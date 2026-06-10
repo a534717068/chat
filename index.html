@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>DeepSeek 助手</title>
+  <title>张莎 · 智能助手</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -31,17 +31,14 @@
       right: 16px;
       display: flex;
       gap: 6px;
-      align-items: center;
     }
-    .header-buttons select,
     .header-buttons button {
       background: #0f3460;
       border: none;
       color: white;
-      padding: 6px 10px;
+      padding: 6px 12px;
       border-radius: 6px;
       font-size: 0.8rem;
-      font-family: inherit;
     }
     .setup-bar {
       background: white;
@@ -66,6 +63,18 @@
       border-radius: 8px;
       font-size: 0.9rem;
       white-space: nowrap;
+    }
+    .token-panel {
+      background: #fff;
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      color: #555;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 4px;
+      flex-shrink: 0;
     }
     .chat-box {
       flex: 1;
@@ -155,14 +164,8 @@
 </head>
 <body>
   <div class="header">
-    🧠 DeepSeek 助手
+    🧠 张莎
     <div class="header-buttons">
-      <select id="modelSelect">
-        <option value="deepseek-v4-flash" selected>V4 Flash</option>
-        <option value="deepseek-v4-pro">V4 Pro</option>
-        <option value="deepseek-chat">V3 (Chat)</option>
-        <option value="deepseek-reasoner">R1 (Reasoner)</option>
-      </select>
       <button id="exportBtn">导出</button>
       <button id="importBtn">导入</button>
     </div>
@@ -171,6 +174,11 @@
   <div class="setup-bar" id="setupBar">
     <input type="password" id="apiKeyInput" placeholder="粘贴你的 DeepSeek API Key" autocomplete="off">
     <button id="saveKeyBtn">保存</button>
+  </div>
+
+  <div class="token-panel" id="tokenPanel">
+    <span>上次：<strong id="lastTokens">0</strong> tokens / <strong id="lastCost">0.0000</strong> 元</span>
+    <span>累计：<strong id="totalTokens">0</strong> tokens / <strong id="totalCost">0.0000</strong> 元</span>
   </div>
 
   <div class="chat-box" id="chatBox"></div>
@@ -183,15 +191,17 @@
 
   <script>
     (function() {
-      // ---------- 存储管理 ----------
+      // ---------- 存储键 ----------
       const STORAGE_KEY = 'deepseek_api_key';
       const CHAT_STORAGE_KEY = 'deepseek_chat_messages';
+      const TOTAL_TOKENS_KEY = 'deepseek_total_tokens';
+      const TOTAL_COST_KEY = 'deepseek_total_cost';
 
+      // ---------- 基础存取 ----------
       function getApiKey() { return localStorage.getItem(STORAGE_KEY) || ''; }
       function saveApiKey(key) { localStorage.setItem(STORAGE_KEY, key.trim()); }
       function hasApiKey() { return !!getApiKey(); }
 
-      // 聊天记录持久化
       function saveMessages() {
         const toSave = messages.filter(m => m.role !== 'system');
         localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(toSave));
@@ -204,7 +214,7 @@
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed)) {
               messages = [
-                { role: 'system', content: '你是 DeepSeek 助手，用简洁友好的方式回答问题。' },
+                { role: 'system', content: '你是张莎，用简洁友好的方式回答问题。' },
                 ...parsed
               ];
               return true;
@@ -212,6 +222,44 @@
           } catch(e) {}
         }
         return false;
+      }
+
+      // Token 累计
+      function getTotalTokens() {
+        return parseInt(localStorage.getItem(TOTAL_TOKENS_KEY) || '0');
+      }
+      function addTotalTokens(n) {
+        const newTotal = getTotalTokens() + n;
+        localStorage.setItem(TOTAL_TOKENS_KEY, newTotal);
+        document.getElementById('totalTokens').textContent = newTotal;
+        return newTotal;
+      }
+      function updateLastTokens(n) {
+        document.getElementById('lastTokens').textContent = n;
+      }
+
+      // 费用累计
+      function getTotalCost() {
+        return parseFloat(localStorage.getItem(TOTAL_COST_KEY) || '0');
+      }
+      function addTotalCost(amount) {
+        const newTotal = getTotalCost() + amount;
+        localStorage.setItem(TOTAL_COST_KEY, newTotal.toString());
+        document.getElementById('totalCost').textContent = newTotal.toFixed(4);
+        return newTotal;
+      }
+      function updateLastCost(amount) {
+        document.getElementById('lastCost').textContent = amount.toFixed(4);
+      }
+
+      // 费用计算
+      function calcCost(usage) {
+        const promptTokens = usage.prompt_tokens || 0;
+        const completionTokens = usage.completion_tokens || 0;
+        const cachedTokens = usage.prompt_tokens_details?.cached_tokens || 0;
+
+        const uncachedPrompt = promptTokens - cachedTokens;
+        return (cachedTokens * 0.02 + uncachedPrompt * 1 + completionTokens * 2) / 1_000_000;
       }
 
       // ---------- UI 元素 ----------
@@ -223,7 +271,6 @@
       const sendBtn = document.getElementById('sendBtn');
       const importBtn = document.getElementById('importBtn');
       const exportBtn = document.getElementById('exportBtn');
-      const modelSelect = document.getElementById('modelSelect');
 
       if (hasApiKey()) {
         setupBar.style.display = 'none';
@@ -235,12 +282,12 @@
         if (!key) { alert('请输入 API Key'); return; }
         saveApiKey(key);
         setupBar.style.display = 'none';
-        addMessage('assistant', '密钥已保存 ✅ 现在可以开始聊天了。');
+        addMessage('assistant', '密钥已保存 ✅ 现在可以开始和张莎聊天了。');
       });
 
       // ---------- 消息处理 ----------
       let messages = [
-        { role: 'system', content: '你是 DeepSeek 助手，用简洁友好的方式回答问题。' }
+        { role: 'system', content: '你是张莎，用简洁友好的方式回答问题。' }
       ];
 
       function renderBubble(role, content) {
@@ -267,7 +314,7 @@
         const div = document.createElement('div');
         div.className = 'message assistant';
         div.id = 'loadingMsg';
-        div.innerHTML = '<div class="bubble">思考中...</div>';
+        div.innerHTML = '<div class="bubble">张莎正在思考...</div>';
         chatBox.appendChild(div);
         chatBox.scrollTop = chatBox.scrollHeight;
       }
@@ -277,7 +324,6 @@
         if (el) el.remove();
       }
 
-      // API 调用
       async function callDeepSeek(userMessage) {
         const apiKey = getApiKey();
         if (!apiKey) {
@@ -297,7 +343,7 @@
               'Authorization': `Bearer ${apiKey}`
             },
             body: JSON.stringify({
-              model: modelSelect.value,   // 动态读取模型选择
+              model: 'deepseek-chat',
               messages: messages.filter(m => m.role !== 'system' || m === messages[0]),
               stream: false,
               temperature: 0.7
@@ -314,6 +360,15 @@
           const data = await response.json();
           const reply = data.choices[0].message.content;
           addMessage('assistant', reply);
+
+          // 更新 Token 和费用
+          if (data.usage) {
+            updateLastTokens(data.usage.total_tokens);
+            addTotalTokens(data.usage.total_tokens);
+            const cost = calcCost(data.usage);
+            updateLastCost(cost);
+            addTotalCost(cost);
+          }
         } catch (error) {
           removeLoadingMessage();
           addMessage('assistant', `❌ 错误: ${error.message}`);
@@ -332,7 +387,6 @@
       }
 
       // ---------- 导入/导出 ----------
-      // 导出
       exportBtn.addEventListener('click', () => {
         const exportData = messages.filter(m => m.role === 'user' || m.role === 'assistant');
         if (exportData.length === 0) {
@@ -344,14 +398,13 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `deepseek-chat-${new Date().toISOString().slice(0,10)}.json`;
+        a.download = `chat-with-zhangsha-${new Date().toISOString().slice(0,10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
       });
 
-      // 导入（支持纯文本自动解析）
       importBtn.addEventListener('click', () => {
-        const raw = prompt('粘贴聊天内容：\n\n如果已经是 JSON 格式（[{"role":...}]），直接粘贴即可。\n\n如果是纯文本对话，请确保每行以 "你:" 或 "DeepSeek:" 开头，例如：\n你: 你好\nDeepSeek: 你好！...');
+        const raw = prompt('粘贴聊天内容（JSON 或纯文本格式）\n\n纯文本示例：\n你: 你好\n张莎: 你好呀！');
         if (!raw) return;
         let imported;
         try {
@@ -360,19 +413,17 @@
         } catch {
           imported = parseTextConversation(raw);
           if (!imported || imported.length === 0) {
-            alert('无法解析对话内容，请检查格式。\n支持 JSON 数组，或每行用 "你:" / "DeepSeek:" 开头的文本。');
+            alert('无法解析对话内容。\n纯文本请用“你:”和“张莎:”（或“张莎：”）开头。');
             return;
           }
         }
-
         const valid = imported.filter(m => m.role === 'user' || m.role === 'assistant');
         if (valid.length === 0) {
           alert('没有识别到有效的对话消息');
           return;
         }
-
         chatBox.innerHTML = '';
-        messages = [{ role: 'system', content: '你是 DeepSeek 助手，用简洁友好的方式回答问题。' }];
+        messages = [{ role: 'system', content: '你是张莎，用简洁友好的方式回答问题。' }];
         valid.forEach(msg => addMessage(msg.role, msg.content));
         saveMessages();
       });
@@ -380,15 +431,15 @@
       function parseTextConversation(text) {
         const lines = text.split('\n');
         const result = [];
+        // 用户前缀
         const userPrefixes = ['你:', '用户:', 'user:', '我:', '问:','Q:','q:'];
-        const aiPrefixes = ['deepseek:', '助手:', 'assistant:', 'ai:', '答:','A:','a:','deepseek：'];
-
+        // 张莎前缀（可继续扩展其他别名）
+        const aiPrefixes = ['张莎:', '张莎：', '助手:', 'assistant:', 'ai:', '答:','A:','a:'];
         for (let line of lines) {
           line = line.trim();
           if (!line) continue;
           let role = null;
           let content = '';
-
           const lowerLine = line.toLowerCase();
           for (let p of userPrefixes) {
             if (lowerLine.startsWith(p.toLowerCase())) {
@@ -427,12 +478,15 @@
       });
 
       // ---------- 初始化 ----------
+      document.getElementById('totalTokens').textContent = getTotalTokens();
+      document.getElementById('totalCost').textContent = getTotalCost().toFixed(4);
+
       if (hasApiKey()) {
         const restored = loadMessages();
         if (restored) {
           messages.slice(1).forEach(msg => renderBubble(msg.role, msg.content));
         } else {
-          addMessage('assistant', '你好！我是 DeepSeek 助手，有什么可以帮你的？');
+          addMessage('assistant', '你好！我是张莎，有什么可以帮你的？');
         }
       } else {
         loadMessages();
