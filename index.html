@@ -135,6 +135,15 @@
       gap: 4px;
       flex-shrink: 0;
     }
+    .model-indicator {
+      background: var(--token-bg);
+      padding: 4px 12px;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+      flex-shrink: 0;
+    }
     .chat-box {
       flex: 1;
       overflow-y: auto;
@@ -244,7 +253,6 @@
       margin-top: 4px;
     }
 
-    /* 导入弹窗 */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -332,6 +340,9 @@
   <div class="token-panel" id="tokenPanel">
     <span>上次：<strong id="lastTokens">0</strong> tokens / <strong id="lastCost">0.0000</strong> 元</span>
     <span>累计：<strong id="totalTokens">0</strong> tokens / <strong id="totalCost">0.0000</strong> 元</span>
+  </div>
+  <div class="model-indicator">
+    当前模型：<strong>deepseek-v4-flash</strong>
   </div>
 
   <div class="chat-box" id="chatBox"></div>
