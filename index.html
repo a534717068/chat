@@ -34,6 +34,8 @@
       --token-text: #555;
       --preview-bg: #ffffff;
       --chat-bg: #fafafa;
+      --modal-overlay: rgba(0,0,0,0.5);
+      --modal-bg: #ffffff;
     }
 
     /* ========== 暗色主题 ========== */
@@ -57,6 +59,8 @@
       --token-text: #aaaaaa;
       --preview-bg: #1e1e1e;
       --chat-bg: #121212;
+      --modal-overlay: rgba(0,0,0,0.7);
+      --modal-bg: #2a2a2a;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -257,6 +261,76 @@
       text-align: center;
       margin-top: 4px;
     }
+
+    /* ---------- 导入模态框 ---------- */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--modal-overlay);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .modal {
+      background: var(--modal-bg);
+      border-radius: 16px;
+      padding: 20px;
+      width: 100%;
+      max-width: 500px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    .modal textarea {
+      width: 100%;
+      flex: 1;
+      min-height: 150px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      resize: vertical;
+      background: var(--input-bg);
+      color: var(--input-text);
+    }
+    .modal-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .modal-buttons button {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-import {
+      background: #0f3460;
+      color: white;
+    }
+    .btn-file {
+      background: #533483;
+      color: white;
+    }
+    .btn-cancel {
+      background: #888;
+      color: white;
+    }
+    .modal .format-hint {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
@@ -299,6 +373,22 @@
     <button id="sendBtn">发送</button>
   </div>
   <div class="tip">密钥仅保存在你的手机中，不会上传</div>
+
+  <!-- 导入模态框 -->
+  <div class="modal-overlay" id="importModal">
+    <div class="modal">
+      <textarea id="importTextarea" placeholder="在此粘贴聊天内容..."></textarea>
+      <div class="format-hint">
+        格式：每行用“你:”开头代表你说的话，“M:”或“张莎:”开头代表 M 的回复。也支持直接粘贴 JSON 数组。
+      </div>
+      <div class="modal-buttons">
+        <button class="btn-file" id="importFileBtn">选择 TXT 文件</button>
+        <button class="btn-import" id="importConfirmBtn">导入</button>
+        <button class="btn-cancel" id="importCancelBtn">取消</button>
+      </div>
+      <input type="file" id="importFileInput" accept=".txt,text/plain" style="display:none">
+    </div>
+  </div>
 
   <script>
     (function() {
@@ -411,6 +501,14 @@
       const imageBtn = document.getElementById('imageBtn');
       const imageInput = document.getElementById('imageInput');
       const imagePreview = document.getElementById('imagePreview');
+
+      // 导入模态框元素
+      const importModal = document.getElementById('importModal');
+      const importTextarea = document.getElementById('importTextarea');
+      const importFileBtn = document.getElementById('importFileBtn');
+      const importFileInput = document.getElementById('importFileInput');
+      const importConfirmBtn = document.getElementById('importConfirmBtn');
+      const importCancelBtn = document.getElementById('importCancelBtn');
 
       let selectedImages = [];
 
@@ -700,9 +798,47 @@
         URL.revokeObjectURL(url);
       });
 
+      // ---------- 导入功能（新） ----------
       importBtn.addEventListener('click', () => {
-        const raw = prompt('粘贴聊天内容（JSON 或纯文本格式）\n\n纯文本示例：\n你: 你好\nM: 你好呀！');
-        if (!raw) return;
+        importTextarea.value = '';
+        importModal.classList.add('active');
+      });
+
+      importCancelBtn.addEventListener('click', () => {
+        importModal.classList.remove('active');
+      });
+
+      // 点击遮罩关闭
+      importModal.addEventListener('click', (e) => {
+        if (e.target === importModal) {
+          importModal.classList.remove('active');
+        }
+      });
+
+      // 选择 TXT 文件
+      importFileBtn.addEventListener('click', () => {
+        importFileInput.click();
+      });
+
+      importFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          importTextarea.value = ev.target.result;
+        };
+        reader.readAsText(file, 'UTF-8');
+        importFileInput.value = '';
+      });
+
+      // 确认导入
+      importConfirmBtn.addEventListener('click', () => {
+        const raw = importTextarea.value.trim();
+        if (!raw) {
+          alert('请粘贴内容或选择文件');
+          return;
+        }
+
         let imported;
         try {
           imported = JSON.parse(raw);
@@ -710,19 +846,23 @@
         } catch {
           imported = parseTextConversation(raw);
           if (!imported || imported.length === 0) {
-            alert('无法解析对话内容。\n纯文本请用“你:”和“M:”或“张莎:”开头。');
+            alert('无法解析内容，请检查格式。\n支持 JSON 数组或用“你:”/“M:”/“张莎:”开头的文本。');
             return;
           }
         }
+
         const valid = imported.filter(m => m.role === 'user' || m.role === 'assistant');
         if (valid.length === 0) {
           alert('没有识别到有效的对话消息');
           return;
         }
+
         chatBox.innerHTML = '';
         messages = [{ role: 'system', content: '你是M，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' }];
         valid.forEach(msg => addMessage(msg.role, msg.content));
         saveMessages();
+
+        importModal.classList.remove('active');
       });
 
       function parseTextConversation(text) {
