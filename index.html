@@ -244,7 +244,7 @@
       margin-top: 4px;
     }
 
-    /* ---------- 导入弹窗 ---------- */
+    /* 导入弹窗 */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -474,7 +474,6 @@
       const imageInput = document.getElementById('imageInput');
       const imagePreview = document.getElementById('imagePreview');
 
-      // 导入弹窗元素
       const importModal = document.getElementById('importModal');
       const importTextarea = document.getElementById('importTextarea');
       const importFileBtn = document.getElementById('importFileBtn');
@@ -597,7 +596,7 @@
               'Authorization': `Bearer ${apiKey}`
             },
             body: JSON.stringify({
-              model: 'deepseek-vl2',
+              model: 'deepseek-v4-flash',
               messages: apiMessages,
               stream: false,
               temperature: 0.7
@@ -709,7 +708,6 @@
         bindClearEvents();
       }
 
-      // ---------- 定时消息 ----------
       let scheduledTimer = null;
       scheduleBtn.addEventListener('click', () => {
         const minutes = prompt('请输入多少分钟后让M给你发消息？（例如：5）');
@@ -727,7 +725,6 @@
         addMessage('assistant', `⏰ 好的，${mins} 分钟后M会提醒你：“${msg}”`);
       });
 
-      // ---------- 导出 ----------
       exportBtn.addEventListener('click', () => {
         const exportData = messages.filter(m => m.role === 'user' || m.role === 'assistant');
         if (exportData.length === 0) { alert('没有可导出的聊天记录'); return; }
@@ -748,7 +745,6 @@
         URL.revokeObjectURL(url);
       });
 
-      // ---------- 导入（弹窗 + 文件选择） ----------
       importBtn.addEventListener('click', () => {
         importTextarea.value = '';
         importModal.classList.add('active');
@@ -835,7 +831,6 @@
         return result;
       }
 
-      // ---------- 发送消息事件 ----------
       sendBtn.addEventListener('click', sendMessage);
       userInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -848,7 +843,6 @@
         userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
       });
 
-      // ---------- 初始化 ----------
       document.getElementById('totalTokens').textContent = getTotalTokens();
       document.getElementById('totalCost').textContent = getTotalCost().toFixed(4);
 
