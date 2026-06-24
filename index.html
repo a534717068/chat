@@ -710,7 +710,7 @@
         } catch {
           imported = parseTextConversation(raw);
           if (!imported || imported.length === 0) {
-            alert('无法解析对话内容。\n纯文本请用“你:”和“M:”开头。');
+            alert('无法解析对话内容。\n纯文本请用“你:”和“M:”或“张莎:”开头。');
             return;
           }
         }
@@ -729,7 +729,7 @@
         const lines = text.split('\n');
         const result = [];
         const userPrefixes = ['你:', '用户:', 'user:', '我:', '问:','Q:','q:'];
-        const aiPrefixes = ['M:', 'M：', '助手:', 'assistant:', 'ai:', '答:','A:','a:'];
+        const aiPrefixes = ['M:', 'M：', '张莎:', '张莎：', '助手:', 'assistant:', 'ai:', '答:','A:','a:'];
         for (let line of lines) {
           line = line.trim();
           if (!line) continue;
