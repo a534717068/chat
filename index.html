@@ -13,7 +13,6 @@
     }
   </script>
   <style>
-    /* ========== 亮色主题（默认） ========== */
     :root {
       --bg: #f5f5f5;
       --surface: #ffffff;
@@ -37,8 +36,6 @@
       --modal-overlay: rgba(0,0,0,0.5);
       --modal-bg: #ffffff;
     }
-
-    /* ========== 暗色主题 ========== */
     body.dark {
       --bg: #121212;
       --surface: #1e1e1e;
@@ -64,7 +61,6 @@
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
-
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
@@ -154,13 +150,8 @@
       max-width: 90%;
       animation: fadeIn 0.2s ease;
     }
-    .message.user {
-      align-self: flex-end;
-      flex-direction: row-reverse;
-    }
-    .message.assistant {
-      align-self: flex-start;
-    }
+    .message.user { align-self: flex-end; flex-direction: row-reverse; }
+    .message.assistant { align-self: flex-start; }
     .bubble {
       padding: 12px 16px;
       border-radius: 18px;
@@ -219,9 +210,7 @@
       height: fit-content;
       white-space: nowrap;
     }
-    .input-area button.img-btn {
-      background: #533483;
-    }
+    .input-area button.img-btn { background: #533483; }
     #imagePreview {
       display: flex;
       flex-wrap: wrap;
@@ -231,8 +220,7 @@
       flex-shrink: 0;
     }
     #imagePreview img {
-      width: 50px;
-      height: 50px;
+      width: 50px; height: 50px;
       object-fit: cover;
       border-radius: 8px;
       border: 1px solid var(--border);
@@ -242,19 +230,13 @@
       background: rgba(0,0,0,0.6);
       color: white;
       border-radius: 50%;
-      width: 18px;
-      height: 18px;
-      font-size: 12px;
-      line-height: 18px;
+      width: 18px; height: 18px;
+      font-size: 12px; line-height: 18px;
       text-align: center;
-      top: -6px;
-      right: -6px;
+      top: -6px; right: -6px;
       cursor: pointer;
     }
-    .preview-item {
-      position: relative;
-      display: inline-block;
-    }
+    .preview-item { position: relative; display: inline-block; }
     .tip {
       color: var(--text-secondary);
       font-size: 0.8rem;
@@ -262,7 +244,7 @@
       margin-top: 4px;
     }
 
-    /* ---------- 导入模态框 ---------- */
+    /* ---------- 导入弹窗 ---------- */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -273,9 +255,7 @@
       align-items: center;
       padding: 20px;
     }
-    .modal-overlay.active {
-      display: flex;
-    }
+    .modal-overlay.active { display: flex; }
     .modal {
       background: var(--modal-bg);
       border-radius: 16px;
@@ -315,22 +295,14 @@
       font-weight: 600;
       cursor: pointer;
     }
-    .btn-import {
-      background: #0f3460;
-      color: white;
-    }
-    .btn-file {
-      background: #533483;
-      color: white;
-    }
-    .btn-cancel {
-      background: #888;
-      color: white;
-    }
+    .btn-import { background: #0f3460; color: white; }
+    .btn-file { background: #533483; color: white; }
+    .btn-cancel { background: #888; color: white; }
     .modal .format-hint {
       font-size: 0.8rem;
       color: var(--text-secondary);
     }
+
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
@@ -374,7 +346,7 @@
   </div>
   <div class="tip">密钥仅保存在你的手机中，不会上传</div>
 
-  <!-- 导入模态框 -->
+  <!-- 导入弹窗 -->
   <div class="modal-overlay" id="importModal">
     <div class="modal">
       <textarea id="importTextarea" placeholder="在此粘贴聊天内容..."></textarea>
@@ -502,7 +474,7 @@
       const imageInput = document.getElementById('imageInput');
       const imagePreview = document.getElementById('imagePreview');
 
-      // 导入模态框元素
+      // 导入弹窗元素
       const importModal = document.getElementById('importModal');
       const importTextarea = document.getElementById('importTextarea');
       const importFileBtn = document.getElementById('importFileBtn');
@@ -553,10 +525,7 @@
           if (imageUrls && imageUrls.length > 0) {
             const parts = [];
             imageUrls.forEach(url => {
-              parts.push({
-                type: 'image_url',
-                image_url: { url }
-              });
+              parts.push({ type: 'image_url', image_url: { url } });
             });
             if (content) {
               parts.push({ type: 'text', text: content });
@@ -579,7 +548,7 @@
         const div = document.createElement('div');
         div.className = 'message assistant';
         div.id = 'loadingMsg';
-        div.innerHTML = '<div class="bubble">M正在理解图片...</div>';
+        div.innerHTML = '<div class="bubble">M正在思考...</div>';
         chatBox.appendChild(div);
         chatBox.scrollTop = chatBox.scrollHeight;
       }
@@ -664,23 +633,17 @@
       async function sendMessage() {
         const text = userInput.value.trim();
         const hasImages = selectedImages.length > 0;
-
         if (!text && !hasImages) return;
 
         addMessage('user', text || '', true, hasImages ? selectedImages : null);
-
         userInput.value = '';
         userInput.style.height = 'auto';
         const imagesToSend = [...selectedImages];
         clearImages();
-
         await callDeepSeek(text, imagesToSend.length > 0 ? imagesToSend : null);
       }
 
-      imageBtn.addEventListener('click', () => {
-        imageInput.click();
-      });
-
+      imageBtn.addEventListener('click', () => { imageInput.click(); });
       imageInput.addEventListener('change', async (e) => {
         const files = Array.from(e.target.files);
         for (const file of files) {
@@ -689,13 +652,14 @@
           selectedImages.push(base64);
           const item = document.createElement('div');
           item.className = 'preview-item';
-          item.innerHTML = `
-            <img src="${base64}" alt="预览">
-            <span class="clear-img" data-index="${selectedImages.length - 1}">✕</span>
-          `;
+          item.innerHTML = `<img src="${base64}" alt="预览"><span class="clear-img" data-index="${selectedImages.length-1}">✕</span>`;
           imagePreview.appendChild(item);
         }
         imageInput.value = '';
+        bindClearEvents();
+      });
+
+      function bindClearEvents() {
         document.querySelectorAll('#imagePreview .clear-img').forEach(span => {
           span.onclick = function() {
             const idx = parseInt(this.dataset.index);
@@ -703,7 +667,7 @@
             refreshImagePreview();
           };
         });
-      });
+      }
 
       function compressAndEncode(file, maxSize = 1024) {
         return new Promise((resolve) => {
@@ -718,8 +682,7 @@
                 w = Math.floor(w * ratio);
                 h = Math.floor(h * ratio);
               }
-              canvas.width = w;
-              canvas.height = h;
+              canvas.width = w; canvas.height = h;
               const ctx = canvas.getContext('2d');
               ctx.drawImage(img, 0, 0, w, h);
               resolve(canvas.toDataURL('image/jpeg', 0.8));
@@ -740,30 +703,19 @@
         selectedImages.forEach((url, i) => {
           const item = document.createElement('div');
           item.className = 'preview-item';
-          item.innerHTML = `
-            <img src="${url}" alt="预览">
-            <span class="clear-img" data-index="${i}">✕</span>
-          `;
+          item.innerHTML = `<img src="${url}" alt="预览"><span class="clear-img" data-index="${i}">✕</span>`;
           imagePreview.appendChild(item);
         });
-        document.querySelectorAll('#imagePreview .clear-img').forEach(span => {
-          span.onclick = function() {
-            const idx = parseInt(this.dataset.index);
-            selectedImages.splice(idx, 1);
-            refreshImagePreview();
-          };
-        });
+        bindClearEvents();
       }
 
+      // ---------- 定时消息 ----------
       let scheduledTimer = null;
       scheduleBtn.addEventListener('click', () => {
         const minutes = prompt('请输入多少分钟后让M给你发消息？（例如：5）');
         if (!minutes) return;
         const mins = parseFloat(minutes);
-        if (isNaN(mins) || mins <= 0) {
-          alert('请输入大于 0 的数字');
-          return;
-        }
+        if (isNaN(mins) || mins <= 0) { alert('请输入大于 0 的数字'); return; }
         const msg = prompt('请输入M要发送的消息内容：', '该休息一下啦~');
         if (!msg) return;
         if (scheduledTimer) clearTimeout(scheduledTimer);
@@ -775,12 +727,10 @@
         addMessage('assistant', `⏰ 好的，${mins} 分钟后M会提醒你：“${msg}”`);
       });
 
+      // ---------- 导出 ----------
       exportBtn.addEventListener('click', () => {
         const exportData = messages.filter(m => m.role === 'user' || m.role === 'assistant');
-        if (exportData.length === 0) {
-          alert('没有可导出的聊天记录');
-          return;
-        }
+        if (exportData.length === 0) { alert('没有可导出的聊天记录'); return; }
         const textOnly = exportData.map(m => {
           if (Array.isArray(m.content)) {
             const textPart = m.content.find(p => p.type === 'text');
@@ -798,7 +748,7 @@
         URL.revokeObjectURL(url);
       });
 
-      // ---------- 导入功能（新） ----------
+      // ---------- 导入（弹窗 + 文件选择） ----------
       importBtn.addEventListener('click', () => {
         importTextarea.value = '';
         importModal.classList.add('active');
@@ -808,14 +758,10 @@
         importModal.classList.remove('active');
       });
 
-      // 点击遮罩关闭
       importModal.addEventListener('click', (e) => {
-        if (e.target === importModal) {
-          importModal.classList.remove('active');
-        }
+        if (e.target === importModal) importModal.classList.remove('active');
       });
 
-      // 选择 TXT 文件
       importFileBtn.addEventListener('click', () => {
         importFileInput.click();
       });
@@ -831,13 +777,9 @@
         importFileInput.value = '';
       });
 
-      // 确认导入
       importConfirmBtn.addEventListener('click', () => {
         const raw = importTextarea.value.trim();
-        if (!raw) {
-          alert('请粘贴内容或选择文件');
-          return;
-        }
+        if (!raw) { alert('请粘贴内容或选择文件'); return; }
 
         let imported;
         try {
@@ -852,16 +794,12 @@
         }
 
         const valid = imported.filter(m => m.role === 'user' || m.role === 'assistant');
-        if (valid.length === 0) {
-          alert('没有识别到有效的对话消息');
-          return;
-        }
+        if (valid.length === 0) { alert('没有识别到有效的对话消息'); return; }
 
         chatBox.innerHTML = '';
         messages = [{ role: 'system', content: '你是M，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' }];
         valid.forEach(msg => addMessage(msg.role, msg.content));
         saveMessages();
-
         importModal.classList.remove('active');
       });
 
@@ -892,13 +830,12 @@
               }
             }
           }
-          if (role && content) {
-            result.push({ role, content });
-          }
+          if (role && content) result.push({ role, content });
         }
         return result;
       }
 
+      // ---------- 发送消息事件 ----------
       sendBtn.addEventListener('click', sendMessage);
       userInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -911,6 +848,7 @@
         userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
       });
 
+      // ---------- 初始化 ----------
       document.getElementById('totalTokens').textContent = getTotalTokens();
       document.getElementById('totalCost').textContent = getTotalCost().toFixed(4);
 
