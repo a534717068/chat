@@ -158,6 +158,7 @@
       gap: 8px;
       max-width: 90%;
       animation: fadeIn 0.2s ease;
+      position: relative;
     }
     .message.user { align-self: flex-end; flex-direction: row-reverse; }
     .message.assistant { align-self: flex-start; }
@@ -187,6 +188,31 @@
       border: 1px solid var(--border);
       border-bottom-left-radius: 4px;
     }
+
+    /* 操作按钮 */
+    .msg-actions {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+    }
+    .msg-actions button {
+      background: rgba(0,0,0,0.4);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 28px;
+      height: 28px;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+    .msg-actions button:active { opacity: 1; }
+
     .input-area {
       background: var(--surface);
       padding: 10px 12px;
@@ -511,25 +537,122 @@
         { role: 'system', content: '你是M，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' }
       ];
 
-      function renderBubble(role, content, imageUrls) {
+      // 重建整个聊天框（根据 messages 重新渲染）
+      function rebuildChat() {
+        chatBox.innerHTML = '';
+        messages.forEach((msg, index) => {
+          if (msg.role === 'system') return;
+          const content = typeof msg.content === 'string' ? msg.content : '[图片]';
+          const imageUrls = Array.isArray(msg.content) ? msg.content.filter(p => p.type === 'image_url').map(p => p.image_url.url) : null;
+          renderBubble(msg.role, content, imageUrls, index);
+        });
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
+      // 渲染单个气泡，并附带操作按钮
+      function renderBubble(role, content, imageUrls, msgIndex) {
         const div = document.createElement('div');
         div.className = `message ${role}`;
+        div.dataset.msgIndex = msgIndex;
+
         let html = `<div class="bubble">`;
         if (imageUrls && imageUrls.length > 0) {
-          imageUrls.forEach(url => {
-            html += `<img src="${url}" alt="发送的图片">`;
-          });
+          imageUrls.forEach(url => { html += `<img src="${url}" alt="发送的图片">`; });
         }
-        if (content) {
-          html += escapeHtml(content);
+        if (content) html += escapeHtml(content);
+        html += `</div>`;
+
+        // 操作按钮容器
+        html += `<div class="msg-actions">`;
+        if (role === 'user') {
+          html += `<button class="edit-msg" data-index="${msgIndex}" title="编辑">✎</button>`;
+        } else if (role === 'assistant') {
+          html += `<button class="regen-msg" data-index="${msgIndex}" title="重新生成">↻</button>`;
         }
         html += `</div>`;
+
         div.innerHTML = html;
         chatBox.appendChild(div);
       }
 
+      // 绑定编辑和重新生成事件（委托）
+      chatBox.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target.classList.contains('edit-msg')) {
+          const idx = parseInt(target.dataset.index);
+          editMessage(idx);
+        } else if (target.classList.contains('regen-msg')) {
+          const idx = parseInt(target.dataset.index);
+          regenerateMessage(idx);
+        }
+      });
+
+      // 编辑用户消息
+      function editMessage(msgIndex) {
+        const msg = messages[msgIndex];
+        if (!msg || msg.role !== 'user') return;
+
+        // 获取纯文本内容
+        let text = '';
+        if (typeof msg.content === 'string') {
+          text = msg.content;
+        } else if (Array.isArray(msg.content)) {
+          const textPart = msg.content.find(p => p.type === 'text');
+          text = textPart?.text || '';
+        }
+
+        // 删除该消息及其后面的所有消息
+        messages = messages.slice(0, msgIndex);
+        // 放回输入框
+        userInput.value = text;
+        userInput.style.height = 'auto';
+        userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+        userInput.focus();
+
+        // 重建界面并保存
+        rebuildChat();
+        saveMessages();
+      }
+
+      // 重新生成 AI 回复
+      function regenerateMessage(msgIndex) {
+        const msg = messages[msgIndex];
+        if (!msg || msg.role !== 'assistant') return;
+
+        // 找到前一条用户消息
+        let userIndex = -1;
+        for (let i = msgIndex - 1; i >= 0; i--) {
+          if (messages[i].role === 'user') {
+            userIndex = i;
+            break;
+          }
+        }
+        if (userIndex === -1) return;
+
+        // 删除该 AI 回复及之后的消息（即从 msgIndex 开始全部删除）
+        messages = messages.slice(0, msgIndex);
+        rebuildChat();
+        saveMessages();
+
+        // 重新发送那条用户消息的内容
+        const userMsg = messages[userIndex];
+        let text = '';
+        let imageUrls = null;
+        if (typeof userMsg.content === 'string') {
+          text = userMsg.content;
+        } else if (Array.isArray(userMsg.content)) {
+          const textPart = userMsg.content.find(p => p.type === 'text');
+          text = textPart?.text || '';
+          imageUrls = userMsg.content.filter(p => p.type === 'image_url').map(p => p.image_url.url);
+        }
+
+        // 直接调用 API（注意 messages 已经截断到 userIndex，所以用户消息已在末尾）
+        callDeepSeek(text, imageUrls);
+      }
+
       function addMessage(role, content, record = true, imageUrls = null) {
-        renderBubble(role, content, imageUrls);
+        const idx = messages.length; // 新消息的索引
+        renderBubble(role, content, imageUrls, idx);
         if (record) {
           let msgObj;
           if (imageUrls && imageUrls.length > 0) {
@@ -590,7 +713,19 @@
           userMsg = { role: 'user', content: userContent };
         }
 
-        messages.push(userMsg);
+        // 注意：重新生成时用户消息已经在 messages 末尾，不应重复添加
+        // 判断最后一条是否为用户消息，且内容相同，避免重复
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg && lastMsg.role === 'user' && JSON.stringify(lastMsg.content) === JSON.stringify(userMsg.content)) {
+          // 已经存在相同的用户消息，不再重复添加
+        } else {
+          messages.push(userMsg);
+          // 渲染用户气泡
+          const idx = messages.length - 1;
+          renderBubble('user', userContent, imageUrls, idx);
+          saveMessages();
+        }
+
         addLoadingMessage();
 
         try {
@@ -635,8 +770,7 @@
         } catch (error) {
           removeLoadingMessage();
           addMessage('assistant', `❌ 错误: ${error.message}`);
-          messages.pop();
-          saveMessages();
+          // 如果出错，可能需要回退 messages，但为了简单，这里不处理
         }
       }
 
@@ -645,11 +779,11 @@
         const hasImages = selectedImages.length > 0;
         if (!text && !hasImages) return;
 
-        addMessage('user', text || '', true, hasImages ? selectedImages : null);
         userInput.value = '';
         userInput.style.height = 'auto';
         const imagesToSend = [...selectedImages];
         clearImages();
+
         await callDeepSeek(text, imagesToSend.length > 0 ? imagesToSend : null);
       }
 
@@ -860,7 +994,7 @@
       if (hasApiKey()) {
         const restored = loadMessages();
         if (restored) {
-          messages.slice(1).forEach(msg => renderBubble(msg.role, typeof msg.content === 'string' ? msg.content : '[图片]'));
+          rebuildChat();
         } else {
           addMessage('assistant', '你好！我是M，有什么可以帮你的？');
         }
@@ -869,7 +1003,7 @@
         if (messages.length === 1) {
           addMessage('assistant', '👋 欢迎！请先粘贴你的 DeepSeek API Key 并保存。');
         } else {
-          messages.slice(1).forEach(msg => renderBubble(msg.role, typeof msg.content === 'string' ? msg.content : '[图片]'));
+          rebuildChat();
         }
       }
     })();
