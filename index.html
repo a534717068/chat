@@ -4,6 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>M · 智能助手</title>
+  <link rel="manifest" href="manifest.json">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js');
+      });
+    }
+  </script>
   <style>
     /* ========== 亮色主题（默认） ========== */
     :root {
@@ -387,7 +395,6 @@
         applyTheme(isDark ? 'light' : 'dark');
       });
 
-      // 初始化主题
       const savedTheme = localStorage.getItem(THEME_KEY) || 'light';
       applyTheme(savedTheme);
 
