@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>张莎 · 智能助手</title>
+  <title>M · 智能助手</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -208,7 +208,7 @@
 </head>
 <body>
   <div class="header">
-    🧠 张莎
+    🧠 M
     <div class="header-buttons">
       <button id="scheduleBtn">定时</button>
       <button id="exportBtn">导出</button>
@@ -270,7 +270,7 @@
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed)) {
               messages = [
-                { role: 'system', content: '你是张莎，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' },
+                { role: 'system', content: '你是M，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' },
                 ...parsed
               ];
               return true;
@@ -339,11 +339,11 @@
         if (!key) { alert('请输入 API Key'); return; }
         saveApiKey(key);
         setupBar.style.display = 'none';
-        addMessage('assistant', '密钥已保存 ✅ 现在可以开始和张莎聊天了。');
+        addMessage('assistant', '密钥已保存 ✅ 现在可以开始和M聊天了。');
       });
 
       let messages = [
-        { role: 'system', content: '你是张莎，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' }
+        { role: 'system', content: '你是M，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' }
       ];
 
       function renderBubble(role, content, imageUrls) {
@@ -396,7 +396,7 @@
         const div = document.createElement('div');
         div.className = 'message assistant';
         div.id = 'loadingMsg';
-        div.innerHTML = '<div class="bubble">张莎正在理解图片...</div>';
+        div.innerHTML = '<div class="bubble">M正在理解图片...</div>';
         chatBox.appendChild(div);
         chatBox.scrollTop = chatBox.scrollHeight;
       }
@@ -574,14 +574,14 @@
 
       let scheduledTimer = null;
       scheduleBtn.addEventListener('click', () => {
-        const minutes = prompt('请输入多少分钟后让张莎给你发消息？（例如：5）');
+        const minutes = prompt('请输入多少分钟后让M给你发消息？（例如：5）');
         if (!minutes) return;
         const mins = parseFloat(minutes);
         if (isNaN(mins) || mins <= 0) {
           alert('请输入大于 0 的数字');
           return;
         }
-        const msg = prompt('请输入张莎要发送的消息内容：', '该休息一下啦~');
+        const msg = prompt('请输入M要发送的消息内容：', '该休息一下啦~');
         if (!msg) return;
         if (scheduledTimer) clearTimeout(scheduledTimer);
         const ms = mins * 60 * 1000;
@@ -589,7 +589,7 @@
           addMessage('assistant', msg);
           scheduledTimer = null;
         }, ms);
-        addMessage('assistant', `⏰ 好的，${mins} 分钟后张莎会提醒你：“${msg}”`);
+        addMessage('assistant', `⏰ 好的，${mins} 分钟后M会提醒你：“${msg}”`);
       });
 
       exportBtn.addEventListener('click', () => {
@@ -610,13 +610,13 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `chat-with-zhangsha-${new Date().toISOString().slice(0,10)}.json`;
+        a.download = `chat-with-m-${new Date().toISOString().slice(0,10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
       });
 
       importBtn.addEventListener('click', () => {
-        const raw = prompt('粘贴聊天内容（JSON 或纯文本格式）\n\n纯文本示例：\n你: 你好\n张莎: 你好呀！');
+        const raw = prompt('粘贴聊天内容（JSON 或纯文本格式）\n\n纯文本示例：\n你: 你好\nM: 你好呀！');
         if (!raw) return;
         let imported;
         try {
@@ -625,7 +625,7 @@
         } catch {
           imported = parseTextConversation(raw);
           if (!imported || imported.length === 0) {
-            alert('无法解析对话内容。\n纯文本请用“你:”和“张莎:”（或“张莎：”）开头。');
+            alert('无法解析对话内容。\n纯文本请用“你:”和“M:”开头。');
             return;
           }
         }
@@ -635,7 +635,7 @@
           return;
         }
         chatBox.innerHTML = '';
-        messages = [{ role: 'system', content: '你是张莎，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' }];
+        messages = [{ role: 'system', content: '你是M，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' }];
         valid.forEach(msg => addMessage(msg.role, msg.content));
         saveMessages();
       });
@@ -644,7 +644,7 @@
         const lines = text.split('\n');
         const result = [];
         const userPrefixes = ['你:', '用户:', 'user:', '我:', '问:','Q:','q:'];
-        const aiPrefixes = ['张莎:', '张莎：', '助手:', 'assistant:', 'ai:', '答:','A:','a:'];
+        const aiPrefixes = ['M:', 'M：', '助手:', 'assistant:', 'ai:', '答:','A:','a:'];
         for (let line of lines) {
           line = line.trim();
           if (!line) continue;
@@ -694,7 +694,7 @@
         if (restored) {
           messages.slice(1).forEach(msg => renderBubble(msg.role, typeof msg.content === 'string' ? msg.content : '[图片]'));
         } else {
-          addMessage('assistant', '你好！我是张莎，有什么可以帮你的？');
+          addMessage('assistant', '你好！我是M，有什么可以帮你的？');
         }
       } else {
         loadMessages();
