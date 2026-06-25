@@ -119,7 +119,7 @@
   <script>
     (function() {
       const $ = id => document.getElementById(id);
-      const SK = 'deepseek_api_key', CK = 'deepseek_chat_v6', TK = 'deepseek_theme';
+      const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
 
       let apiKey = localStorage.getItem(SK) || '';
@@ -157,7 +157,7 @@
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom());
       scrollBtn.onclick = () => chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
 
-      // ============ 版本切换：在 history 数组中切换 ============
+      // ============ 版本切换（修复回复显示） ============
       window._switchVer = function(idx, dir) {
         const msg = messages[idx];
         if (!msg || !msg.history || msg.history.length < 2) return;
@@ -165,8 +165,12 @@
         const newIdx = cur + dir;
         if (newIdx < 0 || newIdx >= msg.history.length) return;
 
-        // 保存当前版本到 history
-        msg.history[cur] = { content: msg.content, reply: msg.reply, time: msg.time };
+        // 保存当前版本状态
+        if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) {
+          msg.history[cur] = { content: msg.content, reply: messages[idx + 1].content, time: msg.time };
+        } else {
+          msg.history[cur] = { content: msg.content, reply: '', time: msg.time };
+        }
 
         // 切换到目标版本
         const ver = msg.history[newIdx];
@@ -174,10 +178,22 @@
         msg.time = ver.time;
         msg.historyIndex = newIdx;
 
-        // 同时更新后面那条 AI 回复（如果存在且属于这个用户消息的回复）
+        // 确保后面跟着对应的 AI 回复
         if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) {
+          // 直接更新现有回复
           messages[idx + 1].content = ver.reply || '';
           messages[idx + 1].time = ver.time;
+        } else {
+          // 没有回复或回复不匹配，创建新的 AI 回复
+          const replyMsg = {
+            role: 'assistant',
+            content: ver.reply || '',
+            id: nextId++,
+            time: ver.time,
+            parentId: msg.id
+          };
+          // 插入到用户消息后面
+          messages.splice(idx + 1, 0, replyMsg);
         }
 
         renderAll();
@@ -186,12 +202,7 @@
 
       window._delMsg = function(idx) {
         if (!confirm('删除这条及后续对话？')) return;
-        // 如果删除的是用户消息，AI回复也一起删
-        if (messages[idx].role === 'user' && idx + 1 < messages.length && messages[idx + 1].role === 'assistant') {
-          messages = messages.slice(0, idx);
-        } else {
-          messages = messages.slice(0, idx);
-        }
+        messages = messages.slice(0, idx);
         renderAll(); saveAll();
       };
 
@@ -215,7 +226,6 @@
         sendToAPI(text);
       };
 
-      // ============ 渲染所有消息 ============
       function renderAll() {
         chatBox.innerHTML = '';
         messages.forEach((msg, idx) => {
@@ -269,24 +279,21 @@
 
         if (isEdit) {
           const parent = messages[editingIdx];
-          // 保存旧版本到 history
+          // 保存旧版本
           if (!parent.history) {
-            // 第一次编辑：初始化 history
             const oldReply = (editingIdx + 1 < messages.length && messages[editingIdx + 1].role === 'assistant') ? messages[editingIdx + 1].content : '';
             parent.history = [{ content: parent.content, reply: oldReply, time: parent.time }];
             parent.historyIndex = 0;
           } else {
-            // 保存当前版本
             const curReply = (editingIdx + 1 < messages.length && messages[editingIdx + 1].role === 'assistant') ? messages[editingIdx + 1].content : '';
             parent.history[parent.historyIndex] = { content: parent.content, reply: curReply, time: parent.time };
           }
-
-          // 截断原消息之后的所有消息
+          // 截断原消息之后的所有内容
           messages = messages.slice(0, editingIdx + 1);
-          // 更新用户消息
+          // 更新当前消息内容
           parent.content = text;
           parent.time = Date.now();
-          // 添加新版本到 history
+          // 添加新版本
           parent.history.push({ content: text, reply: '', time: parent.time });
           parent.historyIndex = parent.history.length - 1;
           userMsg = parent;
@@ -316,12 +323,12 @@
           if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message || `请求失败 (${res.status})`); }
           const data = await res.json();
           const reply = data.choices[0].message.content;
-          const aiMsg = { role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id, childrenIds: [], versionIndex: 0, totalVersions: 1 };
-          // 把回复也记录到用户消息的当前 history 中
+          const aiMsg = { role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id };
+          messages.push(aiMsg);
+          // 更新当前历史版本的回复
           if (userMsg.history && userMsg.history.length > 0) {
             userMsg.history[userMsg.historyIndex].reply = reply;
           }
-          messages.push(aiMsg);
           renderAll(); saveAll();
           if (data.usage) {
             $('lastTokens').textContent = data.usage.total_tokens;
