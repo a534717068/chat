@@ -166,7 +166,7 @@
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom());
       scrollBtn.onclick = () => chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
 
-      // ============ 核心：渲染所有消息 ============
+      // ============ 渲染所有消息 ============
       function renderAll() {
         chatBox.innerHTML = '';
         messages.forEach((msg, idx) => {
@@ -222,21 +222,20 @@
         renderAll(); saveAll();
       }
 
-      // ============ 版本切换（核心修复） ============
+      // ============ 版本切换 ============
       function switchVer(idx, dir) {
         const msg = messages[idx];
         if (!msg || !msg.childrenIds || !msg.childrenIds.length) return;
         const newIdx = (msg.versionIndex || 0) + dir;
         if (newIdx < 0 || newIdx >= msg.childrenIds.length) return;
 
-        // 从存储中读取完整消息树
+        // 从存储中读取完整消息树（包含所有分支）
         const all = JSON.parse(localStorage.getItem(CK) || '[]');
         const newPath = buildPath(all, msg.childrenIds[newIdx]);
         if (!newPath.length) return;
 
-        // 替换 messages 数组
+        // 替换 messages 数组为新的对话链
         messages = [messages[0], ...newPath];
-        // 重新渲染整个聊天框
         renderAll();
       }
 
@@ -288,6 +287,8 @@
 
         if (isEdit) {
           const parent = messages[editingIdx];
+          // 截断原分支之后的所有消息
+          messages = messages.slice(0, editingIdx + 1);
           const nid = nextId++;
           userMsg = { role: 'user', content: text, id: nid, time: Date.now(), parentId: parent.id, childrenIds: [], versionIndex: (parent.childrenIds||[]).length, totalVersions: 1 };
           parent.childrenIds = parent.childrenIds || [];
@@ -298,9 +299,9 @@
           userMsg = { role: 'user', content: text, id: nextId++, time: Date.now(), parentId: null, childrenIds: [], versionIndex: 0, totalVersions: 1 };
           const last = messages[messages.length-1];
           if (last && last.role !== 'system') userMsg.parentId = last.id;
+          messages.push(userMsg);
         }
 
-        messages.push(userMsg);
         renderAll(); saveAll();
 
         const load = document.createElement('div');
