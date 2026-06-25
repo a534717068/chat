@@ -119,31 +119,13 @@
   <script>
     (function() {
       const $ = id => document.getElementById(id);
-      const SK = 'deepseek_api_key', CK = 'deepseek_chat_v5', TK = 'deepseek_theme';
+      const SK = 'deepseek_api_key', CK = 'deepseek_chat_v6', TK = 'deepseek_theme';
       const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
-      const TREE_KEY = 'deepseek_msg_tree'; // 完整消息树
 
       let apiKey = localStorage.getItem(SK) || '';
       let messages = [{ role: 'system', content: '你是M，用简洁友好的方式回答问题。' }];
       let nextId = Date.now();
       let editingIdx = -1;
-      // 消息树：{ [id]: msgObj }
-      let msgTree = {};
-
-      // 初始化消息树
-      function loadTree() {
-        const saved = localStorage.getItem(TREE_KEY);
-        if (saved) try { msgTree = JSON.parse(saved); } catch(e) { msgTree = {}; }
-      }
-      function saveTree() {
-        localStorage.setItem(TREE_KEY, JSON.stringify(msgTree));
-      }
-      function addToTree(msg) {
-        msgTree[msg.id] = msg;
-        saveTree();
-      }
-
-      loadTree();
 
       function saveAll() {
         localStorage.setItem(CK, JSON.stringify(messages.filter(m => m.role !== 'system')));
@@ -165,7 +147,7 @@
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); };
       document.onclick = () => $('moreMenu').classList.remove('active');
       $('moreMenu').onclick = e => e.stopPropagation();
-      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; msgTree = {}; saveTree(); renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
+      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
 
       if (apiKey) { $('setupBar').style.display = 'none'; $('tokenPanel').style.display = 'flex'; }
       $('saveKeyBtn').onclick = () => { const k = $('apiKeyInput').value.trim(); if (!k) return; localStorage.setItem(SK, k); apiKey = k; $('setupBar').style.display = 'none'; $('tokenPanel').style.display = 'flex'; addMsg('assistant', '密钥已保存 ✅'); };
@@ -175,38 +157,41 @@
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom());
       scrollBtn.onclick = () => chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
 
-      // ============ 版本切换 ============
+      // ============ 版本切换：在 history 数组中切换 ============
       window._switchVer = function(idx, dir) {
         const msg = messages[idx];
-        if (!msg || !msg.childrenIds || !msg.childrenIds.length) return;
-        const newIdx = (msg.versionIndex || 0) + dir;
-        if (newIdx < 0 || newIdx >= msg.childrenIds.length) return;
-        const targetId = msg.childrenIds[newIdx];
-        // 从消息树中构建路径
-        const newPath = buildPathFromTree(targetId);
-        if (!newPath.length) return;
-        // 注意：newPath 是从根到目标的完整路径，需要找到它在当前根下的正确位置
-        // 当前 messages 的根是第一条用户消息的 parentId 为 null，所以需要找到对应的根
-        // 简单处理：将 messages 替换为 [system, ...newPath]
-        messages = [messages[0], ...newPath];
-        renderAll();
-      };
+        if (!msg || !msg.history || msg.history.length < 2) return;
+        const cur = msg.historyIndex || 0;
+        const newIdx = cur + dir;
+        if (newIdx < 0 || newIdx >= msg.history.length) return;
 
-      function buildPathFromTree(targetId) {
-        const path = [];
-        let cur = targetId;
-        while (cur) {
-          const m = msgTree[cur];
-          if (!m) return []; // 树中没有该节点
-          path.unshift(m);
-          cur = m.parentId;
+        // 保存当前版本到 history
+        msg.history[cur] = { content: msg.content, reply: msg.reply, time: msg.time };
+
+        // 切换到目标版本
+        const ver = msg.history[newIdx];
+        msg.content = ver.content;
+        msg.time = ver.time;
+        msg.historyIndex = newIdx;
+
+        // 同时更新后面那条 AI 回复（如果存在且属于这个用户消息的回复）
+        if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) {
+          messages[idx + 1].content = ver.reply || '';
+          messages[idx + 1].time = ver.time;
         }
-        return path;
-      }
+
+        renderAll();
+        saveAll();
+      };
 
       window._delMsg = function(idx) {
         if (!confirm('删除这条及后续对话？')) return;
-        messages = messages.slice(0, idx);
+        // 如果删除的是用户消息，AI回复也一起删
+        if (messages[idx].role === 'user' && idx + 1 < messages.length && messages[idx + 1].role === 'assistant') {
+          messages = messages.slice(0, idx);
+        } else {
+          messages = messages.slice(0, idx);
+        }
         renderAll(); saveAll();
       };
 
@@ -239,7 +224,7 @@
           row.className = `message-row ${msg.role}`;
           const time = new Date(msg.time || Date.now()).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
           const content = typeof msg.content === 'string' ? msg.content : '[图片]';
-          const totalVer = msg.totalVersions || 1;
+          const hasHistory = msg.history && msg.history.length > 1;
 
           let btns = '';
           if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`;
@@ -247,12 +232,13 @@
           btns += `<button class="del-btn" onclick="_delMsg(${idx})">🗑</button>`;
 
           let verHTML = '';
-          if (totalVer > 1) {
-            const cur = (msg.versionIndex || 0) + 1;
+          if (hasHistory) {
+            const cur = (msg.historyIndex || 0) + 1;
+            const total = msg.history.length;
             verHTML = `<div class="version-switcher">
               <button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>◀</button>
-              <span>${cur}/${totalVer}</span>
-              <button onclick="_switchVer(${idx}, 1)" ${cur===totalVer?'disabled':''}>▶</button>
+              <span>${cur}/${total}</span>
+              <button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button>
             </div>`;
           }
 
@@ -270,9 +256,8 @@
       function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
       function addMsg(role, content) {
-        const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, childrenIds: [], versionIndex: 0, totalVersions: 1 };
+        const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 };
         messages.push(msg);
-        addToTree(msg);
         renderAll();
         saveAll();
       }
@@ -284,24 +269,35 @@
 
         if (isEdit) {
           const parent = messages[editingIdx];
-          // 截断原分支之后的所有消息
+          // 保存旧版本到 history
+          if (!parent.history) {
+            // 第一次编辑：初始化 history
+            const oldReply = (editingIdx + 1 < messages.length && messages[editingIdx + 1].role === 'assistant') ? messages[editingIdx + 1].content : '';
+            parent.history = [{ content: parent.content, reply: oldReply, time: parent.time }];
+            parent.historyIndex = 0;
+          } else {
+            // 保存当前版本
+            const curReply = (editingIdx + 1 < messages.length && messages[editingIdx + 1].role === 'assistant') ? messages[editingIdx + 1].content : '';
+            parent.history[parent.historyIndex] = { content: parent.content, reply: curReply, time: parent.time };
+          }
+
+          // 截断原消息之后的所有消息
           messages = messages.slice(0, editingIdx + 1);
-          const nid = nextId++;
-          userMsg = { role: 'user', content: text, id: nid, time: Date.now(), parentId: parent.id, childrenIds: [], versionIndex: (parent.childrenIds||[]).length, totalVersions: 1 };
-          parent.childrenIds = parent.childrenIds || [];
-          parent.childrenIds.push(nid);
-          parent.totalVersions = (parent.totalVersions || 1) + 1;
-          // 更新树中的父节点
-          addToTree(parent);
+          // 更新用户消息
+          parent.content = text;
+          parent.time = Date.now();
+          // 添加新版本到 history
+          parent.history.push({ content: text, reply: '', time: parent.time });
+          parent.historyIndex = parent.history.length - 1;
+          userMsg = parent;
           editingIdx = -1;
         } else {
-          userMsg = { role: 'user', content: text, id: nextId++, time: Date.now(), parentId: null, childrenIds: [], versionIndex: 0, totalVersions: 1 };
+          userMsg = { role: 'user', content: text, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 };
           const last = messages[messages.length-1];
           if (last && last.role !== 'system') userMsg.parentId = last.id;
           messages.push(userMsg);
         }
 
-        addToTree(userMsg);
         renderAll(); saveAll();
 
         const load = document.createElement('div');
@@ -321,8 +317,11 @@
           const data = await res.json();
           const reply = data.choices[0].message.content;
           const aiMsg = { role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id, childrenIds: [], versionIndex: 0, totalVersions: 1 };
+          // 把回复也记录到用户消息的当前 history 中
+          if (userMsg.history && userMsg.history.length > 0) {
+            userMsg.history[userMsg.historyIndex].reply = reply;
+          }
           messages.push(aiMsg);
-          addToTree(aiMsg);
           renderAll(); saveAll();
           if (data.usage) {
             $('lastTokens').textContent = data.usage.total_tokens;
@@ -364,14 +363,8 @@
         try { imported = JSON.parse(raw); if (!Array.isArray(imported)) throw 0; imported = imported.filter(m => m && m.role && m.content); } catch(e) { imported = parseText(raw); }
         if (!imported || !imported.length) return alert('无法解析');
         messages = [messages[0]];
-        msgTree = {};
-        imported.forEach(m => {
-          const msg = { ...m, id: nextId++, parentId: null, childrenIds: [], versionIndex: 0, totalVersions: 1 };
-          messages.push(msg);
-          addToTree(msg);
-        });
-        renderAll();
-        saveAll();
+        imported.forEach(m => addMsg(m.role, m.content));
+        renderAll(); saveAll();
         $('importModal').classList.remove('active');
       };
       function parseText(t) {
@@ -380,9 +373,6 @@
         for (let l of lines) { l = l.trim(); if (!l) continue; let role = null, c = ''; const ll = l.toLowerCase(); for (let p of up) if (ll.startsWith(p.toLowerCase())) { role = 'user'; c = l.slice(p.length).trim(); break; } if (!role) for (let p of ap) if (ll.startsWith(p.toLowerCase())) { role = 'assistant'; c = l.slice(p.length).trim(); break; } if (role && c) res.push({ role, content: c }); }
         return res;
       }
-
-      // 初始化时把当前消息也加入树
-      messages.forEach(m => { if (m.role !== 'system' && !msgTree[m.id]) addToTree(m); });
 
       renderAll();
       if (messages.length <= 1) addMsg('assistant', apiKey ? '你好！我是M，有什么可以帮你的？' : '👋 请先输入 API Key');
