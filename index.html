@@ -157,7 +157,7 @@
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom());
       scrollBtn.onclick = () => chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
 
-      // ============ 版本切换（修复回复显示） ============
+      // ============ 版本切换 ============
       window._switchVer = function(idx, dir) {
         const msg = messages[idx];
         if (!msg || !msg.history || msg.history.length < 2) return;
@@ -180,51 +180,18 @@
 
         // 确保后面跟着对应的 AI 回复
         if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) {
-          // 直接更新现有回复
           messages[idx + 1].content = ver.reply || '';
           messages[idx + 1].time = ver.time;
         } else {
-          // 没有回复或回复不匹配，创建新的 AI 回复
-          const replyMsg = {
-            role: 'assistant',
-            content: ver.reply || '',
-            id: nextId++,
-            time: ver.time,
-            parentId: msg.id
-          };
-          // 插入到用户消息后面
+          const replyMsg = { role: 'assistant', content: ver.reply || '', id: nextId++, time: ver.time, parentId: msg.id };
           messages.splice(idx + 1, 0, replyMsg);
         }
-
-        renderAll();
-        saveAll();
-      };
-
-      window._delMsg = function(idx) {
-        if (!confirm('删除这条及后续对话？')) return;
-        messages = messages.slice(0, idx);
         renderAll(); saveAll();
       };
 
-      window._editMsg = function(idx) {
-        const msg = messages[idx];
-        if (!msg || msg.role !== 'user') return;
-        $('userInput').value = typeof msg.content === 'string' ? msg.content : '';
-        $('userInput').focus();
-        editingIdx = idx;
-      };
-
-      window._regenMsg = function(idx) {
-        const msg = messages[idx];
-        if (!msg || msg.role !== 'assistant') return;
-        let ui = -1;
-        for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; }
-        if (ui === -1) return;
-        const text = typeof messages[ui].content === 'string' ? messages[ui].content : '';
-        messages = messages.slice(0, idx);
-        renderAll(); saveAll();
-        sendToAPI(text);
-      };
+      window._delMsg = function(idx) { if (!confirm('删除这条及后续对话？')) return; messages = messages.slice(0, idx); renderAll(); saveAll(); };
+      window._editMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'user') return; $('userInput').value = typeof msg.content === 'string' ? msg.content : ''; $('userInput').focus(); editingIdx = idx; };
+      window._regenMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'assistant') return; let ui = -1; for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; } if (ui === -1) return; const text = typeof messages[ui].content === 'string' ? messages[ui].content : ''; messages = messages.slice(0, idx); renderAll(); saveAll(); sendToAPI(text); };
 
       function renderAll() {
         chatBox.innerHTML = '';
@@ -251,7 +218,6 @@
               <button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button>
             </div>`;
           }
-
           row.innerHTML = `<div class="time-label">${time}</div>
             <div class="bubble-row">
               <div class="bubble-actions">${btns}</div>
@@ -268,18 +234,15 @@
       function addMsg(role, content) {
         const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 };
         messages.push(msg);
-        renderAll();
-        saveAll();
+        renderAll(); saveAll();
       }
 
       async function sendToAPI(text) {
         if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
         const isEdit = editingIdx >= 0 && editingIdx < messages.length;
         let userMsg;
-
         if (isEdit) {
           const parent = messages[editingIdx];
-          // 保存旧版本
           if (!parent.history) {
             const oldReply = (editingIdx + 1 < messages.length && messages[editingIdx + 1].role === 'assistant') ? messages[editingIdx + 1].content : '';
             parent.history = [{ content: parent.content, reply: oldReply, time: parent.time }];
@@ -288,12 +251,9 @@
             const curReply = (editingIdx + 1 < messages.length && messages[editingIdx + 1].role === 'assistant') ? messages[editingIdx + 1].content : '';
             parent.history[parent.historyIndex] = { content: parent.content, reply: curReply, time: parent.time };
           }
-          // 截断原消息之后的所有内容
           messages = messages.slice(0, editingIdx + 1);
-          // 更新当前消息内容
           parent.content = text;
           parent.time = Date.now();
-          // 添加新版本
           parent.history.push({ content: text, reply: '', time: parent.time });
           parent.historyIndex = parent.history.length - 1;
           userMsg = parent;
@@ -304,7 +264,6 @@
           if (last && last.role !== 'system') userMsg.parentId = last.id;
           messages.push(userMsg);
         }
-
         renderAll(); saveAll();
 
         const load = document.createElement('div');
@@ -325,10 +284,7 @@
           const reply = data.choices[0].message.content;
           const aiMsg = { role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id };
           messages.push(aiMsg);
-          // 更新当前历史版本的回复
-          if (userMsg.history && userMsg.history.length > 0) {
-            userMsg.history[userMsg.historyIndex].reply = reply;
-          }
+          if (userMsg.history && userMsg.history.length > 0) userMsg.history[userMsg.historyIndex].reply = reply;
           renderAll(); saveAll();
           if (data.usage) {
             $('lastTokens').textContent = data.usage.total_tokens;
@@ -357,23 +313,53 @@
         if (d.length) { const b = new Blob([JSON.stringify(d)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK, today); }
       })();
 
-      $('importBtn').onclick = () => $('importModal').classList.add('active');
+      // ==================== 导入功能（重写） ====================
+      $('importBtn').onclick = () => { $('importTextarea').value = ''; $('importModal').classList.add('active'); };
       $('importCancelBtn').onclick = () => $('importModal').classList.remove('active');
       $('importModal').onclick = e => { if (e.target === $('importModal')) $('importModal').classList.remove('active'); };
       $('importFileBtn').onclick = () => $('importFileInput').click();
       $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
       $('importFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
       $('importJsonFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
+
       $('importConfirmBtn').onclick = () => {
-        const raw = $('importTextarea').value.trim(); if (!raw) return alert('请粘贴内容');
+        const raw = $('importTextarea').value.trim();
+        if (!raw) return alert('请粘贴内容');
         let imported;
-        try { imported = JSON.parse(raw); if (!Array.isArray(imported)) throw 0; imported = imported.filter(m => m && m.role && m.content); } catch(e) { imported = parseText(raw); }
-        if (!imported || !imported.length) return alert('无法解析');
+        try {
+          imported = JSON.parse(raw);
+          if (!Array.isArray(imported)) throw 0;
+          imported = imported.filter(m => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string');
+        } catch(e) {
+          imported = parseText(raw);
+        }
+        if (!imported || !imported.length) return alert('无法解析，请检查格式');
+
+        // 清空现有消息（保留 system）
         messages = [messages[0]];
-        imported.forEach(m => addMsg(m.role, m.content));
-        renderAll(); saveAll();
+        // 批量创建消息对象并设置 parentId 链
+        const newMessages = imported.map((m, i) => {
+          return {
+            role: m.role,
+            content: m.content,
+            id: nextId++,
+            time: m.time || Date.now() + i,
+            parentId: null, // 稍后设置
+            history: m.history || null,
+            historyIndex: m.historyIndex || 0
+          };
+        });
+        // 设置父子关系
+        for (let i = 0; i < newMessages.length; i++) {
+          if (i > 0) newMessages[i].parentId = newMessages[i-1].id;
+        }
+        messages.push(...newMessages);
+        renderAll();
+        saveAll();
+        alert(`成功导入 ${newMessages.length} 条消息`);
         $('importModal').classList.remove('active');
       };
+
       function parseText(t) {
         const lines = t.split('\n'), res = [];
         const up = ['你:','用户:','我:','问:'], ap = ['M:','M：','张莎:','张莎：','助手:','答:'];
