@@ -104,7 +104,7 @@
   <div class="modal-overlay" id="importModal">
     <div class="modal">
       <textarea id="importTextarea" placeholder="在此粘贴聊天内容..."></textarea>
-      <div class="format-hint">支持 "你:" / "M:" 开头的文本，或 JSON 数组</div>
+      <div class="format-hint">支持 "你:" / "M:" 开头的文本，或 JSON 数组。动作描写会自动合并。</div>
       <div class="modal-buttons">
         <button class="btn-file" id="importFileBtn">TXT</button>
         <button class="btn-file" id="importJsonFileBtn" style="background:#e94560;">JSON</button>
@@ -165,20 +165,17 @@
         const newIdx = cur + dir;
         if (newIdx < 0 || newIdx >= msg.history.length) return;
 
-        // 保存当前版本状态
         if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) {
           msg.history[cur] = { content: msg.content, reply: messages[idx + 1].content, time: msg.time };
         } else {
           msg.history[cur] = { content: msg.content, reply: '', time: msg.time };
         }
 
-        // 切换到目标版本
         const ver = msg.history[newIdx];
         msg.content = ver.content;
         msg.time = ver.time;
         msg.historyIndex = newIdx;
 
-        // 确保后面跟着对应的 AI 回复
         if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) {
           messages[idx + 1].content = ver.reply || '';
           messages[idx + 1].time = ver.time;
@@ -313,7 +310,7 @@
         if (d.length) { const b = new Blob([JSON.stringify(d)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK, today); }
       })();
 
-      // ==================== 导入功能（重写） ====================
+      // ==================== 导入功能（智能解析，支持动作描写自动合并） ====================
       $('importBtn').onclick = () => { $('importTextarea').value = ''; $('importModal').classList.add('active'); };
       $('importCancelBtn').onclick = () => $('importModal').classList.remove('active');
       $('importModal').onclick = e => { if (e.target === $('importModal')) $('importModal').classList.remove('active'); };
@@ -321,6 +318,48 @@
       $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
       $('importFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
       $('importJsonFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
+
+      function parseText(t) {
+        const lines = t.split('\n');
+        const res = [];
+        // 用户前缀（半角+全角）
+        const up = ['你:','你：','用户:','用户：','我:','我：','问:','问：'];
+        // 助手前缀
+        const ap = ['M:','M：','张莎:','张莎：','助手:','助手：','assistant:','ai:','答:','答：'];
+
+        for (let l of lines) {
+          l = l.trim();
+          if (!l) continue;
+          let role = null, c = '';
+          const lower = l.toLowerCase();
+          for (let p of up) {
+            if (lower.startsWith(p.toLowerCase())) {
+              role = 'user';
+              c = l.slice(p.length).trim();
+              break;
+            }
+          }
+          if (!role) {
+            for (let p of ap) {
+              if (lower.startsWith(p.toLowerCase())) {
+                role = 'assistant';
+                c = l.slice(p.length).trim();
+                break;
+              }
+            }
+          }
+          if (role && c) {
+            res.push({ role, content: c });
+          } else if (!role) {
+            // 无前缀行：合并到上一条消息的末尾
+            if (res.length > 0) {
+              res[res.length - 1].content += ' ' + l;
+            }
+            // 否则忽略（文件开头的说明文字）
+          }
+        }
+        return res;
+      }
 
       $('importConfirmBtn').onclick = () => {
         const raw = $('importTextarea').value.trim();
@@ -333,39 +372,26 @@
         } catch(e) {
           imported = parseText(raw);
         }
-        if (!imported || !imported.length) return alert('无法解析，请检查格式');
+        if (!imported || !imported.length) return alert('无法解析，请检查格式。\n支持 "你:" / "张莎:" 开头的文本，或 JSON 数组。\n动作描写会自动合并到上一句话。');
 
-        // 清空现有消息（保留 system）
         messages = [messages[0]];
-        // 批量创建消息对象并设置 parentId 链
-        const newMessages = imported.map((m, i) => {
-          return {
-            role: m.role,
-            content: m.content,
-            id: nextId++,
-            time: m.time || Date.now() + i,
-            parentId: null, // 稍后设置
-            history: m.history || null,
-            historyIndex: m.historyIndex || 0
-          };
-        });
-        // 设置父子关系
+        const newMessages = imported.map((m, i) => ({
+          role: m.role,
+          content: m.content,
+          id: nextId++,
+          time: m.time || Date.now() + i,
+          parentId: null,
+          history: m.history || null,
+          historyIndex: m.historyIndex || 0
+        }));
         for (let i = 0; i < newMessages.length; i++) {
           if (i > 0) newMessages[i].parentId = newMessages[i-1].id;
         }
         messages.push(...newMessages);
-        renderAll();
-        saveAll();
+        renderAll(); saveAll();
         alert(`成功导入 ${newMessages.length} 条消息`);
         $('importModal').classList.remove('active');
       };
-
-      function parseText(t) {
-        const lines = t.split('\n'), res = [];
-        const up = ['你:','用户:','我:','问:'], ap = ['M:','M：','张莎:','张莎：','助手:','答:'];
-        for (let l of lines) { l = l.trim(); if (!l) continue; let role = null, c = ''; const ll = l.toLowerCase(); for (let p of up) if (ll.startsWith(p.toLowerCase())) { role = 'user'; c = l.slice(p.length).trim(); break; } if (!role) for (let p of ap) if (ll.startsWith(p.toLowerCase())) { role = 'assistant'; c = l.slice(p.length).trim(); break; } if (role && c) res.push({ role, content: c }); }
-        return res;
-      }
 
       renderAll();
       if (messages.length <= 1) addMsg('assistant', apiKey ? '你好！我是M，有什么可以帮你的？' : '👋 请先输入 API Key');
