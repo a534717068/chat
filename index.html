@@ -180,7 +180,6 @@
       display: flex;
       flex-direction: column;
       gap: 12px;
-      position: relative;
     }
     .message {
       display: flex;
@@ -230,52 +229,6 @@
       justify-content: center;
       cursor: pointer;
       opacity: 0.6;
-    }
-    /* 版本切换器 */
-    .version-switcher {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 0.7rem;
-      color: var(--text-secondary);
-      margin-top: 2px;
-    }
-    .version-switcher button {
-      background: var(--button-primary-bg);
-      color: var(--button-primary-text);
-      border: none;
-      border-radius: 4px;
-      padding: 2px 6px;
-      font-size: 0.65rem;
-      cursor: pointer;
-      opacity: 0.8;
-    }
-    .version-switcher button:disabled {
-      opacity: 0.3;
-      cursor: default;
-    }
-    /* 回到底部按钮 */
-    .scroll-to-bottom {
-      position: fixed;
-      bottom: 100px;
-      right: 20px;
-      background: var(--button-primary-bg);
-      color: var(--button-primary-text);
-      border: none;
-      border-radius: 50%;
-      width: 42px;
-      height: 42px;
-      font-size: 20px;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      z-index: 200;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-      opacity: 0.85;
-    }
-    .scroll-to-bottom.visible {
-      display: flex;
     }
     .input-area {
       background: var(--surface);
@@ -373,9 +326,6 @@
 
   <div class="chat-box" id="chatBox"></div>
 
-  <!-- 回到底部按钮 -->
-  <button class="scroll-to-bottom" id="scrollToBottomBtn" title="回到底部">↓</button>
-
   <div id="imagePreview"></div>
 
   <div class="input-area">
@@ -390,7 +340,7 @@
   <div class="modal-overlay" id="importModal">
     <div class="modal">
       <textarea id="importTextarea" placeholder="在此粘贴聊天内容..."></textarea>
-      <div class="format-hint">支持格式：每行用“你:”开头，“M:”或“张莎:”开头。也支持 JSON 数组或选择 .json 文件。</div>
+      <div class="format-hint">支持格式：每行用“你:”开头代表你说的话，“M:”或“张莎:”开头代表 M 的回复。也支持粘贴 JSON 数组（或选择 .json 文件）。</div>
       <div class="modal-buttons">
         <button class="btn-file" id="importFileBtn">选择 TXT 文件</button>
         <button class="btn-file" id="importJsonFileBtn" style="background:#e94560;">选择 JSON 文件</button>
@@ -419,21 +369,11 @@
       function saveMessages() {
         const toSave = messages.filter(m => m.role !== 'system');
         const textOnly = toSave.map(m => {
-          let content = '';
-          if (typeof m.content === 'string') content = m.content;
-          else if (Array.isArray(m.content)) {
+          if (Array.isArray(m.content)) {
             const textPart = m.content.find(p => p.type === 'text');
-            content = textPart?.text || '[图片]';
+            return { role: m.role, content: textPart?.text || '[图片]' };
           }
-          return {
-            role: m.role,
-            content: content,
-            id: m.id,
-            parentId: m.parentId || null,
-            childrenIds: m.childrenIds || [],
-            versionIndex: m.versionIndex || 0,
-            totalVersions: m.totalVersions || 1
-          };
+          return m;
         });
         localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(textOnly));
       }
@@ -444,38 +384,11 @@
           try {
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed)) {
-              // 重建消息树
-              const msgMap = new Map();
-              parsed.forEach(m => {
-                msgMap.set(m.id, {
-                  role: m.role,
-                  content: m.content,
-                  id: m.id,
-                  parentId: m.parentId || null,
-                  childrenIds: m.childrenIds || [],
-                  versionIndex: m.versionIndex || 0,
-                  totalVersions: m.totalVersions || 1
-                });
-              });
-              // 构建当前显示路径（从根到最新叶子）
-              const root = parsed.find(m => m.parentId === null);
-              if (root) {
-                const path = [];
-                let current = root;
-                while (current) {
-                  path.push(msgMap.get(current.id));
-                  const children = current.childrenIds || [];
-                  if (children.length === 0) break;
-                  // 取最后一个子节点（最新版本）
-                  const lastChildId = children[children.length - 1];
-                  current = parsed.find(m => m.id === lastChildId);
-                }
-                messages = [
-                  { role: 'system', content: '你是M，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' },
-                  ...path
-                ];
-                return true;
-              }
+              messages = [
+                { role: 'system', content: '你是M，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' },
+                ...parsed
+              ];
+              return true;
             }
           } catch(e) {}
         }
@@ -553,7 +466,6 @@
       const moreBtn = document.getElementById('moreBtn');
       const moreMenu = document.getElementById('moreMenu');
       const clearChatBtn = document.getElementById('clearChatBtn');
-      const scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
 
       const importModal = document.getElementById('importModal');
       const importTextarea = document.getElementById('importTextarea');
@@ -566,31 +478,6 @@
 
       let selectedImages = [];
 
-      // ---------- 回到底部按钮 ----------
-      function checkScrollToBottom() {
-        const threshold = 200; // 距离底部超过200px时显示按钮
-        const isNearBottom = chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < threshold;
-        if (isNearBottom) {
-          scrollToBottomBtn.classList.remove('visible');
-        } else {
-          scrollToBottomBtn.classList.add('visible');
-        }
-      }
-
-      chatBox.addEventListener('scroll', checkScrollToBottom);
-
-      scrollToBottomBtn.addEventListener('click', () => {
-        chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
-      });
-
-      // 每次添加消息后也检查一次
-      const originalAddMessage = addMessage;
-      addMessage = function(...args) {
-        originalAddMessage(...args);
-        // 稍微延迟，等 DOM 渲染完
-        setTimeout(checkScrollToBottom, 50);
-      };
-
       // ---------- 更多菜单 ----------
       moreBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -601,7 +488,7 @@
       });
       moreMenu.addEventListener('click', (e) => e.stopPropagation());
 
-      // ---------- 清空对话 ----------
+      // ---------- 清空对话（二级菜单+二次确认） ----------
       clearChatBtn.addEventListener('click', () => {
         if (confirm('确定要清空所有聊天记录和设定吗？此操作不可恢复。')) {
           messages = [{ role: 'system', content: '你是M，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' }];
@@ -636,22 +523,18 @@
         { role: 'system', content: '你是M，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' }
       ];
 
-      // 全局 ID 计数器
-      let nextId = Date.now();
-
       function rebuildChat() {
         chatBox.innerHTML = '';
         messages.forEach((msg, index) => {
           if (msg.role === 'system') return;
           const content = typeof msg.content === 'string' ? msg.content : '[图片]';
           const imageUrls = Array.isArray(msg.content) ? msg.content.filter(p => p.type === 'image_url').map(p => p.image_url.url) : null;
-          renderBubble(msg.role, content, imageUrls, index, msg);
+          renderBubble(msg.role, content, imageUrls, index);
         });
         chatBox.scrollTop = chatBox.scrollHeight;
-        checkScrollToBottom();
       }
 
-      function renderBubble(role, content, imageUrls, msgIndex, msgObj) {
+      function renderBubble(role, content, imageUrls, msgIndex) {
         const div = document.createElement('div');
         div.className = `message ${role}`;
         div.dataset.msgIndex = msgIndex;
@@ -661,8 +544,6 @@
         }
         if (content) html += escapeHtml(content);
         html += `</div>`;
-
-        // 操作按钮
         html += `<div class="msg-actions">`;
         if (role === 'user') {
           html += `<button class="edit-msg" data-index="${msgIndex}" title="编辑">✎</button>`;
@@ -670,23 +551,10 @@
           html += `<button class="regen-msg" data-index="${msgIndex}" title="重新生成">↻</button>`;
         }
         html += `</div>`;
-
-        // 版本切换器（仅当有多个版本时显示）
-        if (msgObj && msgObj.totalVersions > 1) {
-          const currentVer = msgObj.versionIndex + 1;
-          const totalVer = msgObj.totalVersions;
-          html += `<div class="version-switcher">`;
-          html += `<button class="ver-prev" data-index="${msgIndex}" ${currentVer === 1 ? 'disabled' : ''}>◀</button>`;
-          html += `<span>${currentVer}/${totalVer}</span>`;
-          html += `<button class="ver-next" data-index="${msgIndex}" ${currentVer === totalVer ? 'disabled' : ''}>▶</button>`;
-          html += `</div>`;
-        }
-
         div.innerHTML = html;
         chatBox.appendChild(div);
       }
 
-      // 事件委托
       chatBox.addEventListener('click', (e) => {
         const target = e.target;
         if (target.classList.contains('edit-msg')) {
@@ -695,61 +563,12 @@
         } else if (target.classList.contains('regen-msg')) {
           const idx = parseInt(target.dataset.index);
           regenerateMessage(idx);
-        } else if (target.classList.contains('ver-prev')) {
-          const idx = parseInt(target.dataset.index);
-          switchVersion(idx, -1);
-        } else if (target.classList.contains('ver-next')) {
-          const idx = parseInt(target.dataset.index);
-          switchVersion(idx, 1);
         }
       });
 
-      // 版本切换
-      function switchVersion(msgIndex, direction) {
-        const msg = messages[msgIndex];
-        if (!msg || !msg.childrenIds || msg.childrenIds.length === 0) return;
-
-        const newVerIndex = msg.versionIndex + direction;
-        if (newVerIndex < 0 || newVerIndex >= msg.childrenIds.length) return;
-
-        // 找到目标子节点 ID
-        const targetChildId = msg.childrenIds[newVerIndex];
-        // 从存储中加载完整消息树
-        const saved = localStorage.getItem(CHAT_STORAGE_KEY);
-        if (!saved) return;
-        const allMessages = JSON.parse(saved);
-
-        // 构建从根到目标子节点的路径
-        const newPath = buildPath(allMessages, targetChildId);
-        if (newPath.length === 0) return;
-
-        // 更新当前显示
-        messages = [
-          { role: 'system', content: '你是M，用简洁友好的方式回答问题。如果用户发了图片，请仔细描述图片内容并回答相关问题。' },
-          ...newPath
-        ];
-        rebuildChat();
-      }
-
-      function buildPath(allMessages, targetId) {
-        const msgMap = new Map();
-        allMessages.forEach(m => msgMap.set(m.id, m));
-        const path = [];
-        let currentId = targetId;
-        while (currentId) {
-          const msg = msgMap.get(currentId);
-          if (!msg) break;
-          path.unshift(msg);
-          currentId = msg.parentId;
-        }
-        return path;
-      }
-
-      // 编辑消息（创建新分支）
       function editMessage(msgIndex) {
         const msg = messages[msgIndex];
         if (!msg || msg.role !== 'user') return;
-
         let text = '';
         if (typeof msg.content === 'string') {
           text = msg.content;
@@ -757,29 +576,26 @@
           const textPart = msg.content.find(p => p.type === 'text');
           text = textPart?.text || '';
         }
-
-        // 把当前内容放回输入框
+        messages = messages.slice(0, msgIndex);
         userInput.value = text;
         userInput.style.height = 'auto';
         userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
         userInput.focus();
-
-        // 标记正在编辑的消息索引，用于发送时创建分支
-        userInput.dataset.editingIndex = msgIndex;
+        rebuildChat();
+        saveMessages();
       }
 
-      // 重新生成 AI 回复
       function regenerateMessage(msgIndex) {
         const msg = messages[msgIndex];
         if (!msg || msg.role !== 'assistant') return;
-
-        // 找到前一条用户消息
         let userIndex = -1;
         for (let i = msgIndex - 1; i >= 0; i--) {
           if (messages[i].role === 'user') { userIndex = i; break; }
         }
         if (userIndex === -1) return;
-
+        messages = messages.slice(0, msgIndex);
+        rebuildChat();
+        saveMessages();
         const userMsg = messages[userIndex];
         let text = '';
         let imageUrls = null;
@@ -790,47 +606,26 @@
           text = textPart?.text || '';
           imageUrls = userMsg.content.filter(p => p.type === 'image_url').map(p => p.image_url.url);
         }
-
-        // 删除当前 AI 回复及之后的消息
-        messages = messages.slice(0, msgIndex);
-        rebuildChat();
-        saveMessages();
-
-        // 重新发送
         callDeepSeek(text, imageUrls);
       }
 
       function addMessage(role, content, record = true, imageUrls = null) {
         const idx = messages.length;
-        const msgObj = createMsgObj(role, content, imageUrls);
-        renderBubble(role, content, imageUrls, idx, msgObj);
+        renderBubble(role, content, imageUrls, idx);
         if (record) {
+          let msgObj;
+          if (imageUrls && imageUrls.length > 0) {
+            const parts = [];
+            imageUrls.forEach(url => { parts.push({ type: 'image_url', image_url: { url } }); });
+            if (content) parts.push({ type: 'text', text: content });
+            msgObj = { role, content: parts };
+          } else {
+            msgObj = { role, content };
+          }
           messages.push(msgObj);
           saveMessages();
         }
         chatBox.scrollTop = chatBox.scrollHeight;
-      }
-
-      function createMsgObj(role, content, imageUrls) {
-        const id = nextId++;
-        let msgContent;
-        if (imageUrls && imageUrls.length > 0) {
-          const parts = [];
-          imageUrls.forEach(url => { parts.push({ type: 'image_url', image_url: { url } }); });
-          if (content) parts.push({ type: 'text', text: content });
-          msgContent = parts;
-        } else {
-          msgContent = content;
-        }
-        return {
-          role,
-          content: msgContent,
-          id,
-          parentId: null,
-          childrenIds: [],
-          versionIndex: 0,
-          totalVersions: 1
-        };
       }
 
       function escapeHtml(text) {
@@ -860,46 +655,24 @@
         }
 
         let userMsg;
-        let editingIndex = parseInt(userInput.dataset.editingIndex);
-        const isEditing = !isNaN(editingIndex) && editingIndex >= 0 && editingIndex < messages.length;
-
-        if (isEditing) {
-          // 编辑模式：创建新分支
-          const parentMsg = messages[editingIndex];
-          const newId = nextId++;
-          userMsg = {
-            role: 'user',
-            content: userContent,
-            id: newId,
-            parentId: parentMsg.id,
-            childrenIds: [],
-            versionIndex: (parentMsg.childrenIds || []).length,
-            totalVersions: 1
-          };
-
-          // 更新父节点的 childrenIds 和 totalVersions
-          if (!parentMsg.childrenIds) parentMsg.childrenIds = [];
-          parentMsg.childrenIds.push(newId);
-          parentMsg.totalVersions = (parentMsg.totalVersions || 1) + 1;
-
-          // 清除标记
-          delete userInput.dataset.editingIndex;
+        if (imageUrls && imageUrls.length > 0) {
+          const parts = [];
+          imageUrls.forEach(url => { parts.push({ type: 'image_url', image_url: { url } }); });
+          if (userContent) parts.push({ type: 'text', text: userContent });
+          userMsg = { role: 'user', content: parts };
         } else {
-          // 正常新消息
-          userMsg = createMsgObj('user', userContent, imageUrls);
-          if (messages.length > 1) {
-            const lastMsg = messages[messages.length - 1];
-            if (lastMsg.role !== 'system') {
-              userMsg.parentId = lastMsg.id;
-            }
-          }
+          userMsg = { role: 'user', content: userContent };
         }
 
-        // 将用户消息加入数组
-        messages.push(userMsg);
-        const userIdx = messages.length - 1;
-        renderBubble('user', userContent, imageUrls, userIdx, userMsg);
-        saveMessages();
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg && lastMsg.role === 'user' && JSON.stringify(lastMsg.content) === JSON.stringify(userMsg.content)) {
+          // 已存在
+        } else {
+          messages.push(userMsg);
+          const idx = messages.length - 1;
+          renderBubble('user', userContent, imageUrls, idx);
+          saveMessages();
+        }
 
         addLoadingMessage();
 
@@ -930,14 +703,7 @@
 
           const data = await response.json();
           const reply = data.choices[0].message.content;
-
-          // 创建 AI 回复消息
-          const aiMsg = createMsgObj('assistant', reply, null);
-          aiMsg.parentId = userMsg.id;
-          messages.push(aiMsg);
-          const aiIdx = messages.length - 1;
-          renderBubble('assistant', reply, null, aiIdx, aiMsg);
-          saveMessages();
+          addMessage('assistant', reply);
 
           if (data.usage) {
             updateLastTokens(data.usage.total_tokens);
@@ -950,7 +716,6 @@
           removeLoadingMessage();
           addMessage('assistant', `❌ 错误: ${error.message}`);
         }
-        chatBox.scrollTop = chatBox.scrollHeight;
       }
 
       async function sendMessage() {
@@ -964,7 +729,6 @@
         await callDeepSeek(text, imagesToSend.length > 0 ? imagesToSend : null);
       }
 
-      // 图片相关（保持不变）
       imageBtn.addEventListener('click', () => { imageInput.click(); });
       imageInput.addEventListener('change', async (e) => {
         const files = Array.from(e.target.files);
@@ -1014,7 +778,6 @@
         bindClearEvents();
       }
 
-      // 定时消息
       let scheduledTimer = null;
       scheduleBtn.addEventListener('click', () => {
         const minutes = prompt('请输入多少分钟后让M给你发消息？（例如：5）');
@@ -1029,7 +792,6 @@
         addMessage('assistant', `⏰ 好的，${mins} 分钟后M会提醒你：“${msg}”`);
       });
 
-      // 导出
       exportBtn.addEventListener('click', () => {
         const exportData = messages.filter(m => m.role === 'user' || m.role === 'assistant');
         if (exportData.length === 0) { alert('没有可导出的聊天记录'); return; }
@@ -1110,7 +872,7 @@
         if (!raw.trim()) { alert('请粘贴内容或选择文件'); return; }
         const imported = parseImportText(raw);
         if (!imported || imported.length === 0) {
-          alert('无法解析内容，请检查格式。\n支持 JSON 数组或用“你:”/“M:”/“张莎:”开头的文本。');
+          alert('无法解析内容，请检查格式。\n支持 JSON 数组或用“你:”/“M:”/“张莎:”开头的文本。\n如果 JSON 文件导入失败，可以尝试先打开文件，复制全部内容，粘贴到此框中再点导入。');
           return;
         }
         chatBox.innerHTML = '';
@@ -1120,7 +882,6 @@
         importModal.classList.remove('active');
       });
 
-      // 发送事件
       sendBtn.addEventListener('click', sendMessage);
       userInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -1130,7 +891,6 @@
         userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
       });
 
-      // 初始化
       document.getElementById('totalTokens').textContent = getTotalTokens();
       document.getElementById('totalCost').textContent = getTotalCost().toFixed(4);
 
