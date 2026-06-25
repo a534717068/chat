@@ -123,17 +123,14 @@
       const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
 
       let apiKey = localStorage.getItem(SK) || '';
-      // 动态初始化系统提示，附带当前时间语境
       let messages = [{ role: 'system', content: getSystemPrompt() }];
       let nextId = Date.now();
       let editingIdx = -1;
 
-      // 根据当前时间生成系统提示
       function getSystemPrompt() {
         const now = new Date();
         const hour = now.getHours();
-        const minute = now.getMinutes();
-        const timeStr = `${hour}:${String(minute).padStart(2,'0')}`;
+        const timeStr = `${hour}:${String(now.getMinutes()).padStart(2,'0')}`;
         let period = '';
         if (hour >= 5 && hour < 12) period = '早上';
         else if (hour >= 12 && hour < 14) period = '中午';
@@ -144,10 +141,19 @@
         return `你是M，用简洁友好的方式回答问题。现在是${period} ${timeStr}，请根据这个时间语境调整你的语气和内容。`;
       }
 
-      // 定时更新系统提示
-      setInterval(() => {
-        messages[0].content = getSystemPrompt();
-      }, 60000); // 每分钟更新一次
+      setInterval(() => { messages[0].content = getSystemPrompt(); }, 60000);
+
+      function formatTime(ts) {
+        const d = new Date(ts);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const timeStr = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        if (msgDay.getTime() === today.getTime()) return timeStr;
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${month}-${day} ${timeStr}`;
+      }
 
       function saveAll() {
         localStorage.setItem(CK, JSON.stringify(messages.filter(m => m.role !== 'system')));
@@ -179,25 +185,21 @@
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom());
       scrollBtn.onclick = () => chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
 
-      // ============ 版本切换 ============
       window._switchVer = function(idx, dir) {
         const msg = messages[idx];
         if (!msg || !msg.history || msg.history.length < 2) return;
         const cur = msg.historyIndex || 0;
         const newIdx = cur + dir;
         if (newIdx < 0 || newIdx >= msg.history.length) return;
-
         if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) {
           msg.history[cur] = { content: msg.content, reply: messages[idx + 1].content, time: msg.time };
         } else {
           msg.history[cur] = { content: msg.content, reply: '', time: msg.time };
         }
-
         const ver = msg.history[newIdx];
         msg.content = ver.content;
         msg.time = ver.time;
         msg.historyIndex = newIdx;
-
         if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) {
           messages[idx + 1].content = ver.reply || '';
           messages[idx + 1].time = ver.time;
@@ -218,7 +220,7 @@
           if (msg.role === 'system') return;
           const row = document.createElement('div');
           row.className = `message-row ${msg.role}`;
-          const time = new Date(msg.time || Date.now()).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+          const timeStr = formatTime(msg.time || Date.now());
           const content = typeof msg.content === 'string' ? msg.content : '[图片]';
           const hasHistory = msg.history && msg.history.length > 1;
 
@@ -237,7 +239,7 @@
               <button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button>
             </div>`;
           }
-          row.innerHTML = `<div class="time-label">${time}</div>
+          row.innerHTML = `<div class="time-label">${timeStr}</div>
             <div class="bubble-row">
               <div class="bubble-actions">${btns}</div>
               <div class="bubble">${esc(content)}</div>
@@ -292,7 +294,6 @@
         chatBox.scrollTop = chatBox.scrollHeight;
 
         try {
-          // 确保系统提示是最新的时间语境
           messages[0].content = getSystemPrompt();
           const apiMsgs = messages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
           const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
@@ -334,7 +335,6 @@
         if (d.length) { const b = new Blob([JSON.stringify(d)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK, today); }
       })();
 
-      // ==================== 导入功能（智能解析，动作描写自动合并，时间自适应） ====================
       $('importBtn').onclick = () => { $('importTextarea').value = ''; $('importModal').classList.add('active'); };
       $('importCancelBtn').onclick = () => $('importModal').classList.remove('active');
       $('importModal').onclick = e => { if (e.target === $('importModal')) $('importModal').classList.remove('active'); };
@@ -344,52 +344,23 @@
       $('importJsonFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
 
       function parseText(t) {
-        const lines = t.split('\n');
-        const res = [];
+        const lines = t.split('\n'); const res = [];
         const up = ['你:','你：','用户:','用户：','我:','我：','问:','问：'];
         const ap = ['M:','M：','张莎:','张莎：','助手:','助手：','assistant:','ai:','答:','答：'];
-        for (let l of lines) {
-          l = l.trim();
-          if (!l) continue;
-          let role = null, c = '';
-          const lower = l.toLowerCase();
-          for (let p of up) { if (lower.startsWith(p.toLowerCase())) { role = 'user'; c = l.slice(p.length).trim(); break; } }
-          if (!role) { for (let p of ap) { if (lower.startsWith(p.toLowerCase())) { role = 'assistant'; c = l.slice(p.length).trim(); break; } } }
-          if (role && c) { res.push({ role, content: c }); }
-          else if (!role && res.length > 0) { res[res.length - 1].content += ' ' + l; }
-        }
+        for (let l of lines) { l = l.trim(); if (!l) continue; let role = null, c = ''; const lower = l.toLowerCase(); for (let p of up) { if (lower.startsWith(p.toLowerCase())) { role = 'user'; c = l.slice(p.length).trim(); break; } } if (!role) { for (let p of ap) { if (lower.startsWith(p.toLowerCase())) { role = 'assistant'; c = l.slice(p.length).trim(); break; } } } if (role && c) { res.push({ role, content: c }); } else if (!role && res.length > 0) { res[res.length - 1].content += ' ' + l; } }
         return res;
       }
 
       $('importConfirmBtn').onclick = () => {
-        const raw = $('importTextarea').value.trim();
-        if (!raw) return alert('请粘贴内容');
+        const raw = $('importTextarea').value.trim(); if (!raw) return alert('请粘贴内容');
         let imported;
-        try {
-          imported = JSON.parse(raw);
-          if (!Array.isArray(imported)) throw 0;
-          imported = imported.filter(m => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string');
-        } catch(e) { imported = parseText(raw); }
+        try { imported = JSON.parse(raw); if (!Array.isArray(imported)) throw 0; imported = imported.filter(m => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'); } catch(e) { imported = parseText(raw); }
         if (!imported || !imported.length) return alert('无法解析');
-
-        messages = [messages[0]];
-        const now = Date.now();
-        const total = imported.length;
-        const newMessages = imported.map((m, i) => ({
-          role: m.role,
-          content: m.content,
-          id: nextId++,
-          time: now - (total - i) * 5000,
-          parentId: null,
-          history: m.history || null,
-          historyIndex: m.historyIndex || 0
-        }));
-        for (let i = 0; i < newMessages.length; i++) {
-          if (i > 0) newMessages[i].parentId = newMessages[i-1].id;
-        }
-        messages.push(...newMessages);
-        renderAll(); saveAll();
-        alert(`成功导入 ${newMessages.length} 条消息，时间已适配当前时段`);
+        messages = [messages[0]]; const now = Date.now(); const total = imported.length;
+        const newMessages = imported.map((m, i) => ({ role: m.role, content: m.content, id: nextId++, time: now - (total - i) * 5000, parentId: null, history: m.history || null, historyIndex: m.historyIndex || 0 }));
+        for (let i = 0; i < newMessages.length; i++) { if (i > 0) newMessages[i].parentId = newMessages[i-1].id; }
+        messages.push(...newMessages); renderAll(); saveAll();
+        alert(`成功导入 ${newMessages.length} 条消息`);
         $('importModal').classList.remove('active');
       };
 
