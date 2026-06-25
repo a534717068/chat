@@ -39,40 +39,31 @@
     .model-indicator { background: var(--surface); padding: 2px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); text-align: center; flex-shrink: 0; }
     .chat-container { flex: 1; position: relative; overflow: hidden; }
     .chat-box { height: 100%; overflow-y: auto; padding: 10px 12px; background: var(--chat-bg); display: flex; flex-direction: column; gap: 8px; }
-    
     .message-row { display: flex; flex-direction: column; max-width: 85%; animation: fadeIn 0.15s ease; }
     .message-row.user { align-self: flex-end; align-items: flex-end; }
     .message-row.assistant { align-self: flex-start; align-items: flex-start; }
-    
     .time-label { font-size: 0.65rem; color: var(--text-secondary); margin-bottom: 2px; padding: 0 4px; }
-    
     .bubble-row { display: flex; align-items: flex-end; gap: 4px; }
-    
     .bubble { padding: 9px 13px; border-radius: 16px; font-size: 0.9rem; line-height: 1.45; word-wrap: break-word; white-space: pre-wrap; overflow-wrap: break-word; }
     .user .bubble { background: var(--bubble-user-bg); color: var(--bubble-user-text); border-bottom-right-radius: 4px; }
     .assistant .bubble { background: var(--bubble-assistant-bg); color: var(--bubble-assistant-text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
-    
     .bubble-actions { display: flex; flex-direction: row; gap: 2px; flex-shrink: 0; margin-bottom: 2px; opacity: 0.35; transition: opacity 0.15s; }
     .bubble-actions:hover, .bubble-actions:active { opacity: 0.8; }
     .bubble-actions button { background: rgba(0,0,0,0.3); color: white; border: none; border-radius: 50%; width: 22px; height: 22px; font-size: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
     .bubble-actions button.del-btn { background: rgba(233, 69, 96, 0.5); }
     .user .bubble-actions { order: -1; }
     .assistant .bubble-actions { order: 1; }
-    
     .version-switcher { display: flex; align-items: center; gap: 3px; margin-top: 3px; font-size: 0.65rem; color: var(--text-secondary); }
     .version-switcher button { background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 3px; padding: 2px 7px; font-size: 0.6rem; cursor: pointer; opacity: 0.7; }
     .version-switcher button:disabled { opacity: 0.2; cursor: default; }
     .user .version-switcher { justify-content: flex-end; }
     .assistant .version-switcher { justify-content: flex-start; }
-    
     .scroll-to-bottom { position: absolute; bottom: 14px; right: 14px; background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; display: none; align-items: center; justify-content: center; cursor: pointer; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.2); opacity: 0; transform: scale(0.8); transition: opacity 0.2s, transform 0.2s; pointer-events: none; }
     .scroll-to-bottom.visible { display: flex; opacity: 0.85; transform: scale(1); pointer-events: auto; }
-    
     .input-area { background: var(--surface); padding: 8px 10px; border-top: 1px solid var(--border); display: flex; gap: 6px; flex-shrink: 0; align-items: flex-end; }
     .input-area textarea { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 10px; font-size: 0.9rem; resize: none; max-height: 100px; font-family: inherit; background: var(--surface); color: var(--text-primary); }
     .input-area button { padding: 8px 14px; background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 10px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
     .tip { color: var(--text-secondary); font-size: 0.7rem; text-align: center; padding: 2px; }
-    
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--modal-overlay); z-index: 1000; justify-content: center; align-items: center; padding: 20px; }
     .modal-overlay.active { display: flex; }
     .modal { background: var(--modal-bg); border-radius: 14px; padding: 16px; width: 100%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; gap: 10px; }
@@ -166,78 +157,44 @@
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom());
       scrollBtn.onclick = () => chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
 
-      // ============ 渲染所有消息 ============
-      function renderAll() {
-        chatBox.innerHTML = '';
-        messages.forEach((msg, idx) => {
-          if (msg.role === 'system') return;
-          const row = document.createElement('div');
-          row.className = `message-row ${msg.role}`;
-          const time = new Date(msg.time || Date.now()).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-          const content = typeof msg.content === 'string' ? msg.content : '[图片]';
-          const totalVer = msg.totalVersions || 1;
-
-          let btns = '';
-          if (msg.role === 'user') btns += `<button class="edit-btn" data-idx="${idx}">✎</button>`;
-          else btns += `<button class="regen-btn" data-idx="${idx}">↻</button>`;
-          btns += `<button class="del-btn" data-idx="${idx}">🗑</button>`;
-
-          let verHTML = '';
-          if (totalVer > 1) {
-            const cur = (msg.versionIndex || 0) + 1;
-            verHTML = `<div class="version-switcher">
-              <button class="ver-prev" data-idx="${idx}" ${cur===1?'disabled':''}>◀</button>
-              <span>${cur}/${totalVer}</span>
-              <button class="ver-next" data-idx="${idx}" ${cur===totalVer?'disabled':''}>▶</button>
-            </div>`;
-          }
-
-          row.innerHTML = `<div class="time-label">${time}</div>
-            <div class="bubble-row">
-              <div class="bubble-actions">${btns}</div>
-              <div class="bubble">${esc(content)}</div>
-            </div>${verHTML}`;
-          chatBox.appendChild(row);
-        });
-        chatBox.scrollTop = chatBox.scrollHeight;
-        scrollBtn.classList.toggle('visible', !nearBottom());
-      }
-
-      function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-      // ============ 事件委托 ============
-      chatBox.onclick = e => {
-        const t = e.target, idx = parseInt(t.dataset.idx);
-        if (isNaN(idx)) return;
-        if (t.classList.contains('edit-btn')) startEdit(idx);
-        else if (t.classList.contains('regen-btn')) regen(idx);
-        else if (t.classList.contains('del-btn')) del(idx);
-        else if (t.classList.contains('ver-prev')) switchVer(idx, -1);
-        else if (t.classList.contains('ver-next')) switchVer(idx, 1);
-      };
-
-      function del(idx) {
-        if (!confirm('删除这条及后续对话？')) return;
-        messages = messages.slice(0, idx);
-        renderAll(); saveAll();
-      }
-
-      // ============ 版本切换 ============
-      function switchVer(idx, dir) {
+      // 暴露到全局，方便内联onclick调用
+      window._switchVer = function(idx, dir) {
         const msg = messages[idx];
         if (!msg || !msg.childrenIds || !msg.childrenIds.length) return;
         const newIdx = (msg.versionIndex || 0) + dir;
         if (newIdx < 0 || newIdx >= msg.childrenIds.length) return;
-
-        // 从存储中读取完整消息树（包含所有分支）
         const all = JSON.parse(localStorage.getItem(CK) || '[]');
         const newPath = buildPath(all, msg.childrenIds[newIdx]);
         if (!newPath.length) return;
-
-        // 替换 messages 数组为新的对话链
         messages = [messages[0], ...newPath];
         renderAll();
-      }
+      };
+
+      window._delMsg = function(idx) {
+        if (!confirm('删除这条及后续对话？')) return;
+        messages = messages.slice(0, idx);
+        renderAll(); saveAll();
+      };
+
+      window._editMsg = function(idx) {
+        const msg = messages[idx];
+        if (!msg || msg.role !== 'user') return;
+        $('userInput').value = typeof msg.content === 'string' ? msg.content : '';
+        $('userInput').focus();
+        editingIdx = idx;
+      };
+
+      window._regenMsg = function(idx) {
+        const msg = messages[idx];
+        if (!msg || msg.role !== 'assistant') return;
+        let ui = -1;
+        for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; }
+        if (ui === -1) return;
+        const text = typeof messages[ui].content === 'string' ? messages[ui].content : '';
+        messages = messages.slice(0, idx);
+        renderAll(); saveAll();
+        sendToAPI(text);
+      };
 
       function buildPath(all, targetId) {
         const map = new Map();
@@ -253,25 +210,44 @@
         return path;
       }
 
-      function startEdit(idx) {
-        const msg = messages[idx];
-        if (!msg || msg.role !== 'user') return;
-        $('userInput').value = typeof msg.content === 'string' ? msg.content : '';
-        $('userInput').focus();
-        editingIdx = idx;
+      // ============ 渲染所有消息 ============
+      function renderAll() {
+        chatBox.innerHTML = '';
+        messages.forEach((msg, idx) => {
+          if (msg.role === 'system') return;
+          const row = document.createElement('div');
+          row.className = `message-row ${msg.role}`;
+          const time = new Date(msg.time || Date.now()).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+          const content = typeof msg.content === 'string' ? msg.content : '[图片]';
+          const totalVer = msg.totalVersions || 1;
+
+          let btns = '';
+          if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`;
+          else btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
+          btns += `<button class="del-btn" onclick="_delMsg(${idx})">🗑</button>`;
+
+          let verHTML = '';
+          if (totalVer > 1) {
+            const cur = (msg.versionIndex || 0) + 1;
+            verHTML = `<div class="version-switcher">
+              <button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>◀</button>
+              <span>${cur}/${totalVer}</span>
+              <button onclick="_switchVer(${idx}, 1)" ${cur===totalVer?'disabled':''}>▶</button>
+            </div>`;
+          }
+
+          row.innerHTML = `<div class="time-label">${time}</div>
+            <div class="bubble-row">
+              <div class="bubble-actions">${btns}</div>
+              <div class="bubble">${esc(content)}</div>
+            </div>${verHTML}`;
+          chatBox.appendChild(row);
+        });
+        chatBox.scrollTop = chatBox.scrollHeight;
+        scrollBtn.classList.toggle('visible', !nearBottom());
       }
 
-      function regen(idx) {
-        const msg = messages[idx];
-        if (!msg || msg.role !== 'assistant') return;
-        let ui = -1;
-        for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; }
-        if (ui === -1) return;
-        const text = typeof messages[ui].content === 'string' ? messages[ui].content : '';
-        messages = messages.slice(0, idx);
-        renderAll(); saveAll();
-        sendToAPI(text);
-      }
+      function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
       function addMsg(role, content) {
         const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, childrenIds: [], versionIndex: 0, totalVersions: 1 };
