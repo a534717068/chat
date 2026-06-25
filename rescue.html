@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据抢救工具</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+      color: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100dvh;
+    }
+    button {
+      padding: 16px 32px;
+      font-size: 18px;
+      background: #0f3460;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    .warning {
+      color: #e94560;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h2>聊天记录抢救工具</h2>
+  <p>点击下方按钮，如果数据还在，会自动下载备份文件。</p>
+  <button onclick="rescue()">尝试下载备份</button>
+  <div class="warning" id="msg"></div>
+  <script>
+    function rescue() {
+      // 尝试所有可能的存储键
+      const keys = [
+        'deepseek_chat_messages',
+        'deepseek_chat_messages_v2',
+        'deepseek_chat_messages_backup'
+      ];
+      let found = false;
+      for (let key of keys) {
+        const raw = window.localStorage.getItem(key);
+        if (raw && raw.length > 10) { // 确保不是空数据
+          try {
+            // 尝试验证 JSON 格式
+            JSON.parse(raw);
+            const blob = new Blob([raw], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `聊天记录恢复_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            document.getElementById('msg').textContent = '✅ 备份文件下载成功！请检查浏览器下载列表。';
+            found = true;
+            break;
+          } catch (e) {
+            // JSON 格式有问题，但依然可以下载原始文本
+            const blob = new Blob([raw], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `聊天记录恢复_原始数据_${new Date().toISOString().slice(0,10)}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+            document.getElementById('msg').textContent = '⚠️ 发现数据但格式异常，已下载为 TXT 文件。请发给我帮你修复。';
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) {
+        document.getElementById('msg').textContent = '❌ 没有找到任何旧聊天记录。数据可能已被清除。';
+      }
+    }
+  </script>
+</body>
+</html>
