@@ -84,7 +84,10 @@
       <button id="importBtn">导入</button>
       <button id="moreBtn">更多</button>
     </div>
-    <div class="more-menu" id="moreMenu"><button id="clearChatBtn">清空对话</button></div>
+    <div class="more-menu" id="moreMenu">
+      <button id="settingBtn">设定</button>
+      <button id="clearChatBtn">清空对话</button>
+    </div>
   </div>
   <div class="setup-bar" id="setupBar" style="display:none;">
     <input type="password" id="apiKeyInput" placeholder="粘贴 DeepSeek API Key" autocomplete="off">
@@ -101,6 +104,8 @@
     <button id="sendBtn">发送</button>
   </div>
   <div class="tip">密钥仅保存在你的手机中</div>
+
+  <!-- 导入弹窗 -->
   <div class="modal-overlay" id="importModal">
     <div class="modal">
       <textarea id="importTextarea" placeholder="在此粘贴聊天内容..."></textarea>
@@ -116,18 +121,33 @@
     </div>
   </div>
 
+  <!-- 设定弹窗 -->
+  <div class="modal-overlay" id="settingModal">
+    <div class="modal">
+      <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
+      <div class="format-hint">这里的设定会始终生效，M 每次回答都会记住。</div>
+      <div class="modal-buttons">
+        <button class="btn-import" id="settingSaveBtn">保存设定</button>
+        <button class="btn-cancel" id="settingCancelBtn">取消</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function() {
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
+      const SETTING_KEY = 'deepseek_global_setting';
 
       let apiKey = localStorage.getItem(SK) || '';
-      let messages = [{ role: 'system', content: getSystemPrompt() }];
+      let globalSetting = localStorage.getItem(SETTING_KEY) || '';
+      let messages = [{ role: 'system', content: buildSystemPrompt() }];
       let nextId = Date.now();
       let editingIdx = -1;
 
-      function getSystemPrompt() {
+      // 构建系统提示 = 时间语境 + 全局设定
+      function buildSystemPrompt() {
         const now = new Date();
         const hour = now.getHours();
         const timeStr = `${hour}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -138,11 +158,15 @@
         else if (hour >= 17 && hour < 19) period = '傍晚';
         else if (hour >= 19 && hour < 22) period = '晚上';
         else period = '深夜';
-        // 动态状态描述，不加任何行为指令
-        return `你是M，用简洁友好的方式回答问题。现在是${period} ${timeStr}。`;
+        let prompt = `你是M，用简洁友好的方式回答问题。现在是${period} ${timeStr}。`;
+        if (globalSetting) {
+          prompt += `\n\n【以下是你必须始终遵守的全局设定/人设/记忆，优先级最高】：\n${globalSetting}`;
+        }
+        return prompt;
       }
 
-      setInterval(() => { messages[0].content = getSystemPrompt(); }, 60000);
+      // 定时更新系统提示
+      setInterval(() => { messages[0].content = buildSystemPrompt(); }, 60000);
 
       function formatTime(ts) {
         const d = new Date(ts);
@@ -177,6 +201,26 @@
       document.onclick = () => $('moreMenu').classList.remove('active');
       $('moreMenu').onclick = e => e.stopPropagation();
       $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
+
+      // ==================== 全局设定功能 ====================
+      $('settingBtn').onclick = () => {
+        $('settingTextarea').value = globalSetting;
+        $('settingModal').classList.add('active');
+        $('moreMenu').classList.remove('active');
+      };
+      $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active');
+      $('settingModal').onclick = e => { if (e.target === $('settingModal')) $('settingModal').classList.remove('active'); };
+      $('settingSaveBtn').onclick = () => {
+        globalSetting = $('settingTextarea').value.trim();
+        localStorage.setItem(SETTING_KEY, globalSetting);
+        messages[0].content = buildSystemPrompt();
+        $('settingModal').classList.remove('active');
+        if (globalSetting) {
+          addMsg('assistant', '✅ 全局设定已保存。我会始终记住这些设定。');
+        } else {
+          addMsg('assistant', '✅ 全局设定已清空。');
+        }
+      };
 
       if (apiKey) { $('setupBar').style.display = 'none'; $('tokenPanel').style.display = 'flex'; }
       $('saveKeyBtn').onclick = () => { const k = $('apiKeyInput').value.trim(); if (!k) return; localStorage.setItem(SK, k); apiKey = k; $('setupBar').style.display = 'none'; $('tokenPanel').style.display = 'flex'; addMsg('assistant', '密钥已保存 ✅'); };
@@ -224,12 +268,10 @@
           const timeStr = formatTime(msg.time || Date.now());
           const content = typeof msg.content === 'string' ? msg.content : '[图片]';
           const hasHistory = msg.history && msg.history.length > 1;
-
           let btns = '';
           if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`;
           else btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
           btns += `<button class="del-btn" onclick="_delMsg(${idx})">🗑</button>`;
-
           let verHTML = '';
           if (hasHistory) {
             const cur = (msg.historyIndex || 0) + 1;
@@ -295,8 +337,8 @@
         chatBox.scrollTop = chatBox.scrollHeight;
 
         try {
-          // 确保系统提示在发送前是最新的
-          messages[0].content = getSystemPrompt();
+          // 确保系统提示是最新的（包含全局设定）
+          messages[0].content = buildSystemPrompt();
           const apiMsgs = messages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
           const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -359,15 +401,7 @@
         try { imported = JSON.parse(raw); if (!Array.isArray(imported)) throw 0; imported = imported.filter(m => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'); } catch(e) { imported = parseText(raw); }
         if (!imported || !imported.length) return alert('无法解析');
         messages = [messages[0]]; const now = Date.now(); const total = imported.length;
-        const newMessages = imported.map((m, i) => ({
-          role: m.role,
-          content: m.content, // 去掉了 [历史记录] 标记
-          id: nextId++,
-          time: now - (total - i) * 5000,
-          parentId: null,
-          history: m.history || null,
-          historyIndex: m.historyIndex || 0
-        }));
+        const newMessages = imported.map((m, i) => ({ role: m.role, content: m.content, id: nextId++, time: now - (total - i) * 5000, parentId: null, history: m.history || null, historyIndex: m.historyIndex || 0 }));
         for (let i = 0; i < newMessages.length; i++) { if (i > 0) newMessages[i].parentId = newMessages[i-1].id; }
         messages.push(...newMessages); renderAll(); saveAll();
         alert(`成功导入 ${newMessages.length} 条消息`);
