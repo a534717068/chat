@@ -75,8 +75,13 @@
     .modal-buttons button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; color: white; }
     .btn-import { background: #0f3460; } .btn-file { background: #533483; } .btn-cancel { background: #888; }
     .modal .format-hint { font-size: 0.75rem; color: var(--text-secondary); }
+    .search-nav { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-primary); }
+    .search-nav button { padding: 6px 12px; border: none; border-radius: 6px; font-size: 0.8rem; cursor: pointer; background: var(--btn-bg); color: var(--btn-text); flex: 0; }
+    .search-nav button:disabled { opacity: 0.3; cursor: default; }
     .bubble mark { background: #ffeb3b; color: #1a1a2e; border-radius: 2px; padding: 0 2px; }
+    .bubble mark.current { background: #ff9800; color: #fff; }
     body.dark .bubble mark { background: #f9a825; color: #000; }
+    body.dark .bubble mark.current { background: #e65100; color: #fff; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
@@ -115,7 +120,6 @@
   </div>
   <div class="tip">密钥仅保存在你的手机中</div>
 
-  <!-- 弹窗 -->
   <div class="modal-overlay" id="importModal">
     <div class="modal">
       <textarea id="importTextarea" placeholder="在此粘贴聊天内容..."></textarea>
@@ -143,6 +147,11 @@
   <div class="modal-overlay" id="searchModal">
     <div class="modal">
       <input type="text" id="searchInput" placeholder="输入要搜索的关键词...">
+      <div class="search-nav" id="searchNav" style="display:none;">
+        <button id="searchPrevBtn">◀ 上一个</button>
+        <span id="searchCounter">0/0</span>
+        <button id="searchNextBtn">下一个 ▶</button>
+      </div>
       <div class="modal-buttons">
         <button class="btn-import" id="searchFindBtn">查找</button>
         <button class="btn-cancel" id="searchClearBtn">清除搜索</button>
@@ -156,9 +165,7 @@
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
-      const SETTING_KEY = 'deepseek_global_setting';
-      const WEATHER_KEY = 'deepseek_weather_mode';
-
+      const SETTING_KEY = 'deepseek_global_setting', WEATHER_KEY = 'deepseek_weather_mode';
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
 
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
@@ -170,32 +177,17 @@
         inputEl.addEventListener('input', () => saveDraft(draftKey, inputEl.value));
       }
 
-      // 天气图标映射
       const weatherIcons = ['☀️','⛅','☁️','🌧️','⛈️','❄️','🌫️'];
       let weatherMode = parseInt(localStorage.getItem(WEATHER_KEY) || '0');
-
       function getWeatherEmoji() { return weatherIcons[weatherMode % weatherIcons.length]; }
-      function getWeatherDesc() {
-        const map = ['晴朗','多云','阴天','小雨','雷阵雨','下雪','大雾'];
-        return map[weatherMode % map.length];
-      }
-      function getSeason() {
-        const m = new Date().getMonth() + 1;
-        if (m >= 3 && m <= 5) return '春天';
-        if (m >= 6 && m <= 8) return '夏天';
-        if (m >= 9 && m <= 11) return '秋天';
-        return '冬天';
-      }
+      function getWeatherDesc() { const map = ['晴朗','多云','阴天','小雨','雷阵雨','下雪','大雾']; return map[weatherMode % map.length]; }
+      function getSeason() { const m = new Date().getMonth() + 1; if (m >= 3 && m <= 5) return '春天'; if (m >= 6 && m <= 8) return '夏天'; if (m >= 9 && m <= 11) return '秋天'; return '冬天'; }
 
       function getEnvInfo() {
-        const now = new Date();
-        const hour = now.getHours();
-        const minute = now.getMinutes();
+        const now = new Date(); const hour = now.getHours(); const minute = now.getMinutes();
         const timeStr = `${hour}:${String(minute).padStart(2,'0')}`;
-        const weekDays = ['日','一','二','三','四','五','六'];
-        const weekDay = weekDays[now.getDay()];
-        const season = getSeason();
-        const weather = getWeatherDesc();
+        const weekDays = ['日','一','二','三','四','五','六']; const weekDay = weekDays[now.getDay()];
+        const season = getSeason(); const weather = getWeatherDesc();
         let period = '';
         if (hour >= 5 && hour < 12) period = '早上';
         else if (hour >= 12 && hour < 14) period = '中午';
@@ -211,37 +203,25 @@
         $('weatherIcon').textContent = getWeatherEmoji();
         $('envText').textContent = `${env.season} · 周${env.weekDay} · ${env.period} ${env.timeStr} · ${env.weather}`;
       }
-      updateEnvDisplay();
-      setInterval(updateEnvDisplay, 60000);
-
-      // 点击天气图标切换天气
-      $('weatherIcon').onclick = () => {
-        weatherMode = (weatherMode + 1) % weatherIcons.length;
-        localStorage.setItem(WEATHER_KEY, weatherMode);
-        updateEnvDisplay();
-      };
+      updateEnvDisplay(); setInterval(updateEnvDisplay, 60000);
+      $('weatherIcon').onclick = () => { weatherMode = (weatherMode + 1) % weatherIcons.length; localStorage.setItem(WEATHER_KEY, weatherMode); updateEnvDisplay(); };
 
       let apiKey = localStorage.getItem(SK) || '';
       let globalSetting = localStorage.getItem(SETTING_KEY) || '';
       let messages = [{ role: 'system', content: '' }];
-      let nextId = Date.now();
-      let editingIdx = -1;
+      let nextId = Date.now(); let editingIdx = -1;
       let searchKeyword = '';
+      let searchMatchIndex = -1; // 当前高亮的匹配索引
+      let searchTotal = 0;
 
       function buildSystemPrompt() {
         const env = getEnvInfo();
         let prompt = `你是M，用简洁友好的方式回答问题。现在的时间是${env.period} ${env.timeStr}，周${env.weekDay}，${env.season}。外面天气${env.weather}。`;
-        if (globalSetting) {
-          prompt += `\n\n【以下是你必须始终遵守的全局设定/人设/记忆，优先级最高】：\n${globalSetting}`;
-        }
+        if (globalSetting) prompt += `\n\n【以下是你必须始终遵守的全局设定/人设/记忆，优先级最高】：\n${globalSetting}`;
         return prompt;
       }
-
-      function refreshSystemPrompt() {
-        messages[0].content = buildSystemPrompt();
-      }
-      refreshSystemPrompt();
-      setInterval(refreshSystemPrompt, 60000);
+      function refreshSystemPrompt() { messages[0].content = buildSystemPrompt(); }
+      refreshSystemPrompt(); setInterval(refreshSystemPrompt, 60000);
 
       function formatTime(ts) {
         const d = new Date(ts); const now = new Date();
@@ -283,22 +263,70 @@
       $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active');
       $('settingModal').onclick = e => { if (e.target === $('settingModal')) $('settingModal').classList.remove('active'); };
       $('settingSaveBtn').onclick = () => {
-        globalSetting = $('settingTextarea').value.trim();
-        localStorage.setItem(SETTING_KEY, globalSetting);
-        refreshSystemPrompt();
-        saveDraft(DRAFT_SETTING, '');
+        globalSetting = $('settingTextarea').value.trim(); localStorage.setItem(SETTING_KEY, globalSetting);
+        refreshSystemPrompt(); saveDraft(DRAFT_SETTING, '');
         $('settingModal').classList.remove('active');
         addMsg('assistant', globalSetting ? '✅ 全局设定已保存。' : '✅ 全局设定已清空。');
       };
 
-      $('searchBtn').onclick = () => { $('searchInput').value = loadDraft(DRAFT_SEARCH) || searchKeyword; $('searchModal').classList.add('active'); $('moreMenu').classList.remove('active'); };
+      // ==================== 搜索功能（增强版：支持上下导航） ====================
+      $('searchBtn').onclick = () => {
+        $('searchInput').value = loadDraft(DRAFT_SEARCH) || searchKeyword;
+        $('searchModal').classList.add('active');
+        $('moreMenu').classList.remove('active');
+        updateSearchNav();
+      };
       $('searchCloseBtn').onclick = () => $('searchModal').classList.remove('active');
       $('searchModal').onclick = e => { if (e.target === $('searchModal')) $('searchModal').classList.remove('active'); };
+
+      function updateSearchNav() {
+        if (searchKeyword && searchTotal > 0) {
+          $('searchNav').style.display = 'flex';
+          $('searchCounter').textContent = `${searchMatchIndex + 1}/${searchTotal}`;
+          $('searchPrevBtn').disabled = searchMatchIndex <= 0;
+          $('searchNextBtn').disabled = searchMatchIndex >= searchTotal - 1;
+        } else {
+          $('searchNav').style.display = 'none';
+        }
+      }
+
+      function jumpToMatch(index) {
+        const marks = chatBox.querySelectorAll('mark');
+        if (marks.length === 0) return;
+        if (index < 0) index = 0;
+        if (index >= marks.length) index = marks.length - 1;
+        // 清除所有当前标记
+        marks.forEach(m => m.classList.remove('current'));
+        // 标记当前
+        marks[index].classList.add('current');
+        marks[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        searchMatchIndex = index;
+        updateSearchNav();
+      }
+
       $('searchFindBtn').onclick = () => {
-        searchKeyword = $('searchInput').value.trim(); $('searchModal').classList.remove('active'); renderAll();
-        if (searchKeyword) { const marks = chatBox.querySelectorAll('mark'); if (marks.length > 0) marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        searchKeyword = $('searchInput').value.trim();
+        $('searchModal').classList.remove('active');
+        searchMatchIndex = 0;
+        renderAll();
+        const marks = chatBox.querySelectorAll('mark');
+        searchTotal = marks.length;
+        if (marks.length > 0) {
+          jumpToMatch(0);
+        } else {
+          searchTotal = 0;
+        }
+        updateSearchNav();
       };
-      $('searchClearBtn').onclick = () => { searchKeyword = ''; saveDraft(DRAFT_SEARCH, ''); $('searchInput').value = ''; $('searchModal').classList.remove('active'); renderAll(); };
+
+      $('searchPrevBtn').onclick = () => { if (searchMatchIndex > 0) jumpToMatch(searchMatchIndex - 1); };
+      $('searchNextBtn').onclick = () => { if (searchMatchIndex < searchTotal - 1) jumpToMatch(searchMatchIndex + 1); };
+
+      $('searchClearBtn').onclick = () => {
+        searchKeyword = ''; searchMatchIndex = -1; searchTotal = 0;
+        saveDraft(DRAFT_SEARCH, ''); $('searchInput').value = '';
+        $('searchModal').classList.remove('active'); renderAll();
+      };
 
       if (apiKey) { $('setupBar').style.display = 'none'; $('tokenPanel').style.display = 'flex'; }
       $('saveKeyBtn').onclick = () => { const k = $('apiKeyInput').value.trim(); if (!k) return; localStorage.setItem(SK, k); apiKey = k; $('setupBar').style.display = 'none'; $('tokenPanel').style.display = 'flex'; addMsg('assistant', '密钥已保存 ✅'); };
@@ -351,6 +379,14 @@
         });
         chatBox.scrollTop = chatBox.scrollHeight;
         scrollBtn.classList.toggle('visible', !nearBottom());
+        // 恢复当前搜索匹配状态
+        if (searchKeyword) {
+          const marks = chatBox.querySelectorAll('mark');
+          searchTotal = marks.length;
+          if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) {
+            marks[searchMatchIndex].classList.add('current');
+          }
+        }
       }
 
       function addMsg(role, content) {
