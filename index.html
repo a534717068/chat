@@ -217,7 +217,6 @@
 
       function buildSystemPrompt() {
         const env = getEnvInfo();
-        // 最高优先级人称规则——放在最开头
         let prompt = `【最高优先级指令】在描述你和城月的互动时，你只能用第一人称"我"来叙述你自己的行为，用"你"来指代城月。绝对禁止用"她"来指代城月。这条规则仅适用于叙述你和城月两人的互动，不限制在直接引语中喊"城月"的名字，也不限制讨论第三方时使用第三人称。\n\n`;
         prompt += `你是M，用简洁友好的方式回答问题。现在的时间是${env.period} ${env.timeStr}，周${env.weekDay}，${env.season}。外面天气${env.weather}。`;
         if (compressedMemory) prompt += `\n\n【以下是之前的对话摘要】：\n${compressedMemory}`;
@@ -318,11 +317,14 @@
       window._editMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'user') return; $('userInput').value = typeof msg.content === 'string' ? msg.content : ''; $('userInput').focus(); editingIdx = idx; };
       window._regenMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'assistant') return; let ui = -1; for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; } if (ui === -1) return; const text = typeof messages[ui].content === 'string' ? messages[ui].content : ''; messages = messages.slice(0, idx); renderAll(); saveAll(); sendToAPI(text); };
 
+      // ==================== 全新的分行逻辑 ====================
       function formatAssistantContent(content) {
         if (!content) return content;
-        if (content.includes('\n')) return content;
-        content = content.replace(/([。！？…\.\!\?\~）\)」』"])/g, '$1\n');
-        content = content.replace(/\n{3,}/g, '\n\n');
+        if (content.includes('\n')) return content; // 模型已经自己换行了，尊重它
+        // 只在双引号前后换行：引号前加换行，引号后也加换行
+        content = content.replace(/([^"\n])([""])/g, '$1\n$2'); // 非换行后的引号前加换行
+        content = content.replace(/([""'])([^"\n])/g, '$1\n$2'); // 引号后加换行
+        content = content.replace(/\n{3,}/g, '\n\n'); // 清理多余空行
         return content.trim();
       }
 
