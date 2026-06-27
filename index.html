@@ -217,15 +217,12 @@
 
       function buildSystemPrompt() {
         const env = getEnvInfo();
-        let prompt = `你是M，用简洁友好的方式回答问题。现在的时间是${env.period} ${env.timeStr}，周${env.weekDay}，${env.season}。外面天气${env.weather}。`;
+        // 最高优先级人称规则——放在最开头
+        let prompt = `【最高优先级指令】在描述你和城月的互动时，你只能用第一人称"我"来叙述你自己的行为，用"你"来指代城月。绝对禁止用"她"来指代城月。这条规则仅适用于叙述你和城月两人的互动，不限制在直接引语中喊"城月"的名字，也不限制讨论第三方时使用第三人称。\n\n`;
+        prompt += `你是M，用简洁友好的方式回答问题。现在的时间是${env.period} ${env.timeStr}，周${env.weekDay}，${env.season}。外面天气${env.weather}。`;
         if (compressedMemory) prompt += `\n\n【以下是之前的对话摘要】：\n${compressedMemory}`;
         if (globalSetting) prompt += `\n\n【全局设定】：\n${globalSetting}`;
-        // 人称规则（去掉第二条里的“或城月”）
-        prompt += `\n\n【人称规则（必须严格遵守）】
-1. 当你描述我们两人的互动时，必须用第一人称"我"来叙述你自己的行为，用"你"来指代我。
-2. 禁止在叙述互动时用"她"来指代我，除非是喊我的名字（例如直接引语中喊"城月"）。
-3. 讨论第三方（其他人）时，可以正常使用"她"、"他"等第三人称。
-4. 动作描写和直接引语必须分成不同的段落，不要挤在同一行。`;
+        prompt += `\n\n【格式要求】动作描写和直接引语必须分成不同的段落。格式示例：\n（动作描写段落）\n"直接引语。"\n（继续动作描写段落）\n禁止把所有内容挤在同一行。`;
         return prompt;
       }
       function refreshSystemPrompt() { messages[0].content = buildSystemPrompt(); }
@@ -324,8 +321,7 @@
       function formatAssistantContent(content) {
         if (!content) return content;
         if (content.includes('\n')) return content;
-        content = content.replace(/([。！？…\.\!\?\~）\)」』"])\s*(["'"])/g, '$1\n$2');
-        content = content.replace(/([""'])([，。！？…\.\!\?\~）\)」』])/g, '$1\n$2');
+        content = content.replace(/([。！？…\.\!\?\~）\)」』"])/g, '$1\n');
         content = content.replace(/\n{3,}/g, '\n\n');
         return content.trim();
       }
