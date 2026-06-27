@@ -74,6 +74,7 @@
     .modal-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
     .modal-buttons button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; color: white; }
     .btn-import { background: #0f3460; } .btn-file { background: #533483; } .btn-cancel { background: #888; }
+    .btn-append { background: #0f3460; }
     .modal .format-hint { font-size: 0.75rem; color: var(--text-secondary); }
     .search-nav { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-primary); }
     .search-nav button { padding: 6px 12px; border: none; border-radius: 6px; font-size: 0.8rem; cursor: pointer; background: var(--btn-bg); color: var(--btn-text); flex: 0; }
@@ -127,7 +128,8 @@
       <div class="modal-buttons">
         <button class="btn-file" id="importFileBtn">TXT</button>
         <button class="btn-file" id="importJsonFileBtn" style="background:#e94560;">JSON</button>
-        <button class="btn-import" id="importConfirmBtn">导入</button>
+        <button class="btn-import" id="importConfirmBtn">导入（覆盖）</button>
+        <button class="btn-append" id="importAppendBtn">追加（不覆盖）</button>
         <button class="btn-cancel" id="importCancelBtn">取消</button>
       </div>
       <input type="file" id="importFileInput" accept=".txt" style="display:none">
@@ -167,6 +169,7 @@
       const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
       const SETTING_KEY = 'deepseek_global_setting', WEATHER_KEY = 'deepseek_weather_mode';
       const MEMORY_KEY = 'deepseek_compressed_memory';
+      const FULL_HISTORY_KEY = 'deepseek_full_history'; // 新增：完整历史记录存储键
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
       const MAX_CONTEXT = 30, COMPRESS_THRESHOLD = 40;
 
@@ -211,9 +214,17 @@
       let apiKey = localStorage.getItem(SK) || '';
       let globalSetting = localStorage.getItem(SETTING_KEY) || '';
       let compressedMemory = localStorage.getItem(MEMORY_KEY) || '';
+      // 完整历史记录（永远不会被压缩删除）
+      let fullHistory = [];
+      const savedFull = localStorage.getItem(FULL_HISTORY_KEY);
+      if (savedFull) try { fullHistory = JSON.parse(savedFull); } catch(e) { fullHistory = []; }
       let messages = [{ role: 'system', content: '' }];
       let nextId = Date.now(); let editingIdx = -1;
       let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
+
+      function saveFullHistory() {
+        try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) { /* 存储空间不足时静默失败 */ }
+      }
 
       function buildSystemPrompt() {
         const env = getEnvInfo();
@@ -246,6 +257,11 @@
         if (s) try { const a = JSON.parse(s); if (Array.isArray(a) && a.length) messages = [messages[0], ...a]; } catch(e) {}
       }
       loadAll();
+      // 把当前 messages 同步到 fullHistory（首次加载时）
+      if (fullHistory.length === 0 && messages.length > 1) {
+        fullHistory = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '', time: m.time }));
+        saveFullHistory();
+      }
       $('totalTokens').textContent = localStorage.getItem(TKK) || '0';
       $('totalCost').textContent = parseFloat(localStorage.getItem(TCK) || '0').toFixed(4);
 
@@ -256,7 +272,7 @@
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); };
       document.onclick = () => $('moreMenu').classList.remove('active');
       $('moreMenu').onclick = e => e.stopPropagation();
-      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
+      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
 
       bindDraft($('userInput'), DRAFT_CHAT);
       bindDraft($('settingTextarea'), DRAFT_SETTING);
@@ -316,22 +332,15 @@
       window._editMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'user') return; $('userInput').value = typeof msg.content === 'string' ? msg.content : ''; $('userInput').focus(); editingIdx = idx; };
       window._regenMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'assistant') return; let ui = -1; for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; } if (ui === -1) return; const text = typeof messages[ui].content === 'string' ? messages[ui].content : ''; messages = messages.slice(0, idx); renderAll(); saveAll(); sendToAPI(text); };
 
-      // ==================== 智能代词替换 ====================
       function fixPronouns(content) {
         if (!content) return content;
-        // 检测是否存在第三方女性角色（新姐姐、那个女的、阿姨等）
         const hasThirdParty = /(?:新|那个|这位|某个|别的|其他|一个)?(?:姐姐|妹妹|阿姨|女的|女生|姑娘|同事|同学|朋友|人)/.test(content);
         if (hasThirdParty) {
-          // 有第三方：只替换那些明显是描述互动中指向用户的"她"
-          // 策略：把"她"前面是动作动词（拉、抱、看、碰、亲、推等）+她 的情况替换
-          content = content.replace(/([拉抱看碰亲推动抚摸搂揽牵握抓按捏拍打送跟陪叫喊问对和与给帮让])\s*她/g, '$1你');
+          content = content.replace(/([拉抱看碰推动抚摸搂揽牵握抓按捏拍打送跟陪叫喊问对和与给帮让])\s*她/g, '$1你');
           content = content.replace(/把\s*她/g, '把你');
           content = content.replace(/\b她的\b/g, '你的');
-          // 把"把她"、"她的"也替换
         } else {
-          // 没有第三方：全局替换
-          let result = '';
-          let inQuote = false;
+          let result = ''; let inQuote = false;
           for (let i = 0; i < content.length; i++) {
             const ch = content[i];
             if (ch === '"' || ch === '"' || ch === '"') { inQuote = !inQuote; result += ch; }
@@ -361,10 +370,7 @@
           const row = document.createElement('div'); row.className = `message-row ${msg.role}`;
           const timeStr = formatTime(msg.time || Date.now());
           let content = typeof msg.content === 'string' ? msg.content : '[图片]';
-          if (msg.role === 'assistant') {
-            content = fixPronouns(content);
-            content = formatAssistantContent(content);
-          }
+          if (msg.role === 'assistant') { content = fixPronouns(content); content = formatAssistantContent(content); }
           const hasHistory = msg.history && msg.history.length > 1;
           if (searchKeyword) {
             const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -389,7 +395,11 @@
 
       function addMsg(role, content) {
         const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 };
-        messages.push(msg); renderAll(); saveAll();
+        messages.push(msg);
+        // 同时追加到完整历史
+        fullHistory.push({ role, content, time: msg.time });
+        saveFullHistory();
+        renderAll(); saveAll();
       }
 
       function getNonSystemMessages() { return messages.filter(m => m.role !== 'system'); }
@@ -452,6 +462,9 @@
           if (last && last.role !== 'system') userMsg.parentId = last.id;
           messages.push(userMsg);
         }
+        // 新消息也追加到完整历史
+        fullHistory.push({ role: 'user', content: text, time: userMsg.time });
+        saveFullHistory();
         renderAll(); saveAll();
 
         const load = document.createElement('div'); load.className = 'message-row assistant';
@@ -473,6 +486,8 @@
           const data = await res.json(); const reply = data.choices[0].message.content;
           const aiMsg = { role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id };
           messages.push(aiMsg);
+          fullHistory.push({ role: 'assistant', content: reply, time: aiMsg.time });
+          saveFullHistory();
           if (userMsg.history && userMsg.history.length > 0) userMsg.history[userMsg.historyIndex].reply = reply;
           renderAll(); saveAll();
           if (data.usage) {
@@ -489,8 +504,10 @@
       $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
       $('userInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('sendBtn').click(); } };
 
+      // ==================== 导出：从完整历史记录导出 ====================
       $('exportBtn').onclick = () => {
-        const d = messages.filter(m => m.role !== 'system'); if (!d.length) return alert('无记录');
+        const d = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system');
+        if (!d.length) return alert('无记录');
         const b = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
         const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `chat-m-${new Date().toISOString().slice(0,10)}.json`; a.click();
       };
@@ -498,10 +515,11 @@
       (function auto() {
         const today = new Date().toISOString().slice(0,10);
         if (localStorage.getItem(AEK) === today) return;
-        const d = messages.filter(m => m.role !== 'system');
+        const d = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system');
         if (d.length) { const b = new Blob([JSON.stringify(d)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK, today); }
       })();
 
+      // ==================== 导入功能（覆盖/追加） ====================
       $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
       $('importCancelBtn').onclick = () => $('importModal').classList.remove('active');
       $('importModal').onclick = e => { if (e.target === $('importModal')) $('importModal').classList.remove('active'); };
@@ -518,19 +536,34 @@
         return res;
       }
 
-      $('importConfirmBtn').onclick = () => {
-        const raw = $('importTextarea').value.trim(); if (!raw) return alert('请粘贴内容');
+      function parseAndImport(append = false) {
+        const raw = $('importTextarea').value.trim(); if (!raw) { alert('请粘贴内容'); return; }
         let imported;
         try { imported = JSON.parse(raw); if (!Array.isArray(imported)) throw 0; imported = imported.filter(m => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'); } catch(e) { imported = parseText(raw); }
-        if (!imported || !imported.length) return alert('无法解析');
-        messages = [messages[0]]; const now = Date.now(); const total = imported.length;
-        const newMessages = imported.map((m, i) => ({ role: m.role, content: m.content, id: nextId++, time: now - (total - i) * 5000, parentId: null, history: m.history || null, historyIndex: m.historyIndex || 0 }));
+        if (!imported || !imported.length) { alert('无法解析'); return; }
+        const now = Date.now(); const total = imported.length;
+        const newMessages = imported.map((m, i) => ({ role: m.role, content: m.content, id: nextId++, time: m.time || (now - (total - i) * 5000), parentId: null, history: m.history || null, historyIndex: m.historyIndex || 0 }));
         for (let i = 0; i < newMessages.length; i++) { if (i > 0) newMessages[i].parentId = newMessages[i-1].id; }
-        messages.push(...newMessages); renderAll(); saveAll();
+
+        if (append) {
+          const lastMsg = messages[messages.length - 1];
+          if (lastMsg && lastMsg.role !== 'system') newMessages[0].parentId = lastMsg.id;
+          messages.push(...newMessages);
+          fullHistory.push(...newMessages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '', time: m.time })));
+        } else {
+          messages = [messages[0]];
+          messages.push(...newMessages);
+          fullHistory = newMessages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '', time: m.time }));
+        }
+        saveFullHistory();
+        renderAll(); saveAll();
         saveDraft(DRAFT_IMPORT, '');
-        alert(`成功导入 ${newMessages.length} 条消息`);
+        alert(`${append ? '追加' : '导入'}成功（${newMessages.length} 条消息）`);
         $('importModal').classList.remove('active');
-      };
+      }
+
+      $('importConfirmBtn').onclick = () => parseAndImport(false);
+      $('importAppendBtn').onclick = () => parseAndImport(true);
 
       renderAll();
       if (messages.length <= 1) addMsg('assistant', apiKey ? '你好！我是M，有什么可以帮你的？' : '👋 请先输入 API Key');
