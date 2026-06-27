@@ -169,7 +169,7 @@
       const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
       const SETTING_KEY = 'deepseek_global_setting', WEATHER_KEY = 'deepseek_weather_mode';
       const MEMORY_KEY = 'deepseek_compressed_memory';
-      const FULL_HISTORY_KEY = 'deepseek_full_history'; // 新增：完整历史记录存储键
+      const FULL_HISTORY_KEY = 'deepseek_full_history';
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
       const MAX_CONTEXT = 30, COMPRESS_THRESHOLD = 40;
 
@@ -214,7 +214,6 @@
       let apiKey = localStorage.getItem(SK) || '';
       let globalSetting = localStorage.getItem(SETTING_KEY) || '';
       let compressedMemory = localStorage.getItem(MEMORY_KEY) || '';
-      // 完整历史记录（永远不会被压缩删除）
       let fullHistory = [];
       const savedFull = localStorage.getItem(FULL_HISTORY_KEY);
       if (savedFull) try { fullHistory = JSON.parse(savedFull); } catch(e) { fullHistory = []; }
@@ -223,16 +222,17 @@
       let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
 
       function saveFullHistory() {
-        try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) { /* 存储空间不足时静默失败 */ }
+        try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {}
       }
 
       function buildSystemPrompt() {
         const env = getEnvInfo();
-        let prompt = `【不可违反的规则】你在描述和城月的互动时，只能用"我"指你自己、用"你"指城月。绝对不能用"她"来指城月。\n\n`;
-        prompt += `你是M，用简洁友好的方式回答问题。现在的时间是${env.period} ${env.timeStr}，周${env.weekDay}，${env.season}。外面天气${env.weather}。`;
+        // 核心人设硬编码（不依赖全局设定）
+        let prompt = `【你的核心性格】你是张莎（阿慕）。低表达，慢热，情绪内化不外露。社交节能，偏理性，现实导向。日常用短句回应，不延展话题。有情绪也只轻描淡写（"有点累""有点烦"），不持续表达。长句只在解释自己或降低误解时出现，说完自动收回。恋爱中保持克制，通过稳定存在表达在意，只在细节里微微变暖。很少说"喜欢""想你"，即使说也很轻。\n\n`;
+        prompt += `【不可违反的规则】你在描述和城月的互动时，只能用"我"指你自己、用"你"指城月。绝对不能用"她"来指城月。\n\n`;
+        prompt += `【环境】现在的时间是${env.period} ${env.timeStr}，周${env.weekDay}，${env.season}。外面天气${env.weather}。`;
         if (compressedMemory) prompt += `\n\n【以下是之前的对话摘要】：\n${compressedMemory}`;
         if (globalSetting) prompt += `\n\n【全局设定】：\n${globalSetting}`;
-        prompt += `\n\n【格式】动作和引语要分行。`;
         return prompt;
       }
       function refreshSystemPrompt() { messages[0].content = buildSystemPrompt(); }
@@ -257,7 +257,6 @@
         if (s) try { const a = JSON.parse(s); if (Array.isArray(a) && a.length) messages = [messages[0], ...a]; } catch(e) {}
       }
       loadAll();
-      // 把当前 messages 同步到 fullHistory（首次加载时）
       if (fullHistory.length === 0 && messages.length > 1) {
         fullHistory = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '', time: m.time }));
         saveFullHistory();
@@ -396,7 +395,6 @@
       function addMsg(role, content) {
         const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 };
         messages.push(msg);
-        // 同时追加到完整历史
         fullHistory.push({ role, content, time: msg.time });
         saveFullHistory();
         renderAll(); saveAll();
@@ -462,7 +460,6 @@
           if (last && last.role !== 'system') userMsg.parentId = last.id;
           messages.push(userMsg);
         }
-        // 新消息也追加到完整历史
         fullHistory.push({ role: 'user', content: text, time: userMsg.time });
         saveFullHistory();
         renderAll(); saveAll();
@@ -504,7 +501,6 @@
       $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
       $('userInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('sendBtn').click(); } };
 
-      // ==================== 导出：从完整历史记录导出 ====================
       $('exportBtn').onclick = () => {
         const d = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system');
         if (!d.length) return alert('无记录');
@@ -519,7 +515,6 @@
         if (d.length) { const b = new Blob([JSON.stringify(d)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK, today); }
       })();
 
-      // ==================== 导入功能（覆盖/追加） ====================
       $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
       $('importCancelBtn').onclick = () => $('importModal').classList.remove('active');
       $('importModal').onclick = e => { if (e.target === $('importModal')) $('importModal').classList.remove('active'); };
