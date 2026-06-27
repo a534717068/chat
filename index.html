@@ -168,8 +168,7 @@
       const SETTING_KEY = 'deepseek_global_setting', WEATHER_KEY = 'deepseek_weather_mode';
       const MEMORY_KEY = 'deepseek_compressed_memory';
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
-      const MAX_CONTEXT = 30; // 上下文窗口
-      const COMPRESS_THRESHOLD = 40; // 当消息超过此数量时，压缩早期消息
+      const MAX_CONTEXT = 30, COMPRESS_THRESHOLD = 40;
 
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
@@ -219,12 +218,9 @@
       function buildSystemPrompt() {
         const env = getEnvInfo();
         let prompt = `你是M，用简洁友好的方式回答问题。现在的时间是${env.period} ${env.timeStr}，周${env.weekDay}，${env.season}。外面天气${env.weather}。`;
-        if (compressedMemory) {
-          prompt += `\n\n【以下是你和城月之前的对话历史摘要，请记住这些关键信息，但用自然的方式融入对话，不要逐条复述】：\n${compressedMemory}`;
-        }
-        if (globalSetting) {
-          prompt += `\n\n【以下是你必须始终遵守的全局设定/人设/记忆，优先级最高】：\n${globalSetting}`;
-        }
+        if (compressedMemory) prompt += `\n\n【以下是之前的对话摘要，请记住这些关键信息】：\n${compressedMemory}`;
+        if (globalSetting) prompt += `\n\n【以下是你必须始终遵守的全局设定/人设/记忆，优先级最高】：\n${globalSetting}`;
+        prompt += `\n\n【格式要求】你的回复中，动作描写和对话必须分行。格式示例：\n（动作描写）\n"直接引语。"\n（继续动作描写）\n禁止把动作和语言挤在同一行。`;
         return prompt;
       }
       function refreshSystemPrompt() { messages[0].content = buildSystemPrompt(); }
@@ -320,6 +316,22 @@
       window._editMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'user') return; $('userInput').value = typeof msg.content === 'string' ? msg.content : ''; $('userInput').focus(); editingIdx = idx; };
       window._regenMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'assistant') return; let ui = -1; for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; } if (ui === -1) return; const text = typeof messages[ui].content === 'string' ? messages[ui].content : ''; messages = messages.slice(0, idx); renderAll(); saveAll(); sendToAPI(text); };
 
+      // ==================== 格式化 M 的回复：动作和语言分行 ====================
+      function formatAssistantContent(content) {
+        if (!content) return content;
+        // 如果内容已经包含换行，直接返回（模型自己已经换行了）
+        if (content.includes('\n')) return content;
+        // 在中文引号前换行：把 "xxx" 前面加换行
+        content = content.replace(/([。！？…\.\!\?\~）\)」』"])\s*[""']/g, '$1\n"');
+        // 在引号后面的逗号/句号后换行（动作接着引号的情况）
+        content = content.replace(/[""']([，。！？…\.\!\?\~）\)」』])/g, '"\n$1');
+        // 把单独出现的引号前加换行（更激进的分行）
+        content = content.replace(/([^"\n])([""'])/g, '$1\n$2');
+        // 清理多余的连续换行
+        content = content.replace(/\n{3,}/g, '\n\n');
+        return content.trim();
+      }
+
       function renderAll() {
         chatBox.innerHTML = '';
         messages.forEach((msg, idx) => {
@@ -327,6 +339,10 @@
           const row = document.createElement('div'); row.className = `message-row ${msg.role}`;
           const timeStr = formatTime(msg.time || Date.now());
           let content = typeof msg.content === 'string' ? msg.content : '[图片]';
+          // M 的回复自动分行
+          if (msg.role === 'assistant') {
+            content = formatAssistantContent(content);
+          }
           const hasHistory = msg.history && msg.history.length > 1;
           if (searchKeyword) {
             const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -354,27 +370,18 @@
         messages.push(msg); renderAll(); saveAll();
       }
 
-      // ==================== 压缩对话历史（自动生成长期记忆） ====================
-      function getNonSystemMessages() {
-        return messages.filter(m => m.role !== 'system');
-      }
+      function getNonSystemMessages() { return messages.filter(m => m.role !== 'system'); }
 
       async function compressHistoryIfNeeded() {
         const nonSystemMsgs = getNonSystemMessages();
-        if (nonSystemMsgs.length <= COMPRESS_THRESHOLD) return; // 还没到压缩阈值
-
-        // 取最早的 N 条消息进行压缩（保留最近 MAX_CONTEXT 条不压缩）
+        if (nonSystemMsgs.length <= COMPRESS_THRESHOLD) return;
         const oldMsgs = nonSystemMsgs.slice(0, nonSystemMsgs.length - MAX_CONTEXT);
-        if (oldMsgs.length < 10) return; // 太少了不值得压缩
-
-        // 构建待压缩的对话文本
+        if (oldMsgs.length < 10) return;
         const textToCompress = oldMsgs.map(m => {
           const role = m.role === 'user' ? '城月' : 'M';
           const content = typeof m.content === 'string' ? m.content : '';
           return `${role}：${content}`;
         }).join('\n');
-
-        // 尝试调用 DeepSeek API 进行压缩（如果失败，用简单截断）
         try {
           if (apiKey) {
             const compressPrompt = [
@@ -388,35 +395,18 @@
             if (res.ok) {
               const data = await res.json();
               const summary = data.choices[0].message.content.trim();
-              // 更新压缩记忆
-              if (compressedMemory) {
-                compressedMemory = compressedMemory + '\n' + summary;
-              } else {
-                compressedMemory = summary;
-              }
-              // 限制记忆总长度（防止无限增长）
-              if (compressedMemory.length > 3000) {
-                compressedMemory = compressedMemory.slice(-3000);
-              }
+              if (compressedMemory) { compressedMemory = compressedMemory + '\n' + summary; } else { compressedMemory = summary; }
+              if (compressedMemory.length > 3000) { compressedMemory = compressedMemory.slice(-3000); }
               localStorage.setItem(MEMORY_KEY, compressedMemory);
-              // 从 messages 中删除已压缩的旧消息
               messages = [messages[0], ...nonSystemMsgs.slice(oldMsgs.length)];
-              refreshSystemPrompt();
-              saveAll();
-              renderAll();
-              return;
+              refreshSystemPrompt(); saveAll(); renderAll(); return;
             }
           }
-        } catch(e) {
-          // 压缩失败，使用简单截断（静默处理）
-        }
-        // 如果 API 压缩失败，直接截断旧消息（至少保留记忆不增长）
+        } catch(e) {}
         messages = [messages[0], ...nonSystemMsgs.slice(oldMsgs.length)];
-        saveAll();
-        renderAll();
+        saveAll(); renderAll();
       }
 
-      // 每次发送消息后检查是否需要压缩
       async function sendToAPI(text) {
         if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
         const isEdit = editingIdx >= 0 && editingIdx < messages.length;
@@ -471,7 +461,6 @@
             const tc = parseFloat($('totalCost').textContent) + cost; $('totalCost').textContent = tc.toFixed(4); $('lastCost').textContent = cost.toFixed(4);
             saveAll();
           }
-          // 发送成功后，检查是否需要压缩历史
           await compressHistoryIfNeeded();
         } catch(e) { load.remove(); addMsg('assistant', `❌ ${e.message}`); }
       }
