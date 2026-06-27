@@ -37,6 +37,8 @@
     .setup-bar button { padding: 8px 14px; background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 6px; font-size: 0.85rem; }
     .token-panel { background: var(--surface); padding: 4px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; flex-shrink: 0; }
     .model-indicator { background: var(--surface); padding: 2px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); text-align: center; flex-shrink: 0; }
+    .env-indicator { background: var(--surface); padding: 2px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); text-align: center; flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .env-indicator .weather-icon { font-size: 1rem; cursor: pointer; }
     .chat-container { flex: 1; position: relative; overflow: hidden; }
     .chat-box { height: 100%; overflow-y: auto; padding: 10px 12px; background: var(--chat-bg); display: flex; flex-direction: column; gap: 8px; }
     .message-row { display: flex; flex-direction: column; max-width: 85%; animation: fadeIn 0.15s ease; }
@@ -102,6 +104,10 @@
     <span>累计：<strong id="totalTokens">0</strong> tokens / <strong id="totalCost">0.0000</strong> 元</span>
   </div>
   <div class="model-indicator">当前模型：<strong>deepseek-v4-flash</strong></div>
+  <div class="env-indicator" id="envIndicator">
+    <span class="weather-icon" id="weatherIcon" title="点击切换天气">☀️</span>
+    <span id="envText">获取环境中...</span>
+  </div>
   <div class="chat-container"><div class="chat-box" id="chatBox"></div><button class="scroll-to-bottom" id="scrollToBottomBtn">↓</button></div>
   <div class="input-area">
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
@@ -109,11 +115,11 @@
   </div>
   <div class="tip">密钥仅保存在你的手机中</div>
 
-  <!-- 各种弹窗 -->
+  <!-- 弹窗 -->
   <div class="modal-overlay" id="importModal">
     <div class="modal">
       <textarea id="importTextarea" placeholder="在此粘贴聊天内容..."></textarea>
-      <div class="format-hint">支持 "你:" / "M:" 开头的文本，或 JSON 数组。动作描写会自动合并。</div>
+      <div class="format-hint">支持 "你:" / "M:" 开头的文本，或 JSON 数组。</div>
       <div class="modal-buttons">
         <button class="btn-file" id="importFileBtn">TXT</button>
         <button class="btn-file" id="importJsonFileBtn" style="background:#e94560;">JSON</button>
@@ -151,42 +157,45 @@
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
       const SETTING_KEY = 'deepseek_global_setting';
+      const WEATHER_KEY = 'deepseek_weather_mode';
 
-      // 草稿存储键
-      const DRAFT_CHAT = 'draft_chat_input';
-      const DRAFT_SETTING = 'draft_setting';
-      const DRAFT_IMPORT = 'draft_import';
-      const DRAFT_SEARCH = 'draft_search';
+      const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
 
-      // 通用草稿管理
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
-      function bindDraft(inputEl, draftKey, onClear) {
+      function bindDraft(inputEl, draftKey) {
         if (!inputEl) return;
-        // 恢复草稿
         const saved = loadDraft(draftKey);
         if (saved && !inputEl.value) inputEl.value = saved;
-        // 实时保存
         inputEl.addEventListener('input', () => saveDraft(draftKey, inputEl.value));
-        // 清除草稿的时机由调用者通过 onClear 回调处理
-        if (onClear) {
-          // 监听值变为空时清除
-          const observer = new MutationObserver(() => { if (!inputEl.value) saveDraft(draftKey, ''); });
-          // 简化处理：在特定操作后手动清除
-        }
       }
 
-      let apiKey = localStorage.getItem(SK) || '';
-      let globalSetting = localStorage.getItem(SETTING_KEY) || '';
-      let messages = [{ role: 'system', content: buildSystemPrompt() }];
-      let nextId = Date.now();
-      let editingIdx = -1;
-      let searchKeyword = '';
+      // 天气图标映射
+      const weatherIcons = ['☀️','⛅','☁️','🌧️','⛈️','❄️','🌫️'];
+      let weatherMode = parseInt(localStorage.getItem(WEATHER_KEY) || '0');
 
-      function buildSystemPrompt() {
+      function getWeatherEmoji() { return weatherIcons[weatherMode % weatherIcons.length]; }
+      function getWeatherDesc() {
+        const map = ['晴朗','多云','阴天','小雨','雷阵雨','下雪','大雾'];
+        return map[weatherMode % map.length];
+      }
+      function getSeason() {
+        const m = new Date().getMonth() + 1;
+        if (m >= 3 && m <= 5) return '春天';
+        if (m >= 6 && m <= 8) return '夏天';
+        if (m >= 9 && m <= 11) return '秋天';
+        return '冬天';
+      }
+
+      function getEnvInfo() {
         const now = new Date();
         const hour = now.getHours();
-        const timeStr = `${hour}:${String(now.getMinutes()).padStart(2,'0')}`;
+        const minute = now.getMinutes();
+        const timeStr = `${hour}:${String(minute).padStart(2,'0')}`;
+        const weekDays = ['日','一','二','三','四','五','六'];
+        const weekDay = weekDays[now.getDay()];
+        const season = getSeason();
+        const weather = getWeatherDesc();
         let period = '';
         if (hour >= 5 && hour < 12) period = '早上';
         else if (hour >= 12 && hour < 14) period = '中午';
@@ -194,12 +203,45 @@
         else if (hour >= 17 && hour < 19) period = '傍晚';
         else if (hour >= 19 && hour < 22) period = '晚上';
         else period = '深夜';
-        let prompt = `你是M，用简洁友好的方式回答问题。现在是${period} ${timeStr}。`;
-        if (globalSetting) prompt += `\n\n【以下是你必须始终遵守的全局设定/人设/记忆，优先级最高】：\n${globalSetting}`;
+        return { period, timeStr, weekDay, season, weather };
+      }
+
+      function updateEnvDisplay() {
+        const env = getEnvInfo();
+        $('weatherIcon').textContent = getWeatherEmoji();
+        $('envText').textContent = `${env.season} · 周${env.weekDay} · ${env.period} ${env.timeStr} · ${env.weather}`;
+      }
+      updateEnvDisplay();
+      setInterval(updateEnvDisplay, 60000);
+
+      // 点击天气图标切换天气
+      $('weatherIcon').onclick = () => {
+        weatherMode = (weatherMode + 1) % weatherIcons.length;
+        localStorage.setItem(WEATHER_KEY, weatherMode);
+        updateEnvDisplay();
+      };
+
+      let apiKey = localStorage.getItem(SK) || '';
+      let globalSetting = localStorage.getItem(SETTING_KEY) || '';
+      let messages = [{ role: 'system', content: '' }];
+      let nextId = Date.now();
+      let editingIdx = -1;
+      let searchKeyword = '';
+
+      function buildSystemPrompt() {
+        const env = getEnvInfo();
+        let prompt = `你是M，用简洁友好的方式回答问题。现在的时间是${env.period} ${env.timeStr}，周${env.weekDay}，${env.season}。外面天气${env.weather}。`;
+        if (globalSetting) {
+          prompt += `\n\n【以下是你必须始终遵守的全局设定/人设/记忆，优先级最高】：\n${globalSetting}`;
+        }
         return prompt;
       }
 
-      setInterval(() => { messages[0].content = buildSystemPrompt(); }, 60000);
+      function refreshSystemPrompt() {
+        messages[0].content = buildSystemPrompt();
+      }
+      refreshSystemPrompt();
+      setInterval(refreshSystemPrompt, 60000);
 
       function formatTime(ts) {
         const d = new Date(ts); const now = new Date();
@@ -232,48 +274,28 @@
       $('moreMenu').onclick = e => e.stopPropagation();
       $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
 
-      // ==================== 草稿绑定 ====================
-      // 主聊天输入框
       bindDraft($('userInput'), DRAFT_CHAT);
-      // 设定弹窗
       bindDraft($('settingTextarea'), DRAFT_SETTING);
-      // 导入弹窗
       bindDraft($('importTextarea'), DRAFT_IMPORT);
-      // 搜索弹窗
       bindDraft($('searchInput'), DRAFT_SEARCH);
 
-      // 发送消息后清除聊天草稿
-      const origSendToAPI = sendToAPI;
-      sendToAPI = function(text) {
-        saveDraft(DRAFT_CHAT, '');
-        return origSendToAPI(text);
-      };
-
-      // 全局设定
-      $('settingBtn').onclick = () => {
-        $('settingTextarea').value = loadDraft(DRAFT_SETTING) || globalSetting;
-        $('settingModal').classList.add('active');
-        $('moreMenu').classList.remove('active');
-      };
+      $('settingBtn').onclick = () => { $('settingTextarea').value = loadDraft(DRAFT_SETTING) || globalSetting; $('settingModal').classList.add('active'); $('moreMenu').classList.remove('active'); };
       $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active');
       $('settingModal').onclick = e => { if (e.target === $('settingModal')) $('settingModal').classList.remove('active'); };
       $('settingSaveBtn').onclick = () => {
         globalSetting = $('settingTextarea').value.trim();
         localStorage.setItem(SETTING_KEY, globalSetting);
-        messages[0].content = buildSystemPrompt();
-        saveDraft(DRAFT_SETTING, ''); // 保存后清除草稿
+        refreshSystemPrompt();
+        saveDraft(DRAFT_SETTING, '');
         $('settingModal').classList.remove('active');
         addMsg('assistant', globalSetting ? '✅ 全局设定已保存。' : '✅ 全局设定已清空。');
       };
 
-      // 搜索
       $('searchBtn').onclick = () => { $('searchInput').value = loadDraft(DRAFT_SEARCH) || searchKeyword; $('searchModal').classList.add('active'); $('moreMenu').classList.remove('active'); };
       $('searchCloseBtn').onclick = () => $('searchModal').classList.remove('active');
       $('searchModal').onclick = e => { if (e.target === $('searchModal')) $('searchModal').classList.remove('active'); };
       $('searchFindBtn').onclick = () => {
-        searchKeyword = $('searchInput').value.trim();
-        $('searchModal').classList.remove('active');
-        renderAll();
+        searchKeyword = $('searchInput').value.trim(); $('searchModal').classList.remove('active'); renderAll();
         if (searchKeyword) { const marks = chatBox.querySelectorAll('mark'); if (marks.length > 0) marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' }); }
       };
       $('searchClearBtn').onclick = () => { searchKeyword = ''; saveDraft(DRAFT_SEARCH, ''); $('searchInput').value = ''; $('searchModal').classList.remove('active'); renderAll(); };
@@ -299,7 +321,6 @@
         } else { const replyMsg = { role: 'assistant', content: ver.reply || '', id: nextId++, time: ver.time, parentId: msg.id }; messages.splice(idx + 1, 0, replyMsg); }
         renderAll(); saveAll();
       };
-
       window._delMsg = function(idx) { if (!confirm('删除这条及后续对话？')) return; messages = messages.slice(0, idx); renderAll(); saveAll(); };
       window._editMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'user') return; $('userInput').value = typeof msg.content === 'string' ? msg.content : ''; $('userInput').focus(); editingIdx = idx; };
       window._regenMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'assistant') return; let ui = -1; for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; } if (ui === -1) return; const text = typeof messages[ui].content === 'string' ? messages[ui].content : ''; messages = messages.slice(0, idx); renderAll(); saveAll(); sendToAPI(text); };
@@ -331,8 +352,6 @@
         chatBox.scrollTop = chatBox.scrollHeight;
         scrollBtn.classList.toggle('visible', !nearBottom());
       }
-
-      function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
       function addMsg(role, content) {
         const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 };
@@ -370,7 +389,7 @@
         chatBox.appendChild(load); chatBox.scrollTop = chatBox.scrollHeight;
 
         try {
-          messages[0].content = buildSystemPrompt();
+          refreshSystemPrompt();
           const apiMsgs = messages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
           const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -409,7 +428,6 @@
         if (d.length) { const b = new Blob([JSON.stringify(d)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK, today); }
       })();
 
-      // ==================== 导入 ====================
       $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
       $('importCancelBtn').onclick = () => $('importModal').classList.remove('active');
       $('importModal').onclick = e => { if (e.target === $('importModal')) $('importModal').classList.remove('active'); };
@@ -435,7 +453,7 @@
         const newMessages = imported.map((m, i) => ({ role: m.role, content: m.content, id: nextId++, time: now - (total - i) * 5000, parentId: null, history: m.history || null, historyIndex: m.historyIndex || 0 }));
         for (let i = 0; i < newMessages.length; i++) { if (i > 0) newMessages[i].parentId = newMessages[i-1].id; }
         messages.push(...newMessages); renderAll(); saveAll();
-        saveDraft(DRAFT_IMPORT, ''); // 导入成功后清除草稿
+        saveDraft(DRAFT_IMPORT, '');
         alert(`成功导入 ${newMessages.length} 条消息`);
         $('importModal').classList.remove('active');
       };
