@@ -217,8 +217,7 @@
 
       function buildSystemPrompt() {
         const env = getEnvInfo();
-        // 把人称规则放在最开头，并且用更简短的语句
-        let prompt = `【不可违反的规则】你在描述和我（城月）的互动时，只能用"我"指你自己、用"你"指我。绝对不能用"她"来指我。\n\n`;
+        let prompt = `【不可违反的规则】你在描述和城月的互动时，只能用"我"指你自己、用"你"指城月。绝对不能用"她"来指城月。\n\n`;
         prompt += `你是M，用简洁友好的方式回答问题。现在的时间是${env.period} ${env.timeStr}，周${env.weekDay}，${env.season}。外面天气${env.weather}。`;
         if (compressedMemory) prompt += `\n\n【以下是之前的对话摘要】：\n${compressedMemory}`;
         if (globalSetting) prompt += `\n\n【全局设定】：\n${globalSetting}`;
@@ -274,7 +273,6 @@
         addMsg('assistant', globalSetting ? '✅ 全局设定已保存。' : '✅ 全局设定已清空。');
       };
 
-      // 搜索
       $('searchBtn').onclick = () => { $('searchInput').value = loadDraft(DRAFT_SEARCH) || searchKeyword; $('searchModal').classList.add('active'); $('moreMenu').classList.remove('active'); updateSearchNav(); };
       $('searchCloseBtn').onclick = () => $('searchModal').classList.remove('active');
       $('searchModal').onclick = e => { if (e.target === $('searchModal')) $('searchModal').classList.remove('active'); };
@@ -318,6 +316,30 @@
       window._editMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'user') return; $('userInput').value = typeof msg.content === 'string' ? msg.content : ''; $('userInput').focus(); editingIdx = idx; };
       window._regenMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'assistant') return; let ui = -1; for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; } if (ui === -1) return; const text = typeof messages[ui].content === 'string' ? messages[ui].content : ''; messages = messages.slice(0, idx); renderAll(); saveAll(); sendToAPI(text); };
 
+      // ==================== 强制纠正第三人称 ====================
+      function fixPronouns(content) {
+        if (!content) return content;
+        // 保护引号内的内容（直接引语中的"她"可能是喊别人，不替换）
+        // 简单策略：把不在引号内的"她"替换成"你"
+        let result = '';
+        let inQuote = false;
+        for (let i = 0; i < content.length; i++) {
+          const ch = content[i];
+          if (ch === '"' || ch === '"' || ch === '"') {
+            inQuote = !inQuote;
+            result += ch;
+          } else if (!inQuote && ch === '她') {
+            result += '你';
+          } else {
+            result += ch;
+          }
+        }
+        // 同时也替换"把她" -> "把你"、"她的" -> "你的"（不在引号内）
+        result = result.replace(/([^"]*)把\b她\b/g, '$1把你');
+        result = result.replace(/\b她的\b/g, '你的');
+        return result;
+      }
+
       // 分行：只在引号前后换行
       function formatAssistantContent(content) {
         if (!content) return content;
@@ -335,7 +357,10 @@
           const row = document.createElement('div'); row.className = `message-row ${msg.role}`;
           const timeStr = formatTime(msg.time || Date.now());
           let content = typeof msg.content === 'string' ? msg.content : '[图片]';
-          if (msg.role === 'assistant') content = formatAssistantContent(content);
+          if (msg.role === 'assistant') {
+            content = fixPronouns(content); // 强制纠正第三人称
+            content = formatAssistantContent(content);
+          }
           const hasHistory = msg.history && msg.history.length > 1;
           if (searchKeyword) {
             const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
