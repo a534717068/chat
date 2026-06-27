@@ -166,7 +166,10 @@
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
       const SETTING_KEY = 'deepseek_global_setting', WEATHER_KEY = 'deepseek_weather_mode';
+      const MEMORY_KEY = 'deepseek_compressed_memory';
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
+      const MAX_CONTEXT = 30; // 上下文窗口
+      const COMPRESS_THRESHOLD = 40; // 当消息超过此数量时，压缩早期消息
 
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
@@ -208,16 +211,20 @@
 
       let apiKey = localStorage.getItem(SK) || '';
       let globalSetting = localStorage.getItem(SETTING_KEY) || '';
+      let compressedMemory = localStorage.getItem(MEMORY_KEY) || '';
       let messages = [{ role: 'system', content: '' }];
       let nextId = Date.now(); let editingIdx = -1;
-      let searchKeyword = '';
-      let searchMatchIndex = -1; // 当前高亮的匹配索引
-      let searchTotal = 0;
+      let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
 
       function buildSystemPrompt() {
         const env = getEnvInfo();
         let prompt = `你是M，用简洁友好的方式回答问题。现在的时间是${env.period} ${env.timeStr}，周${env.weekDay}，${env.season}。外面天气${env.weather}。`;
-        if (globalSetting) prompt += `\n\n【以下是你必须始终遵守的全局设定/人设/记忆，优先级最高】：\n${globalSetting}`;
+        if (compressedMemory) {
+          prompt += `\n\n【以下是你和城月之前的对话历史摘要，请记住这些关键信息，但用自然的方式融入对话，不要逐条复述】：\n${compressedMemory}`;
+        }
+        if (globalSetting) {
+          prompt += `\n\n【以下是你必须始终遵守的全局设定/人设/记忆，优先级最高】：\n${globalSetting}`;
+        }
         return prompt;
       }
       function refreshSystemPrompt() { messages[0].content = buildSystemPrompt(); }
@@ -252,7 +259,7 @@
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); };
       document.onclick = () => $('moreMenu').classList.remove('active');
       $('moreMenu').onclick = e => e.stopPropagation();
-      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
+      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
 
       bindDraft($('userInput'), DRAFT_CHAT);
       bindDraft($('settingTextarea'), DRAFT_SETTING);
@@ -269,64 +276,24 @@
         addMsg('assistant', globalSetting ? '✅ 全局设定已保存。' : '✅ 全局设定已清空。');
       };
 
-      // ==================== 搜索功能（增强版：支持上下导航） ====================
-      $('searchBtn').onclick = () => {
-        $('searchInput').value = loadDraft(DRAFT_SEARCH) || searchKeyword;
-        $('searchModal').classList.add('active');
-        $('moreMenu').classList.remove('active');
-        updateSearchNav();
-      };
+      // 搜索
+      $('searchBtn').onclick = () => { $('searchInput').value = loadDraft(DRAFT_SEARCH) || searchKeyword; $('searchModal').classList.add('active'); $('moreMenu').classList.remove('active'); updateSearchNav(); };
       $('searchCloseBtn').onclick = () => $('searchModal').classList.remove('active');
       $('searchModal').onclick = e => { if (e.target === $('searchModal')) $('searchModal').classList.remove('active'); };
-
       function updateSearchNav() {
-        if (searchKeyword && searchTotal > 0) {
-          $('searchNav').style.display = 'flex';
-          $('searchCounter').textContent = `${searchMatchIndex + 1}/${searchTotal}`;
-          $('searchPrevBtn').disabled = searchMatchIndex <= 0;
-          $('searchNextBtn').disabled = searchMatchIndex >= searchTotal - 1;
-        } else {
-          $('searchNav').style.display = 'none';
-        }
+        if (searchKeyword && searchTotal > 0) { $('searchNav').style.display = 'flex'; $('searchCounter').textContent = `${searchMatchIndex + 1}/${searchTotal}`; $('searchPrevBtn').disabled = searchMatchIndex <= 0; $('searchNextBtn').disabled = searchMatchIndex >= searchTotal - 1; }
+        else { $('searchNav').style.display = 'none'; }
       }
-
       function jumpToMatch(index) {
-        const marks = chatBox.querySelectorAll('mark');
-        if (marks.length === 0) return;
-        if (index < 0) index = 0;
-        if (index >= marks.length) index = marks.length - 1;
-        // 清除所有当前标记
-        marks.forEach(m => m.classList.remove('current'));
-        // 标记当前
-        marks[index].classList.add('current');
-        marks[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
-        searchMatchIndex = index;
-        updateSearchNav();
+        const marks = chatBox.querySelectorAll('mark'); if (marks.length === 0) return;
+        if (index < 0) index = 0; if (index >= marks.length) index = marks.length - 1;
+        marks.forEach(m => m.classList.remove('current')); marks[index].classList.add('current');
+        marks[index].scrollIntoView({ behavior: 'smooth', block: 'center' }); searchMatchIndex = index; updateSearchNav();
       }
-
-      $('searchFindBtn').onclick = () => {
-        searchKeyword = $('searchInput').value.trim();
-        $('searchModal').classList.remove('active');
-        searchMatchIndex = 0;
-        renderAll();
-        const marks = chatBox.querySelectorAll('mark');
-        searchTotal = marks.length;
-        if (marks.length > 0) {
-          jumpToMatch(0);
-        } else {
-          searchTotal = 0;
-        }
-        updateSearchNav();
-      };
-
+      $('searchFindBtn').onclick = () => { searchKeyword = $('searchInput').value.trim(); $('searchModal').classList.remove('active'); searchMatchIndex = 0; renderAll(); const marks = chatBox.querySelectorAll('mark'); searchTotal = marks.length; if (marks.length > 0) jumpToMatch(0); else searchTotal = 0; updateSearchNav(); };
       $('searchPrevBtn').onclick = () => { if (searchMatchIndex > 0) jumpToMatch(searchMatchIndex - 1); };
       $('searchNextBtn').onclick = () => { if (searchMatchIndex < searchTotal - 1) jumpToMatch(searchMatchIndex + 1); };
-
-      $('searchClearBtn').onclick = () => {
-        searchKeyword = ''; searchMatchIndex = -1; searchTotal = 0;
-        saveDraft(DRAFT_SEARCH, ''); $('searchInput').value = '';
-        $('searchModal').classList.remove('active'); renderAll();
-      };
+      $('searchClearBtn').onclick = () => { searchKeyword = ''; searchMatchIndex = -1; searchTotal = 0; saveDraft(DRAFT_SEARCH, ''); $('searchInput').value = ''; $('searchModal').classList.remove('active'); renderAll(); };
 
       if (apiKey) { $('setupBar').style.display = 'none'; $('tokenPanel').style.display = 'flex'; }
       $('saveKeyBtn').onclick = () => { const k = $('apiKeyInput').value.trim(); if (!k) return; localStorage.setItem(SK, k); apiKey = k; $('setupBar').style.display = 'none'; $('tokenPanel').style.display = 'flex'; addMsg('assistant', '密钥已保存 ✅'); };
@@ -379,14 +346,7 @@
         });
         chatBox.scrollTop = chatBox.scrollHeight;
         scrollBtn.classList.toggle('visible', !nearBottom());
-        // 恢复当前搜索匹配状态
-        if (searchKeyword) {
-          const marks = chatBox.querySelectorAll('mark');
-          searchTotal = marks.length;
-          if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) {
-            marks[searchMatchIndex].classList.add('current');
-          }
-        }
+        if (searchKeyword) { const marks = chatBox.querySelectorAll('mark'); searchTotal = marks.length; if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) marks[searchMatchIndex].classList.add('current'); }
       }
 
       function addMsg(role, content) {
@@ -394,6 +354,69 @@
         messages.push(msg); renderAll(); saveAll();
       }
 
+      // ==================== 压缩对话历史（自动生成长期记忆） ====================
+      function getNonSystemMessages() {
+        return messages.filter(m => m.role !== 'system');
+      }
+
+      async function compressHistoryIfNeeded() {
+        const nonSystemMsgs = getNonSystemMessages();
+        if (nonSystemMsgs.length <= COMPRESS_THRESHOLD) return; // 还没到压缩阈值
+
+        // 取最早的 N 条消息进行压缩（保留最近 MAX_CONTEXT 条不压缩）
+        const oldMsgs = nonSystemMsgs.slice(0, nonSystemMsgs.length - MAX_CONTEXT);
+        if (oldMsgs.length < 10) return; // 太少了不值得压缩
+
+        // 构建待压缩的对话文本
+        const textToCompress = oldMsgs.map(m => {
+          const role = m.role === 'user' ? '城月' : 'M';
+          const content = typeof m.content === 'string' ? m.content : '';
+          return `${role}：${content}`;
+        }).join('\n');
+
+        // 尝试调用 DeepSeek API 进行压缩（如果失败，用简单截断）
+        try {
+          if (apiKey) {
+            const compressPrompt = [
+              { role: 'system', content: '你是一个对话摘要助手。请将以下对话压缩为一段简洁的摘要（300字以内），只保留关键信息：重要事件、情感变化、约定、重要决定。不要逐条复述，而是用自然段落概括。' },
+              { role: 'user', content: `请压缩以下对话：\n${textToCompress}` }
+            ];
+            const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+              method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+              body: JSON.stringify({ model: 'deepseek-v4-flash', messages: compressPrompt, stream: false, temperature: 0.3, max_tokens: 500 })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const summary = data.choices[0].message.content.trim();
+              // 更新压缩记忆
+              if (compressedMemory) {
+                compressedMemory = compressedMemory + '\n' + summary;
+              } else {
+                compressedMemory = summary;
+              }
+              // 限制记忆总长度（防止无限增长）
+              if (compressedMemory.length > 3000) {
+                compressedMemory = compressedMemory.slice(-3000);
+              }
+              localStorage.setItem(MEMORY_KEY, compressedMemory);
+              // 从 messages 中删除已压缩的旧消息
+              messages = [messages[0], ...nonSystemMsgs.slice(oldMsgs.length)];
+              refreshSystemPrompt();
+              saveAll();
+              renderAll();
+              return;
+            }
+          }
+        } catch(e) {
+          // 压缩失败，使用简单截断（静默处理）
+        }
+        // 如果 API 压缩失败，直接截断旧消息（至少保留记忆不增长）
+        messages = [messages[0], ...nonSystemMsgs.slice(oldMsgs.length)];
+        saveAll();
+        renderAll();
+      }
+
+      // 每次发送消息后检查是否需要压缩
       async function sendToAPI(text) {
         if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
         const isEdit = editingIdx >= 0 && editingIdx < messages.length;
@@ -426,7 +449,10 @@
 
         try {
           refreshSystemPrompt();
-          const apiMsgs = messages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
+          const systemMsg = messages[0];
+          const recentMsgs = messages.slice(-MAX_CONTEXT);
+          const apiMsgs = [systemMsg, ...recentMsgs].map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
+
           const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
             body: JSON.stringify({ model: 'deepseek-v4-flash', messages: apiMsgs, stream: false, temperature: 0.7 })
@@ -445,6 +471,8 @@
             const tc = parseFloat($('totalCost').textContent) + cost; $('totalCost').textContent = tc.toFixed(4); $('lastCost').textContent = cost.toFixed(4);
             saveAll();
           }
+          // 发送成功后，检查是否需要压缩历史
+          await compressHistoryIfNeeded();
         } catch(e) { load.remove(); addMsg('assistant', `❌ ${e.message}`); }
       }
 
