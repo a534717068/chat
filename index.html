@@ -316,31 +316,35 @@
       window._editMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'user') return; $('userInput').value = typeof msg.content === 'string' ? msg.content : ''; $('userInput').focus(); editingIdx = idx; };
       window._regenMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'assistant') return; let ui = -1; for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; } if (ui === -1) return; const text = typeof messages[ui].content === 'string' ? messages[ui].content : ''; messages = messages.slice(0, idx); renderAll(); saveAll(); sendToAPI(text); };
 
-      // ==================== 强制纠正第三人称 ====================
+      // ==================== 智能代词替换 ====================
       function fixPronouns(content) {
         if (!content) return content;
-        // 保护引号内的内容（直接引语中的"她"可能是喊别人，不替换）
-        // 简单策略：把不在引号内的"她"替换成"你"
-        let result = '';
-        let inQuote = false;
-        for (let i = 0; i < content.length; i++) {
-          const ch = content[i];
-          if (ch === '"' || ch === '"' || ch === '"') {
-            inQuote = !inQuote;
-            result += ch;
-          } else if (!inQuote && ch === '她') {
-            result += '你';
-          } else {
-            result += ch;
+        // 检测是否存在第三方女性角色（新姐姐、那个女的、阿姨等）
+        const hasThirdParty = /(?:新|那个|这位|某个|别的|其他|一个)?(?:姐姐|妹妹|阿姨|女的|女生|姑娘|同事|同学|朋友|人)/.test(content);
+        if (hasThirdParty) {
+          // 有第三方：只替换那些明显是描述互动中指向用户的"她"
+          // 策略：把"她"前面是动作动词（拉、抱、看、碰、亲、推等）+她 的情况替换
+          content = content.replace(/([拉抱看碰亲推动抚摸搂揽牵握抓按捏拍打送跟陪叫喊问对和与给帮让])\s*她/g, '$1你');
+          content = content.replace(/把\s*她/g, '把你');
+          content = content.replace(/\b她的\b/g, '你的');
+          // 把"把她"、"她的"也替换
+        } else {
+          // 没有第三方：全局替换
+          let result = '';
+          let inQuote = false;
+          for (let i = 0; i < content.length; i++) {
+            const ch = content[i];
+            if (ch === '"' || ch === '"' || ch === '"') { inQuote = !inQuote; result += ch; }
+            else if (!inQuote && ch === '她') { result += '你'; }
+            else { result += ch; }
           }
+          content = result;
+          content = content.replace(/把\s*她/g, '把你');
+          content = content.replace(/\b她的\b/g, '你的');
         }
-        // 同时也替换"把她" -> "把你"、"她的" -> "你的"（不在引号内）
-        result = result.replace(/([^"]*)把\b她\b/g, '$1把你');
-        result = result.replace(/\b她的\b/g, '你的');
-        return result;
+        return content;
       }
 
-      // 分行：只在引号前后换行
       function formatAssistantContent(content) {
         if (!content) return content;
         if (content.includes('\n')) return content;
@@ -358,7 +362,7 @@
           const timeStr = formatTime(msg.time || Date.now());
           let content = typeof msg.content === 'string' ? msg.content : '[图片]';
           if (msg.role === 'assistant') {
-            content = fixPronouns(content); // 强制纠正第三人称
+            content = fixPronouns(content);
             content = formatAssistantContent(content);
           }
           const hasHistory = msg.history && msg.history.length > 1;
