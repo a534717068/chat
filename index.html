@@ -187,71 +187,23 @@
       const WEATHER_CACHE_KEY = 'deepseek_weather_cache';
 
       async function fetchRealWeather() {
-        try {
-          const cached = localStorage.getItem(WEATHER_CACHE_KEY);
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (Date.now() - parsed.time < 30 * 60 * 1000) { weatherCache = parsed.data; updateEnvDisplay(); return; }
-          }
-          const position = await new Promise((resolve, reject) => { navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 }); });
-          const { latitude, longitude } = position.coords;
-          const res = await fetch(`https://wttr.in/${latitude},${longitude}?format=j1`);
-          if (!res.ok) throw new Error('天气获取失败');
-          const data = await res.json();
-          const current = data.current_condition[0];
-          const weatherCode = parseInt(current.weatherCode);
-          const temp = current.temp_C;
-          const desc = current.weatherDesc[0].value;
-          const city = data.nearest_area[0].areaName[0].value || '附近';
-          const emoji = getWeatherEmojiFromCode(weatherCode);
-          weatherCache = { desc: `${desc} ${temp}°C`, emoji, city };
-          localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ data: weatherCache, time: Date.now() }));
-          updateEnvDisplay();
-        } catch (e) { weatherCache = { desc: '天气数据获取失败', emoji: '🌤️', city: '' }; updateEnvDisplay(); }
+        try { const cached = localStorage.getItem(WEATHER_CACHE_KEY); if (cached) { const parsed = JSON.parse(cached); if (Date.now() - parsed.time < 30 * 60 * 1000) { weatherCache = parsed.data; updateEnvDisplay(); return; } } const position = await new Promise((resolve, reject) => { navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 }); }); const { latitude, longitude } = position.coords; const res = await fetch(`https://wttr.in/${latitude},${longitude}?format=j1`); if (!res.ok) throw new Error('天气获取失败'); const data = await res.json(); const current = data.current_condition[0]; const weatherCode = parseInt(current.weatherCode); const temp = current.temp_C; const desc = current.weatherDesc[0].value; const city = data.nearest_area[0].areaName[0].value || '附近'; const emoji = getWeatherEmojiFromCode(weatherCode); weatherCache = { desc: `${desc} ${temp}°C`, emoji, city }; localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ data: weatherCache, time: Date.now() })); updateEnvDisplay(); } catch (e) { weatherCache = { desc: '天气数据获取失败', emoji: '🌤️', city: '' }; updateEnvDisplay(); }
       }
 
-      function getWeatherEmojiFromCode(code) {
-        if (code <= 299 || code === 395) return '⛈️'; if (code <= 302) return '🌧️'; if (code <= 311) return '🌧️';
-        if (code <= 320) return '🌨️'; if (code <= 329) return '❄️'; if (code <= 350) return '🌧️';
-        if (code === 371 || code === 395) return '❄️'; if (code <= 116) return '☀️'; if (code <= 119) return '⛅';
-        if (code <= 122) return '☁️'; if (code <= 143) return '🌫️'; if (code <= 182) return '🌧️'; if (code <= 230) return '🌨️';
-        return '☀️';
-      }
-
+      function getWeatherEmojiFromCode(code) { if (code <= 299 || code === 395) return '⛈️'; if (code <= 302) return '🌧️'; if (code <= 311) return '🌧️'; if (code <= 320) return '🌨️'; if (code <= 329) return '❄️'; if (code <= 350) return '🌧️'; if (code === 371 || code === 395) return '❄️'; if (code <= 116) return '☀️'; if (code <= 119) return '⛅'; if (code <= 122) return '☁️'; if (code <= 143) return '🌫️'; if (code <= 182) return '🌧️'; if (code <= 230) return '🌨️'; return '☀️'; }
       function getWeatherDesc() { return weatherCache.desc; }
       function getWeatherEmoji() { return weatherCache.emoji; }
       function getSeason() { const m = new Date().getMonth() + 1; if (m >= 3 && m <= 5) return '春天'; if (m >= 6 && m <= 8) return '夏天'; if (m >= 9 && m <= 11) return '秋天'; return '冬天'; }
-
-      function getEnvInfo() {
-        const now = new Date(); const hour = now.getHours(); const minute = now.getMinutes();
-        const timeStr = `${hour}:${String(minute).padStart(2,'0')}`;
-        const weekDays = ['日','一','二','三','四','五','六']; const weekDay = weekDays[now.getDay()];
-        const season = getSeason(); const weather = getWeatherDesc();
-        let period = '';
-        if (hour >= 5 && hour < 12) period = '早上'; else if (hour >= 12 && hour < 14) period = '中午';
-        else if (hour >= 14 && hour < 17) period = '下午'; else if (hour >= 17 && hour < 19) period = '傍晚';
-        else if (hour >= 19 && hour < 22) period = '晚上'; else period = '深夜';
-        return { period, timeStr, weekDay, season, weather, city: weatherCache.city };
-      }
-
-      function updateEnvDisplay() {
-        const env = getEnvInfo();
-        $('weatherIcon').textContent = getWeatherEmoji();
-        $('envText').textContent = `${env.season} · 周${env.weekDay} · ${env.period} ${env.timeStr} · ${env.weather}${env.city ? ' · ' + env.city : ''}`;
-      }
-
+      function getEnvInfo() { const now = new Date(); const hour = now.getHours(); const minute = now.getMinutes(); const timeStr = `${hour}:${String(minute).padStart(2,'0')}`; const weekDays = ['日','一','二','三','四','五','六']; const weekDay = weekDays[now.getDay()]; const season = getSeason(); const weather = getWeatherDesc(); let period = ''; if (hour >= 5 && hour < 12) period = '早上'; else if (hour >= 12 && hour < 14) period = '中午'; else if (hour >= 14 && hour < 17) period = '下午'; else if (hour >= 17 && hour < 19) period = '傍晚'; else if (hour >= 19 && hour < 22) period = '晚上'; else period = '深夜'; return { period, timeStr, weekDay, season, weather, city: weatherCache.city }; }
+      function updateEnvDisplay() { const env = getEnvInfo(); $('weatherIcon').textContent = getWeatherEmoji(); $('envText').textContent = `${env.season} · 周${env.weekDay} · ${env.period} ${env.timeStr} · ${env.weather}${env.city ? ' · ' + env.city : ''}`; }
       fetchRealWeather(); setInterval(fetchRealWeather, 30 * 60 * 1000);
 
       let apiKey = localStorage.getItem(SK) || '';
       let globalSetting = localStorage.getItem(SETTING_KEY) || '';
       let compressedMemory = localStorage.getItem(MEMORY_KEY) || '';
-      let fullHistory = [];
-      const savedFull = localStorage.getItem(FULL_HISTORY_KEY);
-      if (savedFull) try { fullHistory = JSON.parse(savedFull); } catch(e) { fullHistory = []; }
-      let messages = [{ role: 'system', content: '' }];
-      let nextId = Date.now(); let editingIdx = -1;
+      let fullHistory = []; const savedFull = localStorage.getItem(FULL_HISTORY_KEY); if (savedFull) try { fullHistory = JSON.parse(savedFull); } catch(e) { fullHistory = []; }
+      let messages = [{ role: 'system', content: '' }]; let nextId = Date.now(); let editingIdx = -1;
       let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
-
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
       function buildSystemPrompt() {
@@ -266,116 +218,65 @@
       function refreshSystemPrompt() { messages[0].content = buildSystemPrompt(); }
       refreshSystemPrompt();
 
-      function formatTime(ts) {
-        const d = new Date(ts); const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-        const timeStr = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-        if (msgDay.getTime() === today.getTime()) return timeStr;
-        return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${timeStr}`;
-      }
-
-      function saveAll() {
-        localStorage.setItem(CK, JSON.stringify(messages.filter(m => m.role !== 'system')));
-        localStorage.setItem(TKK, $('totalTokens').textContent);
-        localStorage.setItem(TCK, $('totalCost').textContent);
-      }
-      function loadAll() {
-        const s = localStorage.getItem(CK);
-        if (s) try { const a = JSON.parse(s); if (Array.isArray(a) && a.length) messages = [messages[0], ...a]; } catch(e) {}
-      }
-      loadAll();
-      if (fullHistory.length === 0 && messages.length > 1) {
-        fullHistory = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '', time: m.time }));
-        saveFullHistory();
-      }
-      $('totalTokens').textContent = localStorage.getItem(TKK) || '0';
-      $('totalCost').textContent = parseFloat(localStorage.getItem(TCK) || '0').toFixed(4);
-
+      function formatTime(ts) { const d = new Date(ts); const now = new Date(); const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const timeStr = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }); if (msgDay.getTime() === today.getTime()) return timeStr; return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${timeStr}`; }
+      function saveAll() { localStorage.setItem(CK, JSON.stringify(messages.filter(m => m.role !== 'system'))); localStorage.setItem(TKK, $('totalTokens').textContent); localStorage.setItem(TCK, $('totalCost').textContent); }
+      function loadAll() { const s = localStorage.getItem(CK); if (s) try { const a = JSON.parse(s); if (Array.isArray(a) && a.length) messages = [messages[0], ...a]; } catch(e) {} }
+      loadAll(); if (fullHistory.length === 0 && messages.length > 1) { fullHistory = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '', time: m.time })); saveFullHistory(); }
+      $('totalTokens').textContent = localStorage.getItem(TKK) || '0'; $('totalCost').textContent = parseFloat(localStorage.getItem(TCK) || '0').toFixed(4);
       function setTheme(d) { document.body.classList.toggle('dark', d); $('themeToggle').textContent = d ? '☀️' : '🌙'; localStorage.setItem(TK, d ? 'dark' : 'light'); }
-      setTheme(localStorage.getItem(TK) === 'dark');
-      $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
-
-      $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); };
-      document.onclick = () => $('moreMenu').classList.remove('active');
-      $('moreMenu').onclick = e => e.stopPropagation();
+      setTheme(localStorage.getItem(TK) === 'dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
+      $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.onclick = () => $('moreMenu').classList.remove('active'); $('moreMenu').onclick = e => e.stopPropagation();
       $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
-
       bindDraft($('userInput'), DRAFT_CHAT); bindDraft($('settingTextarea'), DRAFT_SETTING); bindDraft($('importTextarea'), DRAFT_IMPORT); bindDraft($('searchInput'), DRAFT_SEARCH);
-
       $('settingBtn').onclick = () => { $('settingTextarea').value = loadDraft(DRAFT_SETTING) || globalSetting; $('settingModal').classList.add('active'); $('moreMenu').classList.remove('active'); };
-      $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active');
-      $('settingModal').onclick = e => { if (e.target === $('settingModal')) $('settingModal').classList.remove('active'); };
-      $('settingSaveBtn').onclick = () => {
-        globalSetting = $('settingTextarea').value.trim(); localStorage.setItem(SETTING_KEY, globalSetting);
-        refreshSystemPrompt(); saveDraft(DRAFT_SETTING, ''); $('settingModal').classList.remove('active');
-        addMsg('assistant', globalSetting ? '✅ 全局设定已保存。' : '✅ 全局设定已清空。');
-      };
-
+      $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active'); $('settingModal').onclick = e => { if (e.target === $('settingModal')) $('settingModal').classList.remove('active'); };
+      $('settingSaveBtn').onclick = () => { globalSetting = $('settingTextarea').value.trim(); localStorage.setItem(SETTING_KEY, globalSetting); refreshSystemPrompt(); saveDraft(DRAFT_SETTING, ''); $('settingModal').classList.remove('active'); addMsg('assistant', globalSetting ? '✅ 全局设定已保存。' : '✅ 全局设定已清空。'); };
       $('searchBtn').onclick = () => { $('searchInput').value = loadDraft(DRAFT_SEARCH) || searchKeyword; $('searchModal').classList.add('active'); $('moreMenu').classList.remove('active'); updateSearchNav(); };
-      $('searchCloseBtn').onclick = () => $('searchModal').classList.remove('active');
-      $('searchModal').onclick = e => { if (e.target === $('searchModal')) $('searchModal').classList.remove('active'); };
-      function updateSearchNav() {
-        if (searchKeyword && searchTotal > 0) { $('searchNav').style.display = 'flex'; $('searchCounter').textContent = `${searchMatchIndex + 1}/${searchTotal}`; $('searchPrevBtn').disabled = searchMatchIndex <= 0; $('searchNextBtn').disabled = searchMatchIndex >= searchTotal - 1; }
-        else { $('searchNav').style.display = 'none'; }
-      }
-      function jumpToMatch(index) {
-        const marks = chatBox.querySelectorAll('mark'); if (marks.length === 0) return;
-        if (index < 0) index = 0; if (index >= marks.length) index = marks.length - 1;
-        marks.forEach(m => m.classList.remove('current')); marks[index].classList.add('current');
-        marks[index].scrollIntoView({ behavior: 'smooth', block: 'center' }); searchMatchIndex = index; updateSearchNav();
-      }
+      $('searchCloseBtn').onclick = () => $('searchModal').classList.remove('active'); $('searchModal').onclick = e => { if (e.target === $('searchModal')) $('searchModal').classList.remove('active'); };
+      function updateSearchNav() { if (searchKeyword && searchTotal > 0) { $('searchNav').style.display = 'flex'; $('searchCounter').textContent = `${searchMatchIndex + 1}/${searchTotal}`; $('searchPrevBtn').disabled = searchMatchIndex <= 0; $('searchNextBtn').disabled = searchMatchIndex >= searchTotal - 1; } else { $('searchNav').style.display = 'none'; } }
+      function jumpToMatch(index) { const marks = chatBox.querySelectorAll('mark'); if (marks.length === 0) return; if (index < 0) index = 0; if (index >= marks.length) index = marks.length - 1; marks.forEach(m => m.classList.remove('current')); marks[index].classList.add('current'); marks[index].scrollIntoView({ behavior: 'smooth', block: 'center' }); searchMatchIndex = index; updateSearchNav(); }
       $('searchFindBtn').onclick = () => { searchKeyword = $('searchInput').value.trim(); $('searchModal').classList.remove('active'); searchMatchIndex = 0; renderAll(); const marks = chatBox.querySelectorAll('mark'); searchTotal = marks.length; if (marks.length > 0) jumpToMatch(0); else searchTotal = 0; updateSearchNav(); };
-      $('searchPrevBtn').onclick = () => { if (searchMatchIndex > 0) jumpToMatch(searchMatchIndex - 1); };
-      $('searchNextBtn').onclick = () => { if (searchMatchIndex < searchTotal - 1) jumpToMatch(searchMatchIndex + 1); };
+      $('searchPrevBtn').onclick = () => { if (searchMatchIndex > 0) jumpToMatch(searchMatchIndex - 1); }; $('searchNextBtn').onclick = () => { if (searchMatchIndex < searchTotal - 1) jumpToMatch(searchMatchIndex + 1); };
       $('searchClearBtn').onclick = () => { searchKeyword = ''; searchMatchIndex = -1; searchTotal = 0; saveDraft(DRAFT_SEARCH, ''); $('searchInput').value = ''; $('searchModal').classList.remove('active'); renderAll(); };
-
       if (apiKey) { $('setupBar').style.display = 'none'; $('tokenPanel').style.display = 'flex'; }
       $('saveKeyBtn').onclick = () => { const k = $('apiKeyInput').value.trim(); if (!k) return; localStorage.setItem(SK, k); apiKey = k; $('setupBar').style.display = 'none'; $('tokenPanel').style.display = 'flex'; addMsg('assistant', '密钥已保存 ✅'); };
-
       const chatBox = $('chatBox'), scrollBtn = $('scrollToBottomBtn');
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
-      chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom());
-      scrollBtn.onclick = () => chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
-
-      window._switchVer = function(idx, dir) {
-        const msg = messages[idx]; if (!msg || !msg.history || msg.history.length < 2) return;
-        const cur = msg.historyIndex || 0; const newIdx = cur + dir;
-        if (newIdx < 0 || newIdx >= msg.history.length) return;
-        if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) {
-          msg.history[cur] = { content: msg.content, reply: messages[idx + 1].content, time: msg.time };
-        } else { msg.history[cur] = { content: msg.content, reply: '', time: msg.time }; }
-        const ver = msg.history[newIdx]; msg.content = ver.content; msg.time = ver.time; msg.historyIndex = newIdx;
-        if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) {
-          messages[idx + 1].content = ver.reply || ''; messages[idx + 1].time = ver.time;
-        } else { const replyMsg = { role: 'assistant', content: ver.reply || '', id: nextId++, time: ver.time, parentId: msg.id }; messages.splice(idx + 1, 0, replyMsg); }
-        renderAll(); saveAll();
-      };
+      chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom()); scrollBtn.onclick = () => chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
+      window._switchVer = function(idx, dir) { const msg = messages[idx]; if (!msg || !msg.history || msg.history.length < 2) return; const cur = msg.historyIndex || 0; const newIdx = cur + dir; if (newIdx < 0 || newIdx >= msg.history.length) return; if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) { msg.history[cur] = { content: msg.content, reply: messages[idx + 1].content, time: msg.time }; } else { msg.history[cur] = { content: msg.content, reply: '', time: msg.time }; } const ver = msg.history[newIdx]; msg.content = ver.content; msg.time = ver.time; msg.historyIndex = newIdx; if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) { messages[idx + 1].content = ver.reply || ''; messages[idx + 1].time = ver.time; } else { const replyMsg = { role: 'assistant', content: ver.reply || '', id: nextId++, time: ver.time, parentId: msg.id }; messages.splice(idx + 1, 0, replyMsg); } renderAll(); saveAll(); };
       window._delMsg = function(idx) { if (!confirm('删除这条及后续对话？')) return; messages = messages.slice(0, idx); renderAll(); saveAll(); };
       window._editMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'user') return; $('userInput').value = typeof msg.content === 'string' ? msg.content : ''; $('userInput').focus(); editingIdx = idx; };
       window._regenMsg = function(idx) { const msg = messages[idx]; if (!msg || msg.role !== 'assistant') return; let ui = -1; for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; } if (ui === -1) return; const text = typeof messages[ui].content === 'string' ? messages[ui].content : ''; messages = messages.slice(0, idx); renderAll(); saveAll(); sendToAPI(text); };
 
       function fixPronouns(content) {
         if (!content) return content;
-        const hasThirdParty = /(?:新|那个|这位|某个|别的|其他|一个)?(?:姐姐|妹妹|阿姨|女的|女生|姑娘|同事|同学|朋友|人)/.test(content);
+        // 检测是否存在第三方女性角色
+        const hasThirdParty = /(?:你|我)?(?:妈|阿姨|姐姐|妹妹|姑姑|姨|婶|婆婆|岳母|邻居|同事|同学|朋友|那个女的|那个女生|那个姑娘)(?:她)?/.test(content);
         if (hasThirdParty) {
+          // 有第三方：只替换物理动作动词+她
           content = content.replace(/([拉抱看碰推动抚摸搂揽牵握抓按捏拍打送跟陪叫喊问对和与给帮让])\s*她/g, '$1你');
-          content = content.replace(/把\s*她/g, '把你'); content = content.replace(/\b她的\b/g, '你的');
+          content = content.replace(/把\s*她/g, '把你');
+          content = content.replace(/\b她的\b/g, '你的');
         } else {
+          // 没有第三方：全局替换不在引号内的"她"
           let result = ''; let inQuote = false;
-          for (let i = 0; i < content.length; i++) { const ch = content[i]; if (ch === '"' || ch === '"' || ch === '"') { inQuote = !inQuote; result += ch; } else if (!inQuote && ch === '她') { result += '你'; } else { result += ch; } }
-          content = result; content = content.replace(/把\s*她/g, '把你'); content = content.replace(/\b她的\b/g, '你的');
+          for (let i = 0; i < content.length; i++) {
+            const ch = content[i];
+            if (ch === '"' || ch === '"' || ch === '"') { inQuote = !inQuote; result += ch; }
+            else if (!inQuote && ch === '她') { result += '你'; }
+            else { result += ch; }
+          }
+          content = result;
+          content = content.replace(/把\s*她/g, '把你');
+          content = content.replace(/\b她的\b/g, '你的');
         }
         return content;
       }
 
-      // ==================== 修复换行：冒号+引号前也换行 ====================
       function formatAssistantContent(content) {
         if (!content) return content;
         if (content.includes('\n')) return content;
-        // 在中文冒号后紧跟双引号时换行
         content = content.replace(/(：)([""'])/g, '$1\n$2');
-        // 原有的双引号前后换行
         content = content.replace(/([^"\n])([""'])/g, '$1\n$2');
         content = content.replace(/([""'])([^"\n])/g, '$1\n$2');
         content = content.replace(/\n{3,}/g, '\n\n');
@@ -393,8 +294,7 @@
           const hasHistory = msg.history && msg.history.length > 1;
           if (searchKeyword) { const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); content = content.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>'); }
           let btns = '';
-          if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`;
-          else btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
+          if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`; else btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
           btns += `<button class="del-btn" onclick="_delMsg(${idx})">🗑</button>`;
           let verHTML = '';
           if (hasHistory) { const cur = (msg.historyIndex || 0) + 1; const total = msg.history.length; verHTML = `<div class="version-switcher"><button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button></div>`; }
@@ -408,13 +308,7 @@
       function addMsg(role, content) { const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 }; messages.push(msg); fullHistory.push({ role, content, time: msg.time }); saveFullHistory(); renderAll(); saveAll(); }
       function getNonSystemMessages() { return messages.filter(m => m.role !== 'system'); }
 
-      async function compressHistoryIfNeeded() {
-        const nonSystemMsgs = getNonSystemMessages(); if (nonSystemMsgs.length <= COMPRESS_THRESHOLD) return;
-        const oldMsgs = nonSystemMsgs.slice(0, nonSystemMsgs.length - MAX_CONTEXT); if (oldMsgs.length < 10) return;
-        const textToCompress = oldMsgs.map(m => { const role = m.role === 'user' ? '城月' : 'M'; const content = typeof m.content === 'string' ? m.content : ''; return `${role}：${content}`; }).join('\n');
-        try { if (apiKey) { const compressPrompt = [{ role: 'system', content: '请将以下对话压缩为一段简洁的摘要（500字以内），只保留关键信息：重要事件、情感变化、约定、重要决定。' }, { role: 'user', content: `请压缩以下对话：\n${textToCompress}` }]; const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'deepseek-v4-flash', messages: compressPrompt, stream: false, temperature: 0.3, max_tokens: 800 }) }); if (res.ok) { const data = await res.json(); const summary = data.choices[0].message.content.trim(); compressedMemory = compressedMemory ? compressedMemory + '\n' + summary : summary; if (compressedMemory.length > 5000) compressedMemory = compressedMemory.slice(-5000); localStorage.setItem(MEMORY_KEY, compressedMemory); messages = [messages[0], ...nonSystemMsgs.slice(oldMsgs.length)]; refreshSystemPrompt(); saveAll(); renderAll(); return; } } } catch(e) {}
-        messages = [messages[0], ...nonSystemMsgs.slice(oldMsgs.length)]; saveAll(); renderAll();
-      }
+      async function compressHistoryIfNeeded() { const nonSystemMsgs = getNonSystemMessages(); if (nonSystemMsgs.length <= COMPRESS_THRESHOLD) return; const oldMsgs = nonSystemMsgs.slice(0, nonSystemMsgs.length - MAX_CONTEXT); if (oldMsgs.length < 10) return; const textToCompress = oldMsgs.map(m => { const role = m.role === 'user' ? '城月' : 'M'; const content = typeof m.content === 'string' ? m.content : ''; return `${role}：${content}`; }).join('\n'); try { if (apiKey) { const compressPrompt = [{ role: 'system', content: '请将以下对话压缩为一段简洁的摘要（500字以内），只保留关键信息：重要事件、情感变化、约定、重要决定。' }, { role: 'user', content: `请压缩以下对话：\n${textToCompress}` }]; const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'deepseek-v4-flash', messages: compressPrompt, stream: false, temperature: 0.3, max_tokens: 800 }) }); if (res.ok) { const data = await res.json(); const summary = data.choices[0].message.content.trim(); compressedMemory = compressedMemory ? compressedMemory + '\n' + summary : summary; if (compressedMemory.length > 5000) compressedMemory = compressedMemory.slice(-5000); localStorage.setItem(MEMORY_KEY, compressedMemory); messages = [messages[0], ...nonSystemMsgs.slice(oldMsgs.length)]; refreshSystemPrompt(); saveAll(); renderAll(); return; } } } catch(e) {} messages = [messages[0], ...nonSystemMsgs.slice(oldMsgs.length)]; saveAll(); renderAll(); }
 
       async function sendToAPI(text) {
         if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
@@ -428,27 +322,19 @@
 
       $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
       $('userInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('sendBtn').click(); } };
-
       $('exportBtn').onclick = () => { const d = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system'); if (!d.length) return alert('无记录'); const b = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `chat-m-${new Date().toISOString().slice(0,10)}.json`; a.click(); };
       (function auto() { const today = new Date().toISOString().slice(0,10); if (localStorage.getItem(AEK) === today) return; const d = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system'); if (d.length) { const b = new Blob([JSON.stringify(d)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK, today); } })();
 
       $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
-      $('importCancelBtn').onclick = () => $('importModal').classList.remove('active');
-      $('importModal').onclick = e => { if (e.target === $('importModal')) $('importModal').classList.remove('active'); };
-      $('importFileBtn').onclick = () => $('importFileInput').click();
-      $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
+      $('importCancelBtn').onclick = () => $('importModal').classList.remove('active'); $('importModal').onclick = e => { if (e.target === $('importModal')) $('importModal').classList.remove('active'); };
+      $('importFileBtn').onclick = () => $('importFileInput').click(); $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
       $('importFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
       $('importJsonFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
-
       function parseText(t) { const lines = t.split('\n'); const res = []; const up = ['你:','你：','用户:','用户：','我:','我：','问:','问：']; const ap = ['M:','M：','张莎:','张莎：','助手:','助手：','assistant:','ai:','答:','答：']; for (let l of lines) { l = l.trim(); if (!l) continue; let role = null, c = ''; const lower = l.toLowerCase(); for (let p of up) { if (lower.startsWith(p.toLowerCase())) { role = 'user'; c = l.slice(p.length).trim(); break; } } if (!role) { for (let p of ap) { if (lower.startsWith(p.toLowerCase())) { role = 'assistant'; c = l.slice(p.length).trim(); break; } } } if (role && c) { res.push({ role, content: c }); } else if (!role && res.length > 0) { res[res.length - 1].content += ' ' + l; } } return res; }
-
       function parseAndImport(append = false) { const raw = $('importTextarea').value.trim(); if (!raw) { alert('请粘贴内容'); return; } let imported; try { imported = JSON.parse(raw); if (!Array.isArray(imported)) throw 0; imported = imported.filter(m => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'); } catch(e) { imported = parseText(raw); } if (!imported || !imported.length) { alert('无法解析'); return; } const now = Date.now(); const total = imported.length; const newMessages = imported.map((m, i) => ({ role: m.role, content: m.content, id: nextId++, time: m.time || (now - (total - i) * 5000), parentId: null, history: m.history || null, historyIndex: m.historyIndex || 0 })); for (let i = 0; i < newMessages.length; i++) { if (i > 0) newMessages[i].parentId = newMessages[i-1].id; } if (append) { const lastMsg = messages[messages.length - 1]; if (lastMsg && lastMsg.role !== 'system') newMessages[0].parentId = lastMsg.id; messages.push(...newMessages); fullHistory.push(...newMessages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '', time: m.time }))); } else { messages = [messages[0]]; messages.push(...newMessages); fullHistory = newMessages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '', time: m.time })); } saveFullHistory(); renderAll(); saveAll(); saveDraft(DRAFT_IMPORT, ''); alert(`${append ? '追加' : '导入'}成功（${newMessages.length} 条消息）`); $('importModal').classList.remove('active'); }
+      $('importConfirmBtn').onclick = () => parseAndImport(false); $('importAppendBtn').onclick = () => parseAndImport(true);
 
-      $('importConfirmBtn').onclick = () => parseAndImport(false);
-      $('importAppendBtn').onclick = () => parseAndImport(true);
-
-      renderAll();
-      if (messages.length <= 1) addMsg('assistant', apiKey ? '你好！我是M，有什么可以帮你的？' : '👋 请先输入 API Key');
+      renderAll(); if (messages.length <= 1) addMsg('assistant', apiKey ? '你好！我是M，有什么可以帮你的？' : '👋 请先输入 API Key');
     })();
   </script>
 </body>
