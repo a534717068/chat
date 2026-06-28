@@ -1,4 +1,4 @@
-const CACHE_NAME = 'm-assistant-v1';
+const CACHE_NAME = 'm-assistant-v2';  // 改这里
 const urlsToCache = [
   '.',
   'index.html',
