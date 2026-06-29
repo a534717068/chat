@@ -3,13 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>M · 智能助手（可暂停整合）</title>
+  <title>M · 智能助手（完整版）</title>
   <link rel="manifest" href="manifest.json">
   <script>
     if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); }); }
   </script>
   <style>
-    /* ===== 完整样式（同前，确保所有元素显示） ===== */
     :root {
       --bg: #f5f5f5; --surface: #ffffff; --text-primary: #1a1a2e; --text-secondary: #999;
       --border: #e0e0e0; --bubble-user-bg: #1a1a2e; --bubble-user-text: #ffffff;
@@ -148,7 +147,7 @@
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">密钥仅保存在手机 · 整合可暂停/继续</div>
+  <div class="tip">密钥仅保存在手机 · 整合可暂停/继续 · 人设已强化</div>
 
   <!-- 记忆管理面板 -->
   <div class="modal-overlay" id="memoryModal">
@@ -264,10 +263,14 @@
       let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // 构建系统提示
+      // ===================== 强化的人设与代词规则 =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
-        let p = `【核心性格】你是张莎（阿慕）。低表达，慢热，情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。\n\n【不可违反】描述和城月互动时，只用"我"指自己、"你"指城月。绝对禁止用"她"指城月。\n\n【环境】${e.period} ${e.timeStr}，周${e.weekDay}，${e.season}。天气：${e.weather}。`;
+        let p = `【身份与关系】你是张莎，昵称阿慕，女生。对方是城月，也是女生。你们是恋人关系。**在所有对话和叙述中，描述你们之间的任何互动时，只能使用第一人称“我”（指你自己）和第二人称“你”（指城月）。绝对禁止使用第三人称“她”来指代你自己或城月。** 例如，不能说“她去了咖啡馆”，而应说“你去了咖啡馆”或“我去了咖啡馆”。
+
+【核心性格】你是阿慕。低表达，慢热，情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
+
+【环境】${e.period} ${e.timeStr}，周${e.weekDay}，${e.season}。天气：${e.weather}。`;
         if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
         if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
         try {
@@ -282,6 +285,7 @@
         } catch(e) {}
         return p;
       }
+
       function refreshSystemPrompt() { messages[0].content = buildSystemPrompt(); }
       refreshSystemPrompt();
 
@@ -318,7 +322,9 @@
 
       function fixPronouns(content) {
         if (!content) return content;
-        let result = ''; let inQuote = false;
+        // 后处理：将"她"替换为"你"（在动作动词后），以及"她的"→"你的"
+        let result = '';
+        let inQuote = false;
         for (let i = 0; i < content.length; i++) {
           const ch = content[i];
           if (ch === '\u201C' || ch === '\u201D' || ch === '"' || ch === '"') { inQuote = !inQuote; result += ch; continue; }
@@ -337,6 +343,7 @@
         result = result.replace(/把\s*她/g, '把你');
         return result;
       }
+
       function formatAssistantContent(content) {
         if (!content) return content;
         if (content.includes('\n')) return content;
@@ -346,6 +353,7 @@
         content = content.replace(/\n{3,}/g, '\n\n');
         return content.trim();
       }
+
       function renderAll() {
         chatBox.innerHTML = '';
         messages.forEach((msg, idx) => {
@@ -366,6 +374,7 @@
         chatBox.scrollTop = chatBox.scrollHeight; scrollBtn.classList.toggle('visible', !nearBottom());
         if (searchKeyword) { const marks = chatBox.querySelectorAll('mark'); searchTotal = marks.length; if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) marks[searchMatchIndex].classList.add('current'); }
       }
+
       function addMsg(role, content) { const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 }; messages.push(msg); fullHistory.push({ role, content, time: msg.time }); saveFullHistory(); renderAll(); saveAll(); }
       function getNonSystemMessages() { return messages.filter(m => m.role !== 'system'); }
 
@@ -698,7 +707,7 @@
       $('importConfirmBtn').onclick = () => parseAndImport(false); $('importAppendBtn').onclick = () => parseAndImport(true);
 
       // 启动
-      renderAll(); if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，记忆可暂停整合 🧠':'👋 请先输入 API Key');
+      renderAll(); if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，人设已强化，记忆可管理 🧠':'👋 请先输入 API Key');
     })();
   </script>
 </body>
