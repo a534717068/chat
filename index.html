@@ -32,6 +32,7 @@
     .more-menu.active { display: flex; }
     .more-menu button { background: none; border: none; color: var(--text-primary); padding: 10px 14px; text-align: left; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid var(--border); }
     .more-menu button:last-child { border-bottom: none; color: #e94560; }
+    .more-menu button.memory-reprocess { color: #4caf50; }
     .setup-bar { background: var(--surface); padding: 6px 10px; display: flex; gap: 6px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
     .setup-bar input { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; background: var(--surface); color: var(--text-primary); }
     .setup-bar button { padding: 8px 14px; background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 6px; font-size: 0.85rem; }
@@ -85,7 +86,6 @@
     body.dark .bubble mark { background: #f9a825; color: #000; }
     body.dark .bubble mark.current { background: #e65100; color: #fff; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-    /* 记忆库显示按钮 */
     .memory-btn { position: absolute; left: 8px; background: rgba(255,255,255,0.1); border: none; color: var(--header-text); padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; cursor: pointer; }
   </style>
 </head>
@@ -103,6 +103,7 @@
       <button id="searchBtn">搜索</button>
       <button id="settingBtn">设定</button>
       <button id="clearChatBtn">清空对话</button>
+      <button id="reprocessBtn" class="memory-reprocess">🔄 整合旧记忆</button>
     </div>
   </div>
   <div class="setup-bar" id="setupBar" style="display:none;">
@@ -186,7 +187,6 @@
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
       const MAX_CONTEXT = 30, COMPRESS_THRESHOLD = 40;
       
-      // ---------- 新增记忆库存储键 ----------
       const MEMORY_FACTS_KEY = 'memory_facts_v2';
       const MEMORY_NARRATIVES_KEY = 'memory_narratives_v2';
 
@@ -211,14 +211,11 @@
       let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ---------- 核心：构建系统提示（注入长期记忆） ----------
       function buildSystemPrompt() { 
         const e = getEnvInfo(); 
         let p = `【核心性格】你是张莎（阿慕）。低表达，慢热，情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。\n\n【不可违反】描述和城月互动时，只用"我"指自己、"你"指城月。绝对禁止用"她"指城月。\n\n【环境】${e.period} ${e.timeStr}，周${e.weekDay}，${e.season}。天气：${e.weather}。`; 
         if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`; 
         if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
-        
-        // ---------- 注入聚合后的长期记忆（叙事） ----------
         try {
           const narratives = JSON.parse(localStorage.getItem(MEMORY_NARRATIVES_KEY) || '{}');
           const memoryText = Object.values(narratives).filter(t => t && t.length > 0).join('\n\n');
@@ -260,7 +257,6 @@
       window._editMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='user') return; $('userInput').value=typeof msg.content==='string'?msg.content:''; $('userInput').focus(); editingIdx=idx; };
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); renderAll(); saveAll(); sendToAPI(text); };
 
-      // ==================== 代词替换 ====================
       function fixPronouns(content) {
         if (!content) return content;
         let result = ''; let inQuote = false;
@@ -329,12 +325,15 @@
 
       async function compressHistoryIfNeeded() { const non = getNonSystemMessages(); if (non.length <= COMPRESS_THRESHOLD) return; const old = non.slice(0, non.length - MAX_CONTEXT); if (old.length < 10) return; const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n'); try { if (apiKey) { const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, body:JSON.stringify({ model:'deepseek-v4-flash', messages:[{role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},{role:'user',content:`请压缩：\n${text}`}], stream:false, temperature:0.3, max_tokens:800 }) }); if (res.ok) { const d = await res.json(); const s = d.choices[0].message.content.trim(); compressedMemory = compressedMemory ? compressedMemory+'\n'+s : s; if (compressedMemory.length>5000) compressedMemory = compressedMemory.slice(-5000); localStorage.setItem(MEMORY_KEY, compressedMemory); messages = [messages[0], ...non.slice(old.length)]; refreshSystemPrompt(); saveAll(); renderAll(); return; } } } catch(e) {} messages = [messages[0], ...non.slice(old.length)]; saveAll(); renderAll(); }
 
-      // ==================== 🧠 记忆核心函数 ====================
+      // ==================== 🧠 记忆核心 ====================
       async function extractAndStoreFacts(userText, aiText) {
         if (!apiKey) return;
-        // 简单防刷：如果上次提取在30秒内，跳过
+        // 防止频繁调用（每次新对话已有限制，此处为了旧历史整合也加个全局防刷）
         const lastExtract = localStorage.getItem('last_extract_time');
-        if (lastExtract && Date.now() - parseInt(lastExtract) < 30000) return;
+        if (lastExtract && Date.now() - parseInt(lastExtract) < 5000) { // 整合时缩短间隔
+          // 但整合时可能连续调用，我们允许短间隔，但为了避免API过载，还是保留小延迟
+          await new Promise(r => setTimeout(r, 200));
+        }
         localStorage.setItem('last_extract_time', Date.now().toString());
 
         const prompt = `从以下对话中提取客观事实。要求：
@@ -350,7 +349,7 @@ M：${aiText}`;
         try {
           const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json','Authorization':`Bearer ${apiKey}`},
+            headers: {'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
             body: JSON.stringify({model:'deepseek-v4-flash', messages:[{role:'user',content:prompt}], temperature:0.2})
           });
           if (!res.ok) return;
@@ -362,13 +361,11 @@ M：${aiText}`;
           if (!facts.length) return;
 
           let allFacts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
-          // 简单去重：用 quote 去重
           const newFacts = facts.filter(f => !allFacts.some(a => a.quote === f.quote));
           if (!newFacts.length) return;
           allFacts = [...allFacts, ...newFacts.map(f => ({...f, time: Date.now()}))];
           localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(allFacts));
 
-          // 触发聚合
           await mergeFactsIntoNarratives();
         } catch(e) { console.warn('提取事实失败', e); }
       }
@@ -376,24 +373,17 @@ M：${aiText}`;
       async function mergeFactsIntoNarratives() {
         const allFacts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         if (allFacts.length < 2) return;
-
-        // 按 entity 分组
         const entities = {};
         allFacts.forEach(f => {
           if (!entities[f.entity]) entities[f.entity] = [];
           entities[f.entity].push(f);
         });
-
         const narratives = JSON.parse(localStorage.getItem(MEMORY_NARRATIVES_KEY) || '{}');
         let changed = false;
-
         for (const [entity, facts] of Object.entries(entities)) {
-          // 如果实体已有叙事，跳过；或者碎片少于2条，跳过
           if (narratives[entity]) continue;
           if (facts.length < 2) continue;
-
           const combined = facts.map(f => f.fact).join('。');
-          // 调 API 合并
           try {
             const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
               method: 'POST',
@@ -406,19 +396,50 @@ M：${aiText}`;
             if (merged) {
               narratives[entity] = merged;
               changed = true;
-              // 删除已合并的原始碎片（可选，这里不清除，留着溯源）
-              // 如果想清掉碎片释放空间，可以在这里过滤，但为了安全先保留
             }
           } catch(e) { console.warn('合并失败', e); }
         }
-
         if (changed) {
           localStorage.setItem(MEMORY_NARRATIVES_KEY, JSON.stringify(narratives));
-          refreshSystemPrompt(); // 立即刷新系统提示
+          refreshSystemPrompt();
         }
       }
 
-      // 显示记忆
+      // ==================== 整合旧记忆（新增按钮） ====================
+      window.reprocessAllHistory = async function() {
+        if (!apiKey) { alert('请先设置 API Key'); return; }
+        if (!confirm('将遍历所有历史对话提取事实，可能会消耗较多 API token，确定继续？')) return;
+        const history = JSON.parse(localStorage.getItem(FULL_HISTORY_KEY) || '[]');
+        if (history.length === 0) { alert('没有历史记录'); return; }
+        // 配对 user 和 assistant
+        const pairs = [];
+        let i = 0;
+        while (i < history.length) {
+          if (history[i].role === 'user' && i+1 < history.length && history[i+1].role === 'assistant') {
+            pairs.push({ user: history[i].content, assistant: history[i+1].content });
+            i += 2;
+          } else {
+            i++;
+          }
+        }
+        if (pairs.length === 0) { alert('没有找到成对的对话'); return; }
+        alert(`共找到 ${pairs.length} 对对话，将依次提取事实。请耐心等待...`);
+        let count = 0;
+        for (const pair of pairs) {
+          await extractAndStoreFacts(pair.user, pair.assistant);
+          count++;
+          // 显示进度
+          if (count % 5 === 0) {
+            console.log(`已处理 ${count}/${pairs.length}`);
+          }
+          // 适当延迟，避免API限流
+          await new Promise(r => setTimeout(r, 300));
+        }
+        alert(`整合完成！共处理 ${count} 对对话。点击“🧠 记忆”查看聚合结果。`);
+        refreshSystemPrompt();
+        renderAll();
+      };
+
       $('memoryViewBtn').onclick = () => {
         const narratives = JSON.parse(localStorage.getItem(MEMORY_NARRATIVES_KEY) || '{}');
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
@@ -433,7 +454,13 @@ M：${aiText}`;
       $('memoryCloseBtn').onclick = () => $('memoryModal').classList.remove('active');
       $('memoryModal').onclick = e => { if (e.target === $('memoryModal')) $('memoryModal').classList.remove('active'); };
 
-      // ==================== 发送消息（集成记忆提取） ====================
+      // 绑定整合按钮
+      $('reprocessBtn').onclick = () => {
+        $('moreMenu').classList.remove('active');
+        window.reprocessAllHistory();
+      };
+
+      // ==================== 发送消息 ====================
       async function sendToAPI(text) {
         if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
         const isEdit = editingIdx >= 0 && editingIdx < messages.length; let userMsg;
@@ -443,7 +470,6 @@ M：${aiText}`;
         const load=document.createElement('div'); load.className='message-row assistant'; load.innerHTML='<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>'; chatBox.appendChild(load); chatBox.scrollTop=chatBox.scrollHeight;
         try { refreshSystemPrompt(); const apiMsgs=[messages[0],...messages.slice(-MAX_CONTEXT)].map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'[图片]'})); const res=await fetch('https://api.deepseek.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},body:JSON.stringify({model:'deepseek-v4-flash',messages:apiMsgs,stream:false,temperature:0.7})}); load.remove(); if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`请求失败 (${res.status})`); } const data=await res.json(); const reply=data.choices[0].message.content; const aiMsg={role:'assistant',content:reply,id:nextId++,time:Date.now(),parentId:userMsg.id}; messages.push(aiMsg); fullHistory.push({role:'assistant',content:reply,time:aiMsg.time}); saveFullHistory(); if (userMsg.history&&userMsg.history.length>0) userMsg.history[userMsg.historyIndex].reply=reply; renderAll(); saveAll(); if (data.usage) { $('lastTokens').textContent=data.usage.total_tokens; const t=parseInt($('totalTokens').textContent)+data.usage.total_tokens; $('totalTokens').textContent=t; const cost=((data.usage.prompt_tokens_details?.cached_tokens||0)*0.02+(data.usage.prompt_tokens-(data.usage.prompt_tokens_details?.cached_tokens||0))*1+data.usage.completion_tokens*2)/1e6; const tc=parseFloat($('totalCost').textContent)+cost; $('totalCost').textContent=tc.toFixed(4); $('lastCost').textContent=cost.toFixed(4); saveAll(); } 
           
-          // 🧠 核心：对话成功后，提取记忆（不阻塞主流程）
           if (reply) {
             extractAndStoreFacts(text, reply).catch(e => console.warn(e));
           }
