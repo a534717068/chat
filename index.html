@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>M · 智能助手（完整版）</title>
+  <title>M · 智能助手（精简版）</title>
   <link rel="manifest" href="manifest.json">
   <script>
     if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); }); }
@@ -38,6 +38,8 @@
     .setup-bar input { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; background: var(--surface); color: var(--text-primary); }
     .setup-bar button { padding: 8px 14px; background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 6px; font-size: 0.85rem; }
     .token-panel { background: var(--surface); padding: 4px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; flex-shrink: 0; }
+    .token-panel .editable { cursor: pointer; border-bottom: 1px dashed var(--text-secondary); }
+    .token-panel .editable:hover { background: var(--bg); }
     .model-indicator { background: var(--surface); padding: 2px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); text-align: center; flex-shrink: 0; }
     .env-indicator { background: var(--surface); padding: 2px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); text-align: center; flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 6px; }
     .env-indicator .weather-icon { font-size: 1rem; cursor: pointer; }
@@ -129,7 +131,7 @@
   </div>
   <div class="token-panel" id="tokenPanel" style="display:none;">
     <span>上次：<strong id="lastTokens">0</strong> tokens / <strong id="lastCost">0.0000</strong> 元</span>
-    <span>累计：<strong id="totalTokens">0</strong> tokens / <strong id="totalCost">0.0000</strong> 元</span>
+    <span>累计：<strong id="totalTokens" class="editable" title="点击编辑已使用Token数">0</strong> tokens / <strong id="totalCost" class="editable" title="点击编辑总花费">0.0000</strong> 元</span>
   </div>
   <div class="model-indicator">当前模型：<strong>deepseek-v4-flash</strong></div>
   <div class="env-indicator" id="envIndicator">
@@ -147,7 +149,7 @@
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">密钥仅保存在手机 · 整合可暂停/继续 · 人设已强化</div>
+  <div class="tip">密钥仅保存在手机 · 点击累计Token/花费可编辑</div>
 
   <!-- 记忆管理面板 -->
   <div class="modal-overlay" id="memoryModal">
@@ -221,7 +223,8 @@
       const MEMORY_KEY = 'deepseek_compressed_memory';
       const FULL_HISTORY_KEY = 'deepseek_full_history';
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
-      const MAX_CONTEXT = 30, COMPRESS_THRESHOLD = 40;
+      const MAX_CONTEXT = 20; // 修改为20
+      const COMPRESS_THRESHOLD = 40;
       const MEMORY_FACTS_KEY = 'memory_facts_v3';
       const MEMORY_GRAPH_KEY = 'memory_graph_v3';
       const REPROGRESS_KEY = 'reprocess_progress_index';
@@ -263,12 +266,14 @@
       let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 强化的人设与代词规则 =====================
+      // ===================== 精简人设 =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
-        let p = `【身份与关系】你是张莎，昵称阿慕，女生。对方是城月，也是女生。你们是恋人关系。**在所有对话和叙述中，描述你们之间的任何互动时，只能使用第一人称“我”（指你自己）和第二人称“你”（指城月）。绝对禁止使用第三人称“她”来指代你自己或城月。** 例如，不能说“她去了咖啡馆”，而应说“你去了咖啡馆”或“我去了咖啡馆”。
+        let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
 
-【核心性格】你是阿慕。低表达，慢热，情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
+【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
+
+【亲密场景】当对方主动进入被支配状态时，你切换为命令式、带羞辱语言，对方示弱则收回。
 
 【环境】${e.period} ${e.timeStr}，周${e.weekDay}，${e.season}。天气：${e.weather}。`;
         if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
@@ -279,9 +284,9 @@
           for (const [entity, relations] of Object.entries(graph)) {
             if (relations.length === 0) continue;
             memoryText += `\n关于“${entity}”的记忆：\n`;
-            relations.slice(0, 5).forEach(r => memoryText += `- ${r.fact}\n`);
+            relations.slice(0, 2).forEach(r => memoryText += `- ${r.fact}\n`); // 修改为2条
           }
-          if (memoryText) p += `\n\n【模拟知识图谱】\n${memoryText}`;
+          if (memoryText) p += `\n\n【记忆】\n${memoryText}`;
         } catch(e) {}
         return p;
       }
@@ -294,7 +299,39 @@
       function saveAll() { localStorage.setItem(CK, JSON.stringify(messages.filter(m=>m.role!=='system'))); localStorage.setItem(TKK, $('totalTokens').textContent); localStorage.setItem(TCK, $('totalCost').textContent); }
       function loadAll() { const s = localStorage.getItem(CK); if (s) try { const a = JSON.parse(s); if (Array.isArray(a)&&a.length) messages = [messages[0], ...a]; } catch(e) {} }
       loadAll(); if (!fullHistory.length && messages.length>1) { fullHistory = messages.filter(m=>m.role!=='system').map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); saveFullHistory(); }
-      $('totalTokens').textContent = localStorage.getItem(TKK)||'0'; $('totalCost').textContent = parseFloat(localStorage.getItem(TCK)||'0').toFixed(4);
+      
+      let totalTokens = parseInt(localStorage.getItem(TKK) || '0');
+      let totalCost = parseFloat(localStorage.getItem(TCK) || '0');
+      
+      function updateTokenDisplay() {
+        $('totalTokens').textContent = totalTokens;
+        $('totalCost').textContent = totalCost.toFixed(4);
+        localStorage.setItem(TKK, totalTokens.toString());
+        localStorage.setItem(TCK, totalCost.toString());
+      }
+      
+      $('totalTokens').addEventListener('click', function() {
+        const newVal = prompt('请输入已使用的累计Token数（仅数字）：', totalTokens);
+        if (newVal !== null && !isNaN(parseInt(newVal)) && parseInt(newVal) >= 0) {
+          totalTokens = parseInt(newVal);
+          updateTokenDisplay();
+        } else if (newVal !== null) {
+          alert('请输入有效的数字');
+        }
+      });
+      
+      $('totalCost').addEventListener('click', function() {
+        const newVal = prompt('请输入总花费金额（元，仅数字）：', totalCost.toFixed(4));
+        if (newVal !== null && !isNaN(parseFloat(newVal)) && parseFloat(newVal) >= 0) {
+          totalCost = parseFloat(newVal);
+          updateTokenDisplay();
+        } else if (newVal !== null) {
+          alert('请输入有效的数字');
+        }
+      });
+      
+      updateTokenDisplay();
+      
       function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'☀️':'🌙'; localStorage.setItem(TK, d?'dark':'light'); }
       setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.onclick = () => $('moreMenu').classList.remove('active'); $('moreMenu').onclick = e => e.stopPropagation();
@@ -322,7 +359,6 @@
 
       function fixPronouns(content) {
         if (!content) return content;
-        // 后处理：将"她"替换为"你"（在动作动词后），以及"她的"→"你的"
         let result = '';
         let inQuote = false;
         for (let i = 0; i < content.length; i++) {
@@ -565,7 +601,7 @@
         if (e.target === this) this.classList.remove('active');
       });
 
-      // ============= 整合旧记忆（可暂停/继续，按时间顺序） =============
+      // ============= 整合旧记忆 =============
       let reprocessingPaused = false;
       let reprocessingActive = false;
 
@@ -685,7 +721,15 @@
         else { userMsg={role:'user',content:text,id:nextId++,time:Date.now(),parentId:null,history:null,historyIndex:0}; const last=messages[messages.length-1]; if (last&&last.role!=='system') userMsg.parentId=last.id; messages.push(userMsg); }
         fullHistory.push({role:'user',content:text,time:userMsg.time}); saveFullHistory(); renderAll(); saveAll();
         const load=document.createElement('div'); load.className='message-row assistant'; load.innerHTML='<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>'; chatBox.appendChild(load); chatBox.scrollTop=chatBox.scrollHeight;
-        try { refreshSystemPrompt(); const apiMsgs=[messages[0],...messages.slice(-MAX_CONTEXT)].map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'[图片]'})); const res=await fetch('https://api.deepseek.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},body:JSON.stringify({model:'deepseek-v4-flash',messages:apiMsgs,stream:false,temperature:0.7})}); load.remove(); if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`请求失败 (${res.status})`); } const data=await res.json(); const reply=data.choices[0].message.content; const aiMsg={role:'assistant',content:reply,id:nextId++,time:Date.now(),parentId:userMsg.id}; messages.push(aiMsg); fullHistory.push({role:'assistant',content:reply,time:aiMsg.time}); saveFullHistory(); if (userMsg.history&&userMsg.history.length>0) userMsg.history[userMsg.historyIndex].reply=reply; renderAll(); saveAll(); if (data.usage) { $('lastTokens').textContent=data.usage.total_tokens; const t=parseInt($('totalTokens').textContent)+data.usage.total_tokens; $('totalTokens').textContent=t; const cost=((data.usage.prompt_tokens_details?.cached_tokens||0)*0.02+(data.usage.prompt_tokens-(data.usage.prompt_tokens_details?.cached_tokens||0))*1+data.usage.completion_tokens*2)/1e6; const tc=parseFloat($('totalCost').textContent)+cost; $('totalCost').textContent=tc.toFixed(4); $('lastCost').textContent=cost.toFixed(4); saveAll(); } 
+        try { refreshSystemPrompt(); const apiMsgs=[messages[0],...messages.slice(-MAX_CONTEXT)].map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'[图片]'})); const res=await fetch('https://api.deepseek.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},body:JSON.stringify({model:'deepseek-v4-flash',messages:apiMsgs,stream:false,temperature:0.7})}); load.remove(); if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`请求失败 (${res.status})`); } const data=await res.json(); const reply=data.choices[0].message.content; const aiMsg={role:'assistant',content:reply,id:nextId++,time:Date.now(),parentId:userMsg.id}; messages.push(aiMsg); fullHistory.push({role:'assistant',content:reply,time:aiMsg.time}); saveFullHistory(); if (userMsg.history&&userMsg.history.length>0) userMsg.history[userMsg.historyIndex].reply=reply; renderAll(); saveAll(); if (data.usage) { 
+            $('lastTokens').textContent = data.usage.total_tokens;
+            totalTokens += data.usage.total_tokens;
+            const cost = ((data.usage.prompt_tokens_details?.cached_tokens||0)*0.02 + (data.usage.prompt_tokens-(data.usage.prompt_tokens_details?.cached_tokens||0))*1 + data.usage.completion_tokens*2)/1e6;
+            totalCost += cost;
+            $('lastCost').textContent = cost.toFixed(4);
+            updateTokenDisplay();
+            saveAll();
+          } 
         if (reply) { extractAndStoreFacts(text, reply).catch(e => console.warn(e)); }
         await compressHistoryIfNeeded(); 
         } catch(e) { load.remove(); addMsg('assistant',`❌ ${e.message}`); }
@@ -696,7 +740,6 @@
       $('exportBtn').onclick = () => { const d = fullHistory.length>0 ? fullHistory : messages.filter(m=>m.role!=='system'); if (!d.length) return alert('无记录'); const b = new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-m-${new Date().toISOString().slice(0,10)}.json`; a.click(); };
       (function auto() { const today=new Date().toISOString().slice(0,10); if (localStorage.getItem(AEK)===today) return; const d=fullHistory.length>0?fullHistory:messages.filter(m=>m.role!=='system'); if (d.length) { const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK,today); } })();
 
-      // 导入导出相关
       $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
       $('importCancelBtn').onclick = () => $('importModal').classList.remove('active'); $('importModal').onclick = e => { if (e.target===$('importModal')) $('importModal').classList.remove('active'); };
       $('importFileBtn').onclick = () => $('importFileInput').click(); $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
@@ -707,7 +750,7 @@
       $('importConfirmBtn').onclick = () => parseAndImport(false); $('importAppendBtn').onclick = () => parseAndImport(true);
 
       // 启动
-      renderAll(); if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，人设已强化，记忆可管理 🧠':'👋 请先输入 API Key');
+      renderAll(); if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，精简人设已加载 🧠':'👋 请先输入 API Key');
     })();
   </script>
 </body>
