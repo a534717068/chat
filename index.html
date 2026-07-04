@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>M · 智能助手（精简版）</title>
+  <title>M · 智能助手（分支版）</title>
   <link rel="manifest" href="manifest.json">
   <script>
     if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); }); }
@@ -15,6 +15,7 @@
       --bubble-assistant-bg: #ffffff; --bubble-assistant-text: #1a1a2e;
       --btn-bg: #0f3460; --btn-text: #ffffff; --header-bg: #1a1a2e; --header-text: #ffffff;
       --chat-bg: #fafafa; --modal-overlay: rgba(0,0,0,0.5); --modal-bg: #ffffff;
+      --branch-bg: #e8f0fe; --branch-text: #1a73e8;
     }
     body.dark {
       --bg: #121212; --surface: #1e1e1e; --text-primary: #e0e0e0; --text-secondary: #888;
@@ -22,6 +23,7 @@
       --bubble-assistant-bg: #2a2a2a; --bubble-assistant-text: #e0e0e0;
       --btn-bg: #3a3a5c; --header-bg: #111; --header-text: #e0e0e0;
       --chat-bg: #121212; --modal-overlay: rgba(0,0,0,0.7); --modal-bg: #2a2a2a;
+      --branch-bg: #1a2733; --branch-text: #64b5f6;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text-primary); display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
@@ -46,9 +48,46 @@
     .env-indicator .location { font-size: 0.65rem; color: var(--text-secondary); margin-left: 4px; }
     .chat-container { flex: 1; position: relative; overflow: hidden; }
     .chat-box { height: 100%; overflow-y: auto; padding: 10px 12px; background: var(--chat-bg); display: flex; flex-direction: column; gap: 8px; }
-    .message-row { display: flex; flex-direction: column; max-width: 85%; animation: fadeIn 0.15s ease; }
+    .message-row { display: flex; flex-direction: column; max-width: 85%; animation: fadeIn 0.15s ease; transition: opacity 0.3s, max-height 0.3s; }
+    .message-row.hidden-branch { display: none; }
     .message-row.user { align-self: flex-end; align-items: flex-end; }
     .message-row.assistant { align-self: flex-start; align-items: flex-start; }
+    
+    /* 分支指示器 */
+    .branch-indicator { 
+      display: flex; 
+      align-items: center; 
+      gap: 4px; 
+      margin: 4px 0; 
+      padding: 4px 0;
+      font-size: 0.7rem; 
+      color: var(--text-secondary);
+    }
+    .branch-indicator.user-side { justify-content: flex-end; }
+    .branch-indicator.assistant-side { justify-content: flex-start; }
+    .branch-indicator .branch-line { 
+      flex: 1; 
+      height: 1px; 
+      background: var(--border); 
+      max-width: 30px;
+    }
+    .branch-indicator .branch-badge { 
+      background: var(--branch-bg); 
+      color: var(--branch-text); 
+      padding: 2px 8px; 
+      border-radius: 10px; 
+      font-size: 0.65rem; 
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--branch-text);
+      transition: background 0.2s;
+    }
+    .branch-indicator .branch-badge:hover { opacity: 0.8; }
+    .branch-indicator .branch-badge.active { 
+      background: var(--branch-text); 
+      color: white; 
+    }
+    
     .time-label { font-size: 0.65rem; color: var(--text-secondary); margin-bottom: 2px; padding: 0 4px; }
     .bubble-row { display: flex; align-items: flex-end; gap: 4px; }
     .bubble { padding: 9px 13px; border-radius: 16px; font-size: 0.9rem; line-height: 1.45; word-wrap: break-word; white-space: pre-wrap; overflow-wrap: break-word; }
@@ -58,10 +97,11 @@
     .bubble-actions:hover, .bubble-actions:active { opacity: 0.8; }
     .bubble-actions button { background: rgba(0,0,0,0.3); color: white; border: none; border-radius: 50%; width: 22px; height: 22px; font-size: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
     .bubble-actions button.del-btn { background: rgba(233, 69, 96, 0.5); }
+    .bubble-actions button.branch-btn { background: rgba(26, 115, 232, 0.6); }
     .user .bubble-actions { order: -1; }
     .assistant .bubble-actions { order: 1; }
     
-    /* 全局二级菜单 - 挂载到body */
+    /* 全局二级菜单 */
     .delete-submenu { 
       position: fixed;
       background: var(--surface); 
@@ -139,7 +179,7 @@
   </style>
 </head>
 <body>
-  <!-- 全局删除子菜单容器 -->
+  <!-- 全局删除子菜单 -->
   <div class="delete-submenu" id="deleteSubmenu">
     <button id="deleteSingleBtn">删除本条</button>
     <button class="danger" id="deleteAllAfterBtn">删除本条及后续</button>
@@ -147,7 +187,7 @@
 
   <div class="header">
     <button class="memory-btn" id="memoryViewBtn">🧠 记忆</button>
-    🧠 M
+    🌿 M · 分支
     <div class="header-buttons">
       <button id="themeToggle">🌙</button>
       <button id="exportBtn">导出</button>
@@ -187,7 +227,7 @@
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">密钥仅保存在手机 · 点击累计Token/花费可编辑</div>
+  <div class="tip">密钥仅保存在手机 · 编辑历史消息自动创建分支 🌿</div>
 
   <!-- 记忆管理面板 -->
   <div class="modal-overlay" id="memoryModal">
@@ -196,12 +236,8 @@
         <span>🧠 记忆管理</span>
         <button class="add-memory-btn" id="addMemoryBtn">＋ 新增</button>
       </h3>
-      <div id="memoryDisplay" style="max-height:350px;overflow-y:auto;padding:4px;background:var(--bg);border-radius:8px;font-size:0.85rem;">
-        加载中...
-      </div>
-      <div class="modal-buttons">
-        <button class="btn-cancel" id="memoryCloseBtn">关闭</button>
-      </div>
+      <div id="memoryDisplay" style="max-height:350px;overflow-y:auto;padding:4px;background:var(--bg);border-radius:8px;font-size:0.85rem;">加载中...</div>
+      <div class="modal-buttons"><button class="btn-cancel" id="memoryCloseBtn">关闭</button></div>
     </div>
   </div>
 
@@ -255,11 +291,11 @@
     (function() {
       const $ = id => document.getElementById(id);
       // ---------- 常量 ----------
-      const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
+      const SK = 'deepseek_api_key', CK = 'deepseek_chat_v8_branch', TK = 'deepseek_theme';
       const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
       const SETTING_KEY = 'deepseek_global_setting';
       const MEMORY_KEY = 'deepseek_compressed_memory';
-      const FULL_HISTORY_KEY = 'deepseek_full_history';
+      const FULL_HISTORY_KEY = 'deepseek_full_history_v8';
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
       const MAX_CONTEXT = 20;
       const COMPRESS_THRESHOLD = 40;
@@ -302,8 +338,24 @@
       let fullHistory = []; const sf = localStorage.getItem(FULL_HISTORY_KEY); if (sf) try { fullHistory = JSON.parse(sf); } catch(e) {}
       let messages = [{ role:'system', content:'' }]; let nextId = Date.now(); let editingIdx = -1;
       let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
-      let currentDeleteIdx = -1; // 当前正在操作的删除目标索引
-      function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
+      let currentDeleteIdx = -1;
+      
+      // 分支系统
+      let branchCounter = 1;
+      let activeBranchId = 'branch_1'; // 当前活跃分支
+      let branchMap = {}; // { branchId: { parentMsgIdx, messages: [...] } }
+      
+      function saveFullHistory() { 
+        try { 
+          localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify({
+            messages: messages,
+            branchMap: branchMap,
+            activeBranchId: activeBranchId,
+            branchCounter: branchCounter,
+            nextId: nextId
+          })); 
+        } catch(e) {} 
+      }
 
       // ===================== 精简人设 =====================
       function buildSystemPrompt() {
@@ -349,14 +401,32 @@
           time: m.time,
           parentId: m.parentId,
           history: m.history,
-          historyIndex: m.historyIndex
+          historyIndex: m.historyIndex,
+          branchId: m.branchId,
+          branchParentIdx: m.branchParentIdx
         }));
         localStorage.setItem(CK, JSON.stringify(toSave)); 
         localStorage.setItem(TKK, $('totalTokens').textContent); 
         localStorage.setItem(TCK, $('totalCost').textContent); 
+        saveFullHistory();
       }
       
       function loadAll() { 
+        // 先尝试加载完整历史
+        const fh = localStorage.getItem(FULL_HISTORY_KEY);
+        if (fh) try {
+          const data = JSON.parse(fh);
+          if (data.messages && Array.isArray(data.messages)) {
+            messages = data.messages;
+            branchMap = data.branchMap || {};
+            activeBranchId = data.activeBranchId || 'branch_1';
+            branchCounter = data.branchCounter || 1;
+            nextId = data.nextId || Date.now();
+            return;
+          }
+        } catch(e) {}
+        
+        // 回退到旧格式
         const s = localStorage.getItem(CK); 
         if (s) try { 
           const a = JSON.parse(s); 
@@ -368,18 +438,24 @@
               time: m.time || Date.now(),
               parentId: m.parentId || null,
               history: m.history || null,
-              historyIndex: m.historyIndex || 0
+              historyIndex: m.historyIndex || 0,
+              branchId: m.branchId || 'branch_1',
+              branchParentIdx: m.branchParentIdx !== undefined ? m.branchParentIdx : null
             }));
             messages = [messages[0], ...loaded];
           }
         } catch(e) {} 
       }
-      loadAll(); 
+      loadAll();
+      
+      // 确保至少有一个分支
+      if (Object.keys(branchMap).length === 0) {
+        branchMap['branch_1'] = { messages: messages, parentBranchId: null, parentMsgIdx: null };
+      }
+      
       if (!fullHistory.length && messages.length>1) { 
         fullHistory = messages.filter(m=>m.role!=='system').map(m=>({
-          role:m.role,
-          content:typeof m.content==='string'?m.content:'',
-          time:m.time
+          role:m.role, content:typeof m.content==='string'?m.content:'', time:m.time
         })); 
         saveFullHistory(); 
       }
@@ -396,22 +472,14 @@
       
       $('totalTokens').addEventListener('click', function() {
         const newVal = prompt('请输入已使用的累计Token数（仅数字）：', totalTokens);
-        if (newVal !== null && !isNaN(parseInt(newVal)) && parseInt(newVal) >= 0) {
-          totalTokens = parseInt(newVal);
-          updateTokenDisplay();
-        } else if (newVal !== null) {
-          alert('请输入有效的数字');
-        }
+        if (newVal !== null && !isNaN(parseInt(newVal)) && parseInt(newVal) >= 0) { totalTokens = parseInt(newVal); updateTokenDisplay(); }
+        else if (newVal !== null) { alert('请输入有效的数字'); }
       });
       
       $('totalCost').addEventListener('click', function() {
         const newVal = prompt('请输入总花费金额（元，仅数字）：', totalCost.toFixed(4));
-        if (newVal !== null && !isNaN(parseFloat(newVal)) && parseFloat(newVal) >= 0) {
-          totalCost = parseFloat(newVal);
-          updateTokenDisplay();
-        } else if (newVal !== null) {
-          alert('请输入有效的数字');
-        }
+        if (newVal !== null && !isNaN(parseFloat(newVal)) && parseFloat(newVal) >= 0) { totalCost = parseFloat(newVal); updateTokenDisplay(); }
+        else if (newVal !== null) { alert('请输入有效的数字'); }
       });
       
       updateTokenDisplay();
@@ -419,12 +487,17 @@
       function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'☀️':'🌙'; localStorage.setItem(TK, d?'dark':'light'); }
       setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; 
-      document.addEventListener('click', () => { 
-        $('moreMenu').classList.remove('active'); 
-        closeDeleteSubmenu();
-      }); 
+      document.addEventListener('click', () => { $('moreMenu').classList.remove('active'); closeDeleteSubmenu(); }); 
       $('moreMenu').onclick = e => e.stopPropagation();
-      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
+      $('clearChatBtn').onclick = () => { 
+        if (confirm('清空所有对话和分支？')) { 
+          messages = [messages[0]]; fullHistory = []; 
+          branchMap = { 'branch_1': { messages: [messages[0]], parentBranchId: null, parentMsgIdx: null } };
+          activeBranchId = 'branch_1'; branchCounter = 1;
+          compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); 
+          renderAll(); saveAll(); $('moreMenu').classList.remove('active'); 
+        } 
+      };
       bindDraft($('userInput'),DRAFT_CHAT);bindDraft($('settingTextarea'),DRAFT_SETTING);bindDraft($('importTextarea'),DRAFT_IMPORT);bindDraft($('searchInput'),DRAFT_SEARCH);
       $('settingBtn').onclick = () => { $('settingTextarea').value = loadDraft(DRAFT_SETTING)||globalSetting; $('settingModal').classList.add('active'); $('moreMenu').classList.remove('active'); };
       $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active'); $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
@@ -441,6 +514,155 @@
       const chatBox = $('chatBox'), scrollBtn = $('scrollToBottomBtn');
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom()); scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
+      
+      // ===================== 分支系统 =====================
+      function getVisibleMessages() {
+        // 收集当前活跃分支的所有消息
+        let visibleMsgs = [];
+        let currentBranchId = activeBranchId;
+        let visitedBranches = new Set();
+        
+        function collectBranchMessages(branchId) {
+          if (visitedBranches.has(branchId)) return;
+          visitedBranches.add(branchId);
+          
+          const branch = branchMap[branchId];
+          if (!branch || !branch.messages) return;
+          
+          // 先收集父分支的消息（到分叉点为止）
+          if (branch.parentBranchId && branch.parentMsgIdx !== null) {
+            const parentBranch = branchMap[branch.parentBranchId];
+            if (parentBranch && parentBranch.messages) {
+              // 只取到分叉点之前的消息
+              const parentMsgs = parentBranch.messages.filter(m => m.role !== 'system');
+              const forkIdx = parentMsgs.findIndex(m => m.id === branch.parentMsgIdx);
+              if (forkIdx >= 0) {
+                parentMsgs.slice(0, forkIdx).forEach(m => visibleMsgs.push({...m, fromParentBranch: true}));
+              }
+            }
+          }
+          
+          // 收集当前分支的消息
+          branch.messages.filter(m => m.role !== 'system').forEach(m => visibleMsgs.push({...m, fromParentBranch: false, branchId: branchId}));
+        }
+        
+        collectBranchMessages(currentBranchId);
+        
+        // 去重（按 id）
+        const seen = new Set();
+        const result = [];
+        visibleMsgs.forEach(m => {
+          if (!seen.has(m.id)) {
+            seen.add(m.id);
+            result.push(m);
+          }
+        });
+        
+        return result;
+      }
+      
+      function getAllBranchesAtIdx(idx) {
+        // 找到在索引idx处分叉的所有分支
+        const msg = messages[idx];
+        if (!msg) return [];
+        
+        const branches = [];
+        for (const [bid, branch] of Object.entries(branchMap)) {
+          if (branch.parentMsgIdx !== null) {
+            const parentMsgs = branchMap[branch.parentBranchId]?.messages || [];
+            const parentIdx = parentMsgs.findIndex(m => m.id === branch.parentMsgIdx);
+            if (parentIdx >= 0) {
+              branches.push({ branchId: bid, forkAtMsgId: branch.parentMsgIdx });
+            }
+          }
+        }
+        
+        // 也检查当前消息是否是分叉点
+        return branches.filter(b => {
+          const branchMsgs = branchMap[b.branchId]?.messages || [];
+          return branchMsgs.some(m => m.id === msg.id);
+        });
+      }
+      
+      function createBranch(forkMsgId) {
+        branchCounter++;
+        const newBranchId = `branch_${branchCounter}`;
+        
+        // 保存当前分支状态
+        branchMap[activeBranchId] = { 
+          messages: [...messages], 
+          parentBranchId: activeBranchId,
+          parentMsgIdx: forkMsgId
+        };
+        
+        // 找到分叉点在当前消息列表中的索引
+        const forkIdx = messages.findIndex(m => m.id === forkMsgId);
+        
+        // 创建新分支
+        branchMap[newBranchId] = {
+          messages: forkIdx >= 0 ? [...messages.slice(0, forkIdx)] : [...messages],
+          parentBranchId: activeBranchId,
+          parentMsgIdx: forkMsgId
+        };
+        
+        // 更新当前分支
+        const oldBranchId = activeBranchId;
+        activeBranchId = newBranchId;
+        
+        return { newBranchId, oldBranchId, forkIdx };
+      }
+      
+      window._switchBranch = function(branchId, forkIdx) {
+        if (branchId === activeBranchId) return;
+        
+        // 保存当前分支
+        branchMap[activeBranchId] = { 
+          messages: [...messages],
+          parentBranchId: branchMap[activeBranchId]?.parentBranchId || activeBranchId,
+          parentMsgIdx: branchMap[activeBranchId]?.parentMsgIdx || null
+        };
+        
+        // 切换到新分支
+        activeBranchId = branchId;
+        const targetBranch = branchMap[branchId];
+        if (targetBranch && targetBranch.messages) {
+          messages = [...targetBranch.messages];
+        }
+        
+        closeDeleteSubmenu();
+        renderAll();
+        saveAll();
+      };
+      
+      window._createNewBranch = function(idx) {
+        const msg = messages[idx];
+        if (!msg || msg.role !== 'user') return;
+        
+        // 复制消息内容到输入框
+        $('userInput').value = typeof msg.content === 'string' ? msg.content : '';
+        $('userInput').focus();
+        editingIdx = idx;
+        
+        // 创建新分支
+        const { newBranchId, oldBranchId, forkIdx } = createBranch(msg.id);
+        
+        // 更新分支映射
+        branchMap[oldBranchId] = { 
+          messages: [...messages.slice(0, forkIdx)],
+          parentBranchId: branchMap[oldBranchId]?.parentBranchId || oldBranchId,
+          parentMsgIdx: branchMap[oldBranchId]?.parentMsgIdx || null
+        };
+        
+        // 截断消息列表到分叉点
+        messages = messages.slice(0, forkIdx);
+        syncFullHistoryFromMessages();
+        
+        closeDeleteSubmenu();
+        renderAll();
+        saveAll();
+        
+        addMsg('assistant', `🌿 已创建新分支「分支 ${branchCounter}」，你可以编辑并发送新消息。`);
+      };
       
       // ===================== 全局删除子菜单 =====================
       const deleteSubmenu = $('deleteSubmenu');
@@ -461,14 +683,8 @@
         let top = btnRect.bottom + 4;
         let left = btnRect.left;
         
-        if (top + menuHeight > window.innerHeight) {
-          top = btnRect.top - menuHeight - 4;
-        }
-        
-        if (left + menuWidth > window.innerWidth) {
-          left = window.innerWidth - menuWidth - 8;
-        }
-        
+        if (top + menuHeight > window.innerHeight) { top = btnRect.top - menuHeight - 4; }
+        if (left + menuWidth > window.innerWidth) { left = window.innerWidth - menuWidth - 8; }
         if (left < 8) left = 8;
         
         deleteSubmenu.style.top = top + 'px';
@@ -489,7 +705,6 @@
         showDeleteSubmenu(idx, event.currentTarget);
       };
       
-      // 删除本条
       deleteSingleBtn.addEventListener('click', function(e) {
         e.stopPropagation();
         if (currentDeleteIdx === -1) return;
@@ -507,10 +722,7 @@
           endIdx = currentDeleteIdx;
         }
         
-        if (!confirm(`确定删除这${endIdx - startIdx + 1}条消息吗？`)) {
-          closeDeleteSubmenu();
-          return;
-        }
+        if (!confirm(`确定删除这${endIdx - startIdx + 1}条消息吗？`)) { closeDeleteSubmenu(); return; }
         
         messages.splice(startIdx, endIdx - startIdx + 1);
         syncFullHistoryFromMessages();
@@ -519,15 +731,11 @@
         saveAll();
       });
       
-      // 删除本条及后续
       deleteAllAfterBtn.addEventListener('click', function(e) {
         e.stopPropagation();
         if (currentDeleteIdx === -1) return;
         
-        if (!confirm('确定删除本条及后续所有消息吗？')) {
-          closeDeleteSubmenu();
-          return;
-        }
+        if (!confirm('确定删除本条及后续所有消息吗？')) { closeDeleteSubmenu(); return; }
         
         messages = messages.slice(0, currentDeleteIdx);
         syncFullHistoryFromMessages();
@@ -536,10 +744,7 @@
         saveAll();
       });
       
-      // 点击子菜单不关闭
-      deleteSubmenu.addEventListener('click', function(e) {
-        e.stopPropagation();
-      });
+      deleteSubmenu.addEventListener('click', function(e) { e.stopPropagation(); });
       
       // ===================== 版本切换 =====================
       window._switchVer = function(idx, dir) { 
@@ -564,11 +769,8 @@
           messages[idx + 1].time = ver.time; 
         } else { 
           messages.splice(idx + 1, 0, {
-            role: 'assistant', 
-            content: ver.reply || '', 
-            id: nextId++, 
-            time: ver.time, 
-            parentId: msg.id
+            role: 'assistant', content: ver.reply || '', id: nextId++, time: ver.time, parentId: msg.id,
+            branchId: activeBranchId, branchParentIdx: null
           }); 
         } 
         closeDeleteSubmenu();
@@ -578,9 +780,7 @@
       
       function syncFullHistoryFromMessages() {
         fullHistory = messages.filter(m => m.role !== 'system').map(m => ({
-          role: m.role,
-          content: typeof m.content === 'string' ? m.content : '',
-          time: m.time
+          role: m.role, content: typeof m.content === 'string' ? m.content : '', time: m.time
         }));
         saveFullHistory();
       }
@@ -644,7 +844,22 @@
 
       function renderAll() {
         chatBox.innerHTML = '';
-        messages.forEach((msg, idx) => {
+        
+        // 获取可见消息
+        const visibleMsgs = getVisibleMessages();
+        
+        // 找出所有分支分叉点
+        const forkPoints = new Map(); // idx -> [branchId1, branchId2, ...]
+        for (const [bid, branch] of Object.entries(branchMap)) {
+          if (branch.parentMsgIdx !== null && bid !== activeBranchId) {
+            if (!forkPoints.has(branch.parentMsgIdx)) {
+              forkPoints.set(branch.parentMsgIdx, []);
+            }
+            forkPoints.get(branch.parentMsgIdx).push(bid);
+          }
+        }
+        
+        visibleMsgs.forEach((msg, displayIdx) => {
           if (msg.role === 'system') return;
           const row = document.createElement('div'); row.className = `message-row ${msg.role}`;
           const timeStr = formatTime(msg.time || Date.now());
@@ -654,28 +869,56 @@
           
           let btns = '';
           if (msg.role === 'user') {
-            btns += `<button onclick="_editMsg(${idx})">✎</button>`;
+            btns += `<button onclick="_editMsg(${displayIdx})">✎</button>`;
+            // 分支按钮
+            const forks = forkPoints.get(msg.id);
+            if (forks && forks.length > 0) {
+              btns += `<button class="branch-btn" onclick="event.stopPropagation();" title="此消息有 ${forks.length} 个分支">🌿</button>`;
+            }
           } else {
-            btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
+            btns += `<button onclick="_regenMsg(${displayIdx})">↻</button>`;
           }
-          btns += `<button class="del-btn" onclick="_toggleDeleteSubmenu(${idx}, event)" title="删除">🗑</button>`;
+          btns += `<button class="del-btn" onclick="_toggleDeleteSubmenu(${displayIdx}, event)" title="删除">🗑</button>`;
           
           let verHTML = '';
           if (msg.history && msg.history.length > 1) { 
             const cur = (msg.historyIndex || 0) + 1; 
             const total = msg.history.length; 
-            verHTML = `<div class="version-switcher"><button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button></div>`; 
+            verHTML = `<div class="version-switcher"><button onclick="_switchVer(${displayIdx}, -1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${displayIdx}, 1)" ${cur===total?'disabled':''}>▶</button></div>`; 
           }
           
           row.innerHTML = `<div class="time-label">${timeStr}</div><div class="bubble-row"><div class="bubble-actions">${btns}</div><div class="bubble">${content}</div></div>${verHTML}`;
-          chatBox.appendChild(row);
+          
+          // 检查是否是分叉点，显示分支指示器
+          const forks = forkPoints.get(msg.id);
+          if (forks && forks.length > 0 && msg.role === 'user') {
+            const forkDiv = document.createElement('div');
+            forkDiv.className = `branch-indicator ${msg.role}-side`;
+            forkDiv.innerHTML = `
+              <div class="branch-line"></div>
+              ${forks.map(bid => {
+                const isActive = bid === activeBranchId;
+                return `<span class="branch-badge ${isActive ? 'active' : ''}" onclick="window._switchBranch('${bid}', ${displayIdx})" title="切换到分支 ${bid}">🌿 ${bid.replace('branch_', '分支 ')}</span>`;
+              }).join('')}
+              <div class="branch-line"></div>
+            `;
+            chatBox.appendChild(row);
+            chatBox.appendChild(forkDiv);
+          } else {
+            chatBox.appendChild(row);
+          }
         });
+        
         chatBox.scrollTop = chatBox.scrollHeight; scrollBtn.classList.toggle('visible', !nearBottom());
         if (searchKeyword) { const marks = chatBox.querySelectorAll('mark'); searchTotal = marks.length; if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) marks[searchMatchIndex].classList.add('current'); }
       }
 
       function addMsg(role, content) { 
-        const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 }; 
+        const msg = { 
+          role, content, id: nextId++, time: Date.now(), parentId: null, 
+          history: null, historyIndex: 0,
+          branchId: activeBranchId, branchParentIdx: null
+        }; 
         messages.push(msg); 
         fullHistory.push({ role, content, time: msg.time }); 
         saveFullHistory(); 
@@ -694,18 +937,11 @@
         try { 
           if (apiKey) { 
             const res = await fetch('https://api.deepseek.com/v1/chat/completions', { 
-              method:'POST', 
-              headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, 
-              body:JSON.stringify({ 
-                model:'deepseek-v4-flash', 
-                messages:[
-                  {role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},
-                  {role:'user',content:`请压缩：\n${text}`}
-                ], 
-                stream:false, 
-                temperature:0.3, 
-                max_tokens:800 
-              }) 
+              method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, 
+              body:JSON.stringify({ model:'deepseek-v4-flash', messages:[
+                {role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},
+                {role:'user',content:`请压缩：\n${text}`}
+              ], stream:false, temperature:0.3, max_tokens:800 }) 
             }); 
             if (res.ok) { 
               const d = await res.json(); 
@@ -715,41 +951,26 @@
               localStorage.setItem(MEMORY_KEY, compressedMemory); 
               messages = [messages[0], ...non.slice(old.length)]; 
               syncFullHistoryFromMessages();
-              refreshSystemPrompt(); 
-              saveAll(); 
-              renderAll(); 
-              return; 
+              refreshSystemPrompt(); saveAll(); renderAll(); return; 
             } 
           } 
         } catch(e) {} 
         messages = [messages[0], ...non.slice(old.length)]; 
-        saveAll(); 
-        renderAll(); 
+        saveAll(); renderAll(); 
       }
 
       // ============= 记忆提取与图谱 =============
       async function extractAndStoreFacts(userText, aiText) {
         if (!apiKey) return;
         const lastExtract = localStorage.getItem('last_extract_time_v3');
-        if (lastExtract && Date.now() - parseInt(lastExtract) < 5000) {
-          await new Promise(r => setTimeout(r, 300));
-        }
+        if (lastExtract && Date.now() - parseInt(lastExtract) < 5000) { await new Promise(r => setTimeout(r, 300)); }
         localStorage.setItem('last_extract_time_v3', Date.now().toString());
-        const prompt = `从以下对话中提取客观事实。**重要：quote 字段必须严格来自用户的原话，不能自己编造，也不能来自 AI 的回复。**
-        输出 JSON 数组，每个对象包含：
-        "entity": "实体名（人名/地名/事物）",
-        "relation": "关系（如：去了、喜欢、买了）",
-        "object": "对象（如：咖啡馆、电影）",
-        "fact": "完整事实句子（第三人称）",
-        "quote": "用户原话（必须从用户输入中摘录）"
-        如果用户没有提供新信息，输出 []。
-        对话：
-        用户：${userText}
-        M：${aiText}`;
+        const prompt = `从以下对话中提取客观事实。**重要：quote 字段必须严格来自用户的原话。**
+        输出 JSON 数组：[{"entity":"实体","relation":"关系","object":"对象","fact":"事实","quote":"用户原话"}]
+        对话：用户：${userText}\nM：${aiText}`;
         try {
           const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+            method: 'POST', headers: {'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
             body: JSON.stringify({model:'deepseek-v4-flash', messages:[{role:'user',content:prompt}], temperature:0.2})
           });
           if (!res.ok) return;
@@ -786,36 +1007,29 @@
       function renderMemoryManager() {
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         const container = document.getElementById('memoryDisplay');
-        if (!facts.length) {
-          container.innerHTML = '<div style="padding:12px;color:var(--text-secondary);">暂无记忆，聊天后自动提取或点击"整合旧记忆"。</div>';
-          return;
-        }
+        if (!facts.length) { container.innerHTML = '<div style="padding:12px;color:var(--text-secondary);">暂无记忆。</div>'; return; }
         let html = '';
         facts.forEach((f, index) => {
-          html += `
-            <div class="memory-item" data-index="${index}">
-              <div class="meta">
-                <span><strong>实体：</strong>${f.entity}</span>
-                <span><strong>关系：</strong>${f.relation}</span>
-                <span><strong>对象：</strong>${f.object}</span>
-                <span><strong>提及：</strong>${f.mentions || 1}</span>
-                <span><strong>时间：</strong>${new Date(f.time).toLocaleDateString()}</span>
-              </div>
-              <div class="fact-text" id="fact-display-${index}">${f.fact}</div>
-              <div class="fact-edit" id="fact-edit-${index}" style="display:none;">
-                <input class="memory-edit-input" id="edit-entity-${index}" value="${f.entity}" placeholder="实体">
-                <input class="memory-edit-input" id="edit-relation-${index}" value="${f.relation}" placeholder="关系">
-                <input class="memory-edit-input" id="edit-object-${index}" value="${f.object}" placeholder="对象">
-                <textarea class="memory-edit-input" id="edit-fact-${index}" rows="2" style="resize:vertical;">${f.fact}</textarea>
-              </div>
-              <div class="actions">
-                <button class="edit-btn" onclick="window.toggleEditFact(${index})">✏️ 编辑</button>
-                <button class="del-btn" onclick="window.deleteFact(${index})">🗑️ 删除</button>
-                <button class="edit-btn" id="save-edit-${index}" style="display:none;background:#4caf50;" onclick="window.saveFact(${index})">💾 保存</button>
-                <button class="edit-btn" id="cancel-edit-${index}" style="display:none;background:#888;" onclick="window.cancelEditFact(${index})">取消</button>
-              </div>
+          html += `<div class="memory-item" data-index="${index}">
+            <div class="meta">
+              <span><strong>实体：</strong>${f.entity}</span><span><strong>关系：</strong>${f.relation}</span>
+              <span><strong>对象：</strong>${f.object}</span><span><strong>提及：</strong>${f.mentions||1}</span>
+              <span><strong>时间：</strong>${new Date(f.time).toLocaleDateString()}</span>
             </div>
-          `;
+            <div class="fact-text" id="fact-display-${index}">${f.fact}</div>
+            <div class="fact-edit" id="fact-edit-${index}" style="display:none;">
+              <input class="memory-edit-input" id="edit-entity-${index}" value="${f.entity}" placeholder="实体">
+              <input class="memory-edit-input" id="edit-relation-${index}" value="${f.relation}" placeholder="关系">
+              <input class="memory-edit-input" id="edit-object-${index}" value="${f.object}" placeholder="对象">
+              <textarea class="memory-edit-input" id="edit-fact-${index}" rows="2">${f.fact}</textarea>
+            </div>
+            <div class="actions">
+              <button class="edit-btn" onclick="window.toggleEditFact(${index})">✏️</button>
+              <button class="del-btn" onclick="window.deleteFact(${index})">🗑️</button>
+              <button class="edit-btn" id="save-edit-${index}" style="display:none;background:#4caf50;" onclick="window.saveFact(${index})">💾</button>
+              <button class="edit-btn" id="cancel-edit-${index}" style="display:none;background:#888;" onclick="window.cancelEditFact(${index})">取消</button>
+            </div>
+          </div>`;
         });
         container.innerHTML = html;
       }
@@ -827,26 +1041,17 @@
         const cancelBtn = document.getElementById(`cancel-edit-${index}`);
         const editBtn = document.querySelector(`.memory-item[data-index="${index}"] .edit-btn`);
         if (edit.style.display === 'none') {
-          edit.style.display = 'block';
-          display.style.display = 'none';
-          saveBtn.style.display = 'inline-block';
-          cancelBtn.style.display = 'inline-block';
+          edit.style.display = 'block'; display.style.display = 'none';
+          saveBtn.style.display = 'inline-block'; cancelBtn.style.display = 'inline-block';
           editBtn.textContent = '✏️ 取消编辑';
-        } else {
-          cancelEditFact(index);
-        }
+        } else { cancelEditFact(index); }
       };
       window.cancelEditFact = function(index) {
-        const display = document.getElementById(`fact-display-${index}`);
-        const edit = document.getElementById(`fact-edit-${index}`);
-        const saveBtn = document.getElementById(`save-edit-${index}`);
-        const cancelBtn = document.getElementById(`cancel-edit-${index}`);
-        const editBtn = document.querySelector(`.memory-item[data-index="${index}"] .edit-btn`);
-        edit.style.display = 'none';
-        display.style.display = 'block';
-        saveBtn.style.display = 'none';
-        cancelBtn.style.display = 'none';
-        editBtn.textContent = '✏️ 编辑';
+        document.getElementById(`fact-display-${index}`).style.display = 'block';
+        document.getElementById(`fact-edit-${index}`).style.display = 'none';
+        document.getElementById(`save-edit-${index}`).style.display = 'none';
+        document.getElementById(`cancel-edit-${index}`).style.display = 'none';
+        document.querySelector(`.memory-item[data-index="${index}"] .edit-btn`).textContent = '✏️';
       };
       window.saveFact = function(index) {
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
@@ -858,10 +1063,7 @@
         if (!entity || !fact) { alert('实体和事实不能为空'); return; }
         facts[index] = { ...facts[index], entity, relation, object, fact };
         localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts));
-        rebuildGraph();
-        renderMemoryManager();
-        refreshSystemPrompt();
-        renderAll();
+        rebuildGraph(); renderMemoryManager(); refreshSystemPrompt(); renderAll();
       };
       window.deleteFact = function(index) {
         if (!confirm('确定删除这条记忆吗？')) return;
@@ -869,41 +1071,29 @@
         if (index >= facts.length) return;
         facts.splice(index, 1);
         localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts));
-        rebuildGraph();
-        renderMemoryManager();
-        refreshSystemPrompt();
-        renderAll();
+        rebuildGraph(); renderMemoryManager(); refreshSystemPrompt(); renderAll();
       };
       function addNewFact() {
-        const entity = prompt('请输入实体名（如：城月、那家咖啡馆）');
-        if (!entity) return;
-        const relation = prompt('请输入关系（如：去了、喜欢）') || '';
-        const object = prompt('请输入对象（如：咖啡馆、电影）') || '';
-        const fact = prompt('请输入完整事实句子（第三人称）');
-        if (!fact) return;
+        const entity = prompt('实体名：'); if (!entity) return;
+        const relation = prompt('关系：') || '';
+        const object = prompt('对象：') || '';
+        const fact = prompt('完整事实：'); if (!fact) return;
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         facts.push({ entity, relation, object, fact, quote: '手动添加', time: Date.now(), mentions: 1 });
         localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts));
-        rebuildGraph();
-        renderMemoryManager();
-        refreshSystemPrompt();
-        renderAll();
+        rebuildGraph(); renderMemoryManager(); refreshSystemPrompt(); renderAll();
       }
       document.getElementById('addMemoryBtn').addEventListener('click', addNewFact);
       document.getElementById('clearMemoryBtn').addEventListener('click', function() {
-        if (confirm('确定清空所有自动提取的记忆吗？（不会删除聊天记录）')) {
-          localStorage.removeItem(MEMORY_FACTS_KEY);
-          localStorage.removeItem(MEMORY_GRAPH_KEY);
-          alert('记忆库已清空！');
-          refreshSystemPrompt();
-          renderAll();
+        if (confirm('确定清空所有记忆吗？')) {
+          localStorage.removeItem(MEMORY_FACTS_KEY); localStorage.removeItem(MEMORY_GRAPH_KEY);
+          alert('记忆库已清空！'); refreshSystemPrompt(); renderAll();
           document.getElementById('moreMenu').classList.remove('active');
           if (document.getElementById('memoryModal').classList.contains('active')) renderMemoryManager();
         }
       });
       document.getElementById('memoryViewBtn').addEventListener('click', function() {
-        renderMemoryManager();
-        document.getElementById('memoryModal').classList.add('active');
+        renderMemoryManager(); document.getElementById('memoryModal').classList.add('active');
       });
       document.getElementById('memoryCloseBtn').addEventListener('click', function() {
         document.getElementById('memoryModal').classList.remove('active');
@@ -913,8 +1103,7 @@
       });
 
       // ============= 整合旧记忆 =============
-      let reprocessingPaused = false;
-      let reprocessingActive = false;
+      let reprocessingPaused = false, reprocessingActive = false;
 
       function updateProgressUI(current, total, paused = false) {
         const progressDiv = document.getElementById('progressDisplay');
@@ -922,72 +1111,48 @@
           progressDiv.style.display = 'flex';
           document.getElementById('progressNum').textContent = current;
           document.getElementById('progressTotal').textContent = total;
-        } else {
-          progressDiv.style.display = 'none';
-        }
-        const btn = document.getElementById('pauseResumeBtn');
-        btn.textContent = paused ? '▶️ 继续' : '⏸️ 暂停';
+        } else { progressDiv.style.display = 'none'; }
+        document.getElementById('pauseResumeBtn').textContent = paused ? '▶️ 继续' : '⏸️ 暂停';
         const pauseBtn = document.getElementById('pauseReprocessBtn');
-        if (paused) {
-          pauseBtn.textContent = '▶️ 继续整合';
-          pauseBtn.style.display = 'block';
-        } else {
-          pauseBtn.textContent = '⏸️ 暂停整合';
-          pauseBtn.style.display = reprocessingActive ? 'block' : 'none';
-        }
+        if (paused) { pauseBtn.textContent = '▶️ 继续整合'; pauseBtn.style.display = 'block'; }
+        else { pauseBtn.textContent = '⏸️ 暂停整合'; pauseBtn.style.display = reprocessingActive ? 'block' : 'none'; }
       }
 
       async function reprocessAllHistory(continueFromProgress = false) {
         if (!apiKey) { alert('请先设置 API Key'); return; }
         const savedIndex = parseInt(localStorage.getItem(REPROGRESS_KEY) || '0');
         if (!continueFromProgress && savedIndex > 0) {
-          if (!confirm(`检测到上次整合在 ${savedIndex} 条处中断，是否继续？\n（选"取消"将从头开始）`)) {
-            localStorage.removeItem(REPROGRESS_KEY);
-          } else {
-            continueFromProgress = true;
-          }
+          if (!confirm(`检测到上次整合在 ${savedIndex} 条处中断，是否继续？`)) { localStorage.removeItem(REPROGRESS_KEY); }
+          else { continueFromProgress = true; }
         }
         const history = JSON.parse(localStorage.getItem(FULL_HISTORY_KEY) || '[]');
-        if (history.length === 0) { alert('没有历史记录'); return; }
+        if (!Array.isArray(history) || history.length === 0) { alert('没有历史记录'); return; }
         const pairs = [];
         let i = 0;
         while (i < history.length) {
           if (history[i].role === 'user' && i+1 < history.length && history[i+1].role === 'assistant') {
-            pairs.push({ user: history[i].content, assistant: history[i+1].content });
-            i += 2;
+            pairs.push({ user: history[i].content, assistant: history[i+1].content }); i += 2;
           } else { i++; }
         }
         if (pairs.length === 0) { alert('没有找到成对的对话'); return; }
         let startIndex = continueFromProgress ? parseInt(localStorage.getItem(REPROGRESS_KEY) || '0') : 0;
-        if (startIndex >= pairs.length) {
-          alert('所有对话已整合完毕，无需重复。如需重新整合，请先清空记忆库。');
-          localStorage.removeItem(REPROGRESS_KEY);
-          return;
-        }
-        reprocessingActive = true;
-        reprocessingPaused = false;
+        if (startIndex >= pairs.length) { alert('已整合完毕'); localStorage.removeItem(REPROGRESS_KEY); return; }
+        reprocessingActive = true; reprocessingPaused = false;
         document.getElementById('reprocessBtn').style.display = 'none';
         document.getElementById('pauseReprocessBtn').style.display = 'block';
         updateProgressUI(startIndex, pairs.length, false);
-
         let count = startIndex;
         for (let idx = startIndex; idx < pairs.length; idx++) {
-          while (reprocessingPaused) {
-            await new Promise(r => setTimeout(r, 500));
-            if (!reprocessingActive) return;
-          }
-          const pair = pairs[idx];
-          await extractAndStoreFacts(pair.user, pair.assistant);
+          while (reprocessingPaused) { await new Promise(r => setTimeout(r, 500)); if (!reprocessingActive) return; }
+          await extractAndStoreFacts(pairs[idx].user, pairs[idx].assistant);
           count = idx + 1;
           localStorage.setItem(REPROGRESS_KEY, count.toString());
           updateProgressUI(count, pairs.length, false);
           if (idx % 5 === 0) await new Promise(r => setTimeout(r, 200));
         }
-        localStorage.removeItem(REPROGRESS_KEY);
-        rebuildGraph();
-        alert(`整合完成！共处理 ${count} 对对话。可在记忆面板中查看/编辑。`);
-        refreshSystemPrompt();
-        renderAll();
+        localStorage.removeItem(REPROGRESS_KEY); rebuildGraph();
+        alert(`整合完成！共处理 ${count} 对对话。`);
+        refreshSystemPrompt(); renderAll();
         reprocessingActive = false;
         document.getElementById('reprocessBtn').style.display = 'block';
         document.getElementById('pauseReprocessBtn').style.display = 'none';
@@ -997,11 +1162,7 @@
       function togglePauseReprocess() {
         if (!reprocessingActive) return;
         reprocessingPaused = !reprocessingPaused;
-        updateProgressUI(
-          parseInt(localStorage.getItem(REPROGRESS_KEY) || '0'),
-          parseInt(document.getElementById('progressTotal').textContent) || 0,
-          reprocessingPaused
-        );
+        updateProgressUI(parseInt(localStorage.getItem(REPROGRESS_KEY)||'0'), parseInt(document.getElementById('progressTotal').textContent)||0, reprocessingPaused);
         document.getElementById('pauseReprocessBtn').textContent = reprocessingPaused ? '▶️ 继续整合' : '⏸️ 暂停整合';
       }
 
@@ -1009,18 +1170,13 @@
         document.getElementById('moreMenu').classList.remove('active');
         const saved = localStorage.getItem(REPROGRESS_KEY);
         if (saved && parseInt(saved) > 0) {
-          if (confirm(`有未完成的整合任务（进度 ${saved} 条），是否继续？\n（点"取消"将从头开始）`)) {
-            reprocessAllHistory(true);
-            return;
-          } else {
-            localStorage.removeItem(REPROGRESS_KEY);
-          }
+          if (confirm(`有未完成的整合任务，是否继续？`)) { reprocessAllHistory(true); return; }
+          else { localStorage.removeItem(REPROGRESS_KEY); }
         }
         reprocessAllHistory(false);
       });
       document.getElementById('pauseReprocessBtn').addEventListener('click', function() {
-        document.getElementById('moreMenu').classList.remove('active');
-        togglePauseReprocess();
+        document.getElementById('moreMenu').classList.remove('active'); togglePauseReprocess();
       });
       document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
@@ -1031,32 +1187,47 @@
         let userMsg;
         
         if (isEdit) { 
-          const parent = messages[editingIdx]; 
+          const parent = messages[editingIdx];
+          
+          // 检查是否需要创建新分支
+          if (editingIdx < messages.length - 1) {
+            // 不是最后一条消息，创建新分支
+            const { newBranchId, forkIdx } = createBranch(parent.id);
+            
+            // 保存当前分支
+            const forkMsg = messages[forkIdx];
+            branchMap[activeBranchId] = {
+              messages: [...messages],
+              parentBranchId: branchMap[activeBranchId]?.parentBranchId || activeBranchId,
+              parentMsgIdx: forkMsg?.id || null
+            };
+            
+            messages = messages.slice(0, forkIdx);
+            syncFullHistoryFromMessages();
+          }
+          
           if (!parent.history) { 
-            const oldReply = (editingIdx+1 < messages.length && messages[editingIdx+1].role === 'assistant') ? messages[editingIdx+1].content : ''; 
+            const oldReply = (editingIdx+1 < messages.length && messages[editingIdx+1]?.role === 'assistant') ? messages[editingIdx+1].content : ''; 
             parent.history = [{content: parent.content, reply: oldReply, time: parent.time}]; 
             parent.historyIndex = 0; 
           } else { 
-            const curReply = (editingIdx+1 < messages.length && messages[editingIdx+1].role === 'assistant') ? messages[editingIdx+1].content : ''; 
-            parent.history[parent.historyIndex] = {content: parent.content, reply: curReply, time: parent.time}; 
+            const curReply = (editingIdx+1 < messages.length && messages[editingIdx+1]?.role === 'assistant') ? messages[editingIdx+1].content : ''; 
+            if (parent.history[parent.historyIndex]) {
+              parent.history[parent.historyIndex] = {content: parent.content, reply: curReply, time: parent.time}; 
+            }
           } 
-          messages = messages.slice(0, editingIdx + 1); 
-          syncFullHistoryFromMessages();
+          
           parent.content = text; 
           parent.time = Date.now(); 
           parent.history.push({content: text, reply: '', time: parent.time}); 
           parent.historyIndex = parent.history.length - 1; 
+          parent.branchId = activeBranchId;
           userMsg = parent; 
           editingIdx = -1; 
         } else { 
           userMsg = {
-            role: 'user', 
-            content: text, 
-            id: nextId++, 
-            time: Date.now(), 
-            parentId: null, 
-            history: null, 
-            historyIndex: 0
+            role: 'user', content: text, id: nextId++, time: Date.now(), parentId: null, 
+            history: null, historyIndex: 0, branchId: activeBranchId, branchParentIdx: null
           }; 
           const last = messages[messages.length - 1]; 
           if (last && last.role !== 'system') userMsg.parentId = last.id; 
@@ -1064,45 +1235,29 @@
         }
         
         fullHistory.push({role: 'user', content: text, time: userMsg.time}); 
-        saveFullHistory(); 
-        renderAll(); 
-        saveAll();
+        saveFullHistory(); renderAll(); saveAll();
         
         const load = document.createElement('div'); 
         load.className = 'message-row assistant'; 
         load.innerHTML = '<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>'; 
-        chatBox.appendChild(load); 
-        chatBox.scrollTop = chatBox.scrollHeight;
+        chatBox.appendChild(load); chatBox.scrollTop = chatBox.scrollHeight;
         
         try { 
           refreshSystemPrompt(); 
           const apiMsgs = [messages[0], ...messages.slice(-MAX_CONTEXT)].map(m => ({
-            role: m.role, 
-            content: typeof m.content === 'string' ? m.content : '[图片]'
+            role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]'
           })); 
           const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`}, 
-            body: JSON.stringify({
-              model: 'deepseek-v4-flash', 
-              messages: apiMsgs, 
-              stream: false, 
-              temperature: 0.7
-            })
+            method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`}, 
+            body: JSON.stringify({ model: 'deepseek-v4-flash', messages: apiMsgs, stream: false, temperature: 0.7 })
           }); 
           load.remove(); 
-          if (!res.ok) { 
-            const e = await res.json().catch(() => ({})); 
-            throw new Error(e.error?.message || `请求失败 (${res.status})`); 
-          } 
+          if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message || `请求失败 (${res.status})`); } 
           const data = await res.json(); 
           const reply = data.choices[0].message.content; 
           const aiMsg = {
-            role: 'assistant', 
-            content: reply, 
-            id: nextId++, 
-            time: Date.now(), 
-            parentId: userMsg.id
+            role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id,
+            branchId: activeBranchId, branchParentIdx: null
           }; 
           messages.push(aiMsg); 
           fullHistory.push({role: 'assistant', content: reply, time: aiMsg.time}); 
@@ -1110,23 +1265,18 @@
           if (userMsg.history && userMsg.history.length > 0) {
             userMsg.history[userMsg.historyIndex].reply = reply; 
           }
-          renderAll(); 
-          saveAll(); 
+          renderAll(); saveAll(); 
           if (data.usage) { 
             $('lastTokens').textContent = data.usage.total_tokens;
             totalTokens += data.usage.total_tokens;
             const cost = ((data.usage.prompt_tokens_details?.cached_tokens || 0) * 0.02 + (data.usage.prompt_tokens - (data.usage.prompt_tokens_details?.cached_tokens || 0)) * 1 + data.usage.completion_tokens * 2) / 1e6;
             totalCost += cost;
             $('lastCost').textContent = cost.toFixed(4);
-            updateTokenDisplay();
-            saveAll();
+            updateTokenDisplay(); saveAll();
           } 
           if (reply) { extractAndStoreFacts(text, reply).catch(e => console.warn(e)); }
           await compressHistoryIfNeeded(); 
-        } catch(e) { 
-          load.remove(); 
-          addMsg('assistant', `❌ ${e.message}`); 
-        }
+        } catch(e) { load.remove(); addMsg('assistant', `❌ ${e.message}`); }
       }
 
       $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
@@ -1134,45 +1284,21 @@
       
       // ===================== 导出功能 =====================
       $('exportBtn').onclick = () => { 
-        const data = messages.filter(m => m.role !== 'system').map(m => ({
-          role: m.role,
-          content: m.content,
-          id: m.id,
-          time: m.time,
-          parentId: m.parentId,
-          history: m.history,
-          historyIndex: m.historyIndex
-        }));
-        if (!data.length) return alert('无记录'); 
+        const data = {
+          messages: messages.filter(m => m.role !== 'system').map(m => ({
+            role: m.role, content: m.content, id: m.id, time: m.time, parentId: m.parentId,
+            history: m.history, historyIndex: m.historyIndex, branchId: m.branchId, branchParentIdx: m.branchParentIdx
+          })),
+          branchMap: branchMap,
+          activeBranchId: activeBranchId,
+          branchCounter: branchCounter
+        };
+        if (!data.messages.length) return alert('无记录'); 
         const b = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); 
-        const a = document.createElement('a'); 
-        a.href = URL.createObjectURL(b); 
-        a.download = `chat-m-${new Date().toISOString().slice(0, 10)}.json`; 
-        a.click(); 
+        const a = document.createElement('a'); a.href = URL.createObjectURL(b); 
+        a.download = `chat-m-branch-${new Date().toISOString().slice(0, 10)}.json`; a.click(); 
       };
       
-      (function auto() { 
-        const today = new Date().toISOString().slice(0, 10); 
-        if (localStorage.getItem(AEK) === today) return; 
-        const data = messages.filter(m => m.role !== 'system').map(m => ({
-          role: m.role,
-          content: m.content,
-          id: m.id,
-          time: m.time,
-          parentId: m.parentId,
-          history: m.history,
-          historyIndex: m.historyIndex
-        }));
-        if (data.length) { 
-          const b = new Blob([JSON.stringify(data)], { type: 'application/json' }); 
-          const a = document.createElement('a'); 
-          a.href = URL.createObjectURL(b); 
-          a.download = `chat-auto-${today}.json`; 
-          a.click(); 
-          localStorage.setItem(AEK, today); 
-        } 
-      })();
-
       // ===================== 导入功能 =====================
       $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
       $('importCancelBtn').onclick = () => $('importModal').classList.remove('active'); 
@@ -1187,10 +1313,8 @@
         const up = ['你:', '你：', '用户:', '用户：', '我:', '我：', '问:', '问：']; 
         const ap = ['M:', 'M：', '张莎:', '张莎：', '助手:', '助手：', 'assistant:', 'ai:', '答:', '答：']; 
         for (let l of lines) { 
-          l = l.trim(); 
-          if (!l) continue; 
-          let role = null, c = ''; 
-          const lower = l.toLowerCase(); 
+          l = l.trim(); if (!l) continue; 
+          let role = null, c = ''; const lower = l.toLowerCase(); 
           for (let p of up) { if (lower.startsWith(p.toLowerCase())) { role = 'user'; c = l.slice(p.length).trim(); break; } } 
           if (!role) { for (let p of ap) { if (lower.startsWith(p.toLowerCase())) { role = 'assistant'; c = l.slice(p.length).trim(); break; } } } 
           if (role && c) { res.push({role, content: c}); } 
@@ -1202,63 +1326,55 @@
       function parseAndImport(append = false) { 
         const raw = $('importTextarea').value.trim(); 
         if (!raw) { alert('请粘贴内容'); return; } 
-        let imported; 
+        let imported, branchData = null; 
         try { 
-          imported = JSON.parse(raw); 
-          if (!Array.isArray(imported)) throw 0; 
+          const parsed = JSON.parse(raw);
+          if (parsed.messages && Array.isArray(parsed.messages)) {
+            // 新格式（包含分支数据）
+            imported = parsed.messages;
+            branchData = parsed;
+          } else if (Array.isArray(parsed)) {
+            imported = parsed;
+          } else { throw 0; }
           imported = imported.filter(m => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'); 
-        } catch(e) { 
-          imported = parseText(raw); 
-        } 
+        } catch(e) { imported = parseText(raw); } 
         if (!imported || !imported.length) { alert('无法解析'); return; } 
         
         const now = Date.now(), total = imported.length; 
         const newMessages = imported.map((m, i) => {
-          const originalId = m.id || (nextId++);
-          const originalTime = m.time || (now - (total - i) * 5000);
-          
           return {
-            role: m.role,
-            content: m.content,
-            id: originalId,
-            time: originalTime,
-            parentId: m.parentId || null,
-            history: m.history || null,
-            historyIndex: m.historyIndex || 0
+            role: m.role, content: m.content, id: m.id || (nextId++),
+            time: m.time || (now - (total - i) * 5000), parentId: m.parentId || null,
+            history: m.history || null, historyIndex: m.historyIndex || 0,
+            branchId: m.branchId || activeBranchId, branchParentIdx: m.branchParentIdx || null
           };
         });
         
         for (let i = 0; i < newMessages.length; i++) {
-          if (!newMessages[i].parentId && i > 0) {
-            newMessages[i].parentId = newMessages[i - 1].id;
-          }
+          if (!newMessages[i].parentId && i > 0) { newMessages[i].parentId = newMessages[i - 1].id; }
+        }
+        
+        if (branchData) {
+          branchMap = branchData.branchMap || {};
+          activeBranchId = branchData.activeBranchId || 'branch_1';
+          branchCounter = branchData.branchCounter || 1;
         }
         
         if (append) { 
           const lastMsg = messages[messages.length - 1]; 
-          if (lastMsg && lastMsg.role !== 'system' && newMessages.length > 0) {
-            newMessages[0].parentId = lastMsg.id; 
-          }
+          if (lastMsg && lastMsg.role !== 'system' && newMessages.length > 0) { newMessages[0].parentId = lastMsg.id; }
           messages.push(...newMessages); 
-          fullHistory.push(...newMessages.map(m => ({
-            role: m.role,
-            content: typeof m.content === 'string' ? m.content : '',
-            time: m.time
-          }))); 
+          fullHistory.push(...newMessages.map(m => ({role: m.role, content: typeof m.content==='string'?m.content:'', time: m.time}))); 
         } else { 
-          messages = [messages[0]]; 
-          messages.push(...newMessages); 
-          fullHistory = newMessages.map(m => ({
-            role: m.role,
-            content: typeof m.content === 'string' ? m.content : '',
-            time: m.time
-          })); 
+          messages = [messages[0]]; messages.push(...newMessages); 
+          fullHistory = newMessages.map(m => ({role: m.role, content: typeof m.content==='string'?m.content:'', time: m.time})); 
+          if (!branchData) {
+            branchMap = { 'branch_1': { messages: [...messages], parentBranchId: null, parentMsgIdx: null } };
+            activeBranchId = 'branch_1'; branchCounter = 1;
+          }
         } 
         
-        saveFullHistory(); 
-        renderAll(); 
-        saveAll(); 
-        saveDraft(DRAFT_IMPORT, ''); 
+        saveFullHistory(); renderAll(); saveAll(); saveDraft(DRAFT_IMPORT, ''); 
         alert(`${append ? '追加' : '导入'}成功（${newMessages.length} 条消息）`); 
         $('importModal').classList.remove('active'); 
       }
@@ -1268,7 +1384,7 @@
 
       // 启动
       renderAll(); 
-      if (messages.length <= 1) addMsg('assistant', apiKey ? '你好！我是M，精简人设已加载 🧠' : '👋 请先输入 API Key');
+      if (messages.length <= 1) addMsg('assistant', apiKey ? '你好！我是M，分支对话功能已加载 🌿' : '👋 请先输入 API Key');
     })();
   </script>
 </body>
