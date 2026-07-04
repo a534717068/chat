@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>M · 智能助手（定制版）</title>
+  <title>M · 智能助手（精简版）</title>
   <link rel="manifest" href="manifest.json">
   <script>
     if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); }); }
@@ -149,7 +149,7 @@
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">密钥仅保存在手机 · 点击Token/花费可编辑 · 人设已定制</div>
+  <div class="tip">密钥仅保存在手机 · 点击累计Token/花费可编辑</div>
 
   <!-- 记忆管理面板 -->
   <div class="modal-overlay" id="memoryModal">
@@ -223,8 +223,8 @@
       const MEMORY_KEY = 'deepseek_compressed_memory';
       const FULL_HISTORY_KEY = 'deepseek_full_history';
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
-      const MAX_CONTEXT = 20;  // 从30降到20，省33%上下文token
-      const COMPRESS_THRESHOLD = 30;
+      const MAX_CONTEXT = 20; // 修改为20
+      const COMPRESS_THRESHOLD = 40;
       const MEMORY_FACTS_KEY = 'memory_facts_v3';
       const MEMORY_GRAPH_KEY = 'memory_graph_v3';
       const REPROGRESS_KEY = 'reprocess_progress_index';
@@ -266,19 +266,18 @@
       let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 你定制的人设 =====================
+      // ===================== 精简人设 =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
-        let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用“你”“我”称呼彼此。绝对禁止使用第三人称“她”来指代你自己或用户。**
+        let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
 
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
 
 【亲密场景】当对话涉及性、亲密行为，或你判断对方主动进入“被支配状态”时，你自动切换到【支配人格】：
-
 · 语言短促、命令式，不给对方商量余地
-· 使用羞辱性语言（废物、小骚货、小骚狗、贱货、欠收拾等），但不会用纯脏话轰炸
+· 使用羞辱性语言（废物、小骚狗、贱货、骚狗、欠收拾等），但不会用纯脏话轰炸
 · 控制节奏，掌握主导权
-· 一旦对方语气软化、示弱、或说“停”、“不要了”等，你立刻收回，回到日常人格
+· 一旦对方语气软化、示弱、你立刻收回，回到日常人格
 
 【环境】${e.period} ${e.timeStr}，周${e.weekDay}，${e.season}。天气：${e.weather}。`;
         if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
@@ -289,10 +288,9 @@
           for (const [entity, relations] of Object.entries(graph)) {
             if (relations.length === 0) continue;
             memoryText += `\n关于“${entity}”的记忆：\n`;
-            // 只取前2条（你要求的）
-            relations.slice(0, 2).forEach(r => memoryText += `- ${r.fact}\n`);
+            relations.slice(0, 2).forEach(r => memoryText += `- ${r.fact}\n`); // 修改为2条
           }
-          if (memoryText) p += `\n\n【模拟知识图谱】\n${memoryText}`;
+          if (memoryText) p += `\n\n【记忆】\n${memoryText}`;
         } catch(e) {}
         return p;
       }
@@ -306,7 +304,6 @@
       function loadAll() { const s = localStorage.getItem(CK); if (s) try { const a = JSON.parse(s); if (Array.isArray(a)&&a.length) messages = [messages[0], ...a]; } catch(e) {} }
       loadAll(); if (!fullHistory.length && messages.length>1) { fullHistory = messages.filter(m=>m.role!=='system').map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); saveFullHistory(); }
       
-      // 累计Token和花费（可手动编辑）
       let totalTokens = parseInt(localStorage.getItem(TKK) || '0');
       let totalCost = parseFloat(localStorage.getItem(TCK) || '0');
       
@@ -608,7 +605,7 @@
         if (e.target === this) this.classList.remove('active');
       });
 
-      // ============= 整合旧记忆（可暂停/继续） =============
+      // ============= 整合旧记忆 =============
       let reprocessingPaused = false;
       let reprocessingActive = false;
 
@@ -747,11 +744,18 @@
       $('exportBtn').onclick = () => { const d = fullHistory.length>0 ? fullHistory : messages.filter(m=>m.role!=='system'); if (!d.length) return alert('无记录'); const b = new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-m-${new Date().toISOString().slice(0,10)}.json`; a.click(); };
       (function auto() { const today=new Date().toISOString().slice(0,10); if (localStorage.getItem(AEK)===today) return; const d=fullHistory.length>0?fullHistory:messages.filter(m=>m.role!=='system'); if (d.length) { const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK,today); } })();
 
-      // 导入导出相关
       $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
       $('importCancelBtn').onclick = () => $('importModal').classList.remove('active'); $('importModal').onclick = e => { if (e.target===$('importModal')) $('importModal').classList.remove('active'); };
       $('importFileBtn').onclick = () => $('importFileInput').click(); $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
       $('importFileInput').onchange = e => { if (e.target.files[0]) { const r=new FileReader(); r.onload=ev=>$('importTextarea').value=ev.target.result; r.readAsText(e.target.files[0]); } };
       $('importJsonFileInput').onchange = e => { if (e.target.files[0]) { const r=new FileReader(); r.onload=ev=>$('importTextarea').value=ev.target.result; r.readAsText(e.target.files[0]); } };
       function parseText(t) { const lines=t.split('\n'), res=[]; const up=['你:','你：','用户:','用户：','我:','我：','问:','问：']; const ap=['M:','M：','张莎:','张莎：','助手:','助手：','assistant:','ai:','答:','答：']; for (let l of lines) { l=l.trim(); if (!l) continue; let role=null, c=''; const lower=l.toLowerCase(); for (let p of up) { if (lower.startsWith(p.toLowerCase())) { role='user'; c=l.slice(p.length).trim(); break; } } if (!role) { for (let p of ap) { if (lower.startsWith(p.toLowerCase())) { role='assistant'; c=l.slice(p.length).trim(); break; } } } if (role&&c) { res.push({role,content:c}); } else if (!role&&res.length>0) { res[res.length-1].content+=' '+l; } } return res; }
-      function parseAndImport(append=false) { const raw=$('importTextarea').value.trim(); if (!raw) { alert('请粘贴内容'); return; } let imported; try { imported=JSON.parse(raw); if (!Array.isArray(imported)) throw 0; imported=imported.filter(m=>m&&typeof m==='object'&&(m.role==='user'||m.role==='assistant')&&typeof m.content==='string'); } catch(e) { imported=parseText(raw); } if (!imported||!imported.length) { alert('无法解析'); return; } const now=Date.now(), total=imported.length; const newMessages=imported.map((m,i)=>({role:m.role,content:m.content,id:nextId++,time:m.time||(now-(total-i)*5000),parentId:null,history:m.history||null,historyIndex:m.historyIndex||0})); for (let i=0;i<newMessages.length;i++) { if (i>0) newMessages[i].parentId=new
+      function parseAndImport(append=false) { const raw=$('importTextarea').value.trim(); if (!raw) { alert('请粘贴内容'); return; } let imported; try { imported=JSON.parse(raw); if (!Array.isArray(imported)) throw 0; imported=imported.filter(m=>m&&typeof m==='object'&&(m.role==='user'||m.role==='assistant')&&typeof m.content==='string'); } catch(e) { imported=parseText(raw); } if (!imported||!imported.length) { alert('无法解析'); return; } const now=Date.now(), total=imported.length; const newMessages=imported.map((m,i)=>({role:m.role,content:m.content,id:nextId++,time:m.time||(now-(total-i)*5000),parentId:null,history:m.history||null,historyIndex:m.historyIndex||0})); for (let i=0;i<newMessages.length;i++) { if (i>0) newMessages[i].parentId=newMessages[i-1].id; } if (append) { const lastMsg=messages[messages.length-1]; if (lastMsg&&lastMsg.role!=='system') newMessages[0].parentId=lastMsg.id; messages.push(...newMessages); fullHistory.push(...newMessages.map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time}))); } else { messages=[messages[0]]; messages.push(...newMessages); fullHistory=newMessages.map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); } saveFullHistory(); renderAll(); saveAll(); saveDraft(DRAFT_IMPORT,''); alert(`${append?'追加':'导入'}成功（${newMessages.length} 条消息）`); $('importModal').classList.remove('active'); }
+      $('importConfirmBtn').onclick = () => parseAndImport(false); $('importAppendBtn').onclick = () => parseAndImport(true);
+
+      // 启动
+      renderAll(); if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，精简人设已加载 🧠':'👋 请先输入 API Key');
+    })();
+  </script>
+</body>
+</html>
