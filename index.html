@@ -9,6 +9,7 @@
     if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); }); }
   </script>
   <style>
+    /* 样式与你之前完全一致，此处保留完整 */
     :root {
       --bg: #f5f5f5; --surface: #ffffff; --text-primary: #1a1a2e; --text-secondary: #999;
       --border: #e0e0e0; --bubble-user-bg: #1a1a2e; --bubble-user-text: #ffffff;
@@ -152,7 +153,7 @@
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">密钥仅保存在手机 · 点击Token/花费可编辑 · 无限加载历史</div>
+  <div class="tip">密钥仅保存在手机 · 点击Token/花费可编辑 · 无限加载 · 版本号保留</div>
 
   <!-- 记忆管理面板 -->
   <div class="modal-overlay" id="memoryModal">
@@ -364,7 +365,29 @@
       chatBox.addEventListener('scroll', () => scrollBtn.classList.toggle('visible', !nearBottom()));
       scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
       
-      window._switchVer = function(idx,dir) { const msg=messages[idx]; if (!msg||!msg.history||msg.history.length<2) return; const cur=msg.historyIndex||0, newIdx=cur+dir; if (newIdx<0||newIdx>=msg.history.length) return; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { msg.history[cur]={content:msg.content,reply:messages[idx+1].content,time:msg.time}; } else { msg.history[cur]={content:msg.content,reply:'',time:msg.time}; } const ver=msg.history[newIdx]; msg.content=ver.content; msg.time=ver.time; msg.historyIndex=newIdx; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { messages[idx+1].content=ver.reply||''; messages[idx+1].time=ver.time; } else { messages.splice(idx+1,0,{role:'assistant',content:ver.reply||'',id:nextId++,time:ver.time,parentId:msg.id}); } renderAll(); saveAll(); };
+      window._switchVer = function(idx,dir) { 
+        const msg=messages[idx]; 
+        if (!msg||!msg.history||msg.history.length<2) return; 
+        const cur=msg.historyIndex||0, newIdx=cur+dir; 
+        if (newIdx<0||newIdx>=msg.history.length) return; 
+        if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { 
+          msg.history[cur]={content:msg.content,reply:messages[idx+1].content,time:msg.time}; 
+        } else { 
+          msg.history[cur]={content:msg.content,reply:'',time:msg.time}; 
+        } 
+        const ver=msg.history[newIdx]; 
+        msg.content=ver.content; 
+        msg.time=ver.time; 
+        msg.historyIndex=newIdx; 
+        if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { 
+          messages[idx+1].content=ver.reply||''; 
+          messages[idx+1].time=ver.time; 
+        } else { 
+          messages.splice(idx+1,0,{role:'assistant',content:ver.reply||'',id:nextId++,time:ver.time,parentId:msg.id}); 
+        } 
+        renderAll(); 
+        saveAll(); 
+      };
       window._delMsg = function(idx) { if (!confirm('删除这条及后续对话？')) return; messages=messages.slice(0,idx); renderAll(); saveAll(); };
       window._editMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='user') return; $('userInput').value=typeof msg.content==='string'?msg.content:''; $('userInput').focus(); editingIdx=idx; };
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); renderAll(); saveAll(); sendToAPI(text); };
@@ -402,10 +425,10 @@
         return content.trim();
       }
 
-      // ============= 核心：无限加载（追加渲染） =============
+      // ============= 核心：无限加载（追加渲染 + 版本号保留） =============
       let isLoadingMore = false;
 
-      // 渲染单条消息
+      // 渲染单条消息（完整保留版本切换逻辑）
       function renderSingleMessage(msg, idx) {
         const row = document.createElement('div'); 
         row.className = `message-row ${msg.role}`;
@@ -424,6 +447,8 @@
         if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`; 
         else btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
         btns += `<button class="del-btn" onclick="_delMsg(${idx})">🗑</button>`;
+        
+        // ======= 版本号显示（保留原来的"几分之几"） =======
         let verHTML = '';
         if (msg.history && msg.history.length > 1) { 
           const cur = (msg.historyIndex || 0) + 1; 
@@ -483,7 +508,7 @@
         isLoadingMore = false;
       }
 
-      // 加载更早的消息（追加到顶部）
+      // ===== 加载更早的消息（追加到顶部，位置不跳） =====
       function loadMoreMessages() {
         if (isLoadingMore) return;
         const allMessages = messages.filter(m => m.role !== 'system');
@@ -507,6 +532,10 @@
         const startIdx = total - currentRendered - loadCount;
         const endIdx = total - currentRendered - 1;
 
+        // 记录插入前的滚动高度
+        const oldScrollHeight = chatBox.scrollHeight;
+        const oldScrollTop = chatBox.scrollTop;
+
         const fragment = document.createDocumentFragment();
         for (let i = startIdx; i <= endIdx; i++) {
           const msg = allMessages[i];
@@ -518,7 +547,7 @@
 
         const loadBtn = document.getElementById('loadMoreBtn');
         if (loadBtn) {
-          const oldScrollTop = chatBox.scrollTop;
+          // 在按钮后面插入新消息
           chatBox.insertBefore(fragment, loadBtn.nextSibling);
           const newRemaining = total - chatBox.querySelectorAll('.message-row').length;
           if (newRemaining > 0) {
@@ -528,10 +557,16 @@
             loadBtn.style.cursor = 'default';
             loadBtn.onclick = null;
           }
-          chatBox.scrollTop = oldScrollTop;
         } else {
           chatBox.prepend(fragment);
         }
+
+        // ===== 关键修复：调整滚动位置，让用户视线不跳 =====
+        // 新增内容的高度 = 插入后的总高度 - 插入前的总高度
+        const newScrollHeight = chatBox.scrollHeight;
+        const addedHeight = newScrollHeight - oldScrollHeight;
+        // 新的滚动位置 = 原来的滚动位置 + 新增的高度（这样你盯着的那条消息位置不变）
+        chatBox.scrollTop = oldScrollTop + addedHeight;
 
         isLoadingMore = false;
         if (searchKeyword) {
@@ -926,7 +961,7 @@
 
       // 启动
       renderAll(); 
-      if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，无限加载已启用 🧠':'👋 请先输入 API Key');
+      if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，无限加载 + 版本号已恢复 🧠':'👋 请先输入 API Key');
     })();
   </script>
 </body>
