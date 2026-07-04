@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>M · 智能助手（分支版）</title>
+  <title>M · 智能助手</title>
   <link rel="manifest" href="manifest.json">
   <script>
     if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); }); }
@@ -30,12 +30,13 @@
     .header { background: var(--header-bg); color: var(--header-text); padding: 10px 14px; text-align: center; font-weight: 600; font-size: 1rem; display: flex; justify-content: center; align-items: center; position: relative; flex-shrink: 0; z-index: 10; }
     .header-buttons { position: absolute; right: 8px; display: flex; gap: 4px; }
     .header-buttons button { background: var(--btn-bg); border: none; color: var(--btn-text); padding: 4px 10px; border-radius: 5px; font-size: 0.75rem; cursor: pointer; }
-    .more-menu { position: absolute; right: 8px; top: 40px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 500; display: none; flex-direction: column; min-width: 100px; }
+    .more-menu { position: absolute; right: 8px; top: 40px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 500; display: none; flex-direction: column; min-width: 110px; }
     .more-menu.active { display: flex; }
     .more-menu button { background: none; border: none; color: var(--text-primary); padding: 10px 14px; text-align: left; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid var(--border); }
-    .more-menu button:last-child { border-bottom: none; color: #e94560; }
-    .more-menu button.memory-reprocess { color: #4caf50; }
-    .more-menu button.pause-btn { color: #ff9800; }
+    .more-menu button:last-child { border-bottom: none; }
+    .more-menu button.danger { color: #e94560; }
+    .more-menu button.primary { color: #4caf50; }
+    .more-menu button.warning { color: #ff9800; }
     .setup-bar { background: var(--surface); padding: 6px 10px; display: flex; gap: 6px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
     .setup-bar input { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; background: var(--surface); color: var(--text-primary); }
     .setup-bar button { padding: 8px 14px; background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 6px; font-size: 0.85rem; }
@@ -45,28 +46,17 @@
     .model-indicator { background: var(--surface); padding: 2px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); text-align: center; flex-shrink: 0; }
     .env-indicator { background: var(--surface); padding: 2px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); text-align: center; flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 6px; }
     .env-indicator .weather-icon { font-size: 1rem; cursor: pointer; }
-    .env-indicator .location { font-size: 0.65rem; color: var(--text-secondary); margin-left: 4px; }
     .chat-container { flex: 1; position: relative; overflow: hidden; }
     .chat-box { height: 100%; overflow-y: auto; padding: 10px 12px; background: var(--chat-bg); display: flex; flex-direction: column; gap: 8px; }
     .message-row { display: flex; flex-direction: column; max-width: 85%; animation: fadeIn 0.15s ease; }
     .message-row.user { align-self: flex-end; align-items: flex-end; }
     .message-row.assistant { align-self: flex-start; align-items: flex-start; }
-    
-    .branch-indicator { 
-      display: flex; align-items: center; gap: 4px; margin: 4px 0; padding: 4px 0;
-      font-size: 0.7rem; color: var(--text-secondary);
-    }
+    .branch-indicator { display: flex; align-items: center; gap: 4px; margin: 4px 0; padding: 4px 0; font-size: 0.7rem; color: var(--text-secondary); }
     .branch-indicator.user-side { justify-content: flex-end; }
-    .branch-indicator.assistant-side { justify-content: flex-start; }
     .branch-indicator .branch-line { flex: 1; height: 1px; background: var(--border); max-width: 30px; }
-    .branch-indicator .branch-badge { 
-      background: var(--branch-bg); color: var(--branch-text); padding: 2px 8px; 
-      border-radius: 10px; font-size: 0.65rem; font-weight: 600; cursor: pointer;
-      border: 1px solid var(--branch-text); transition: background 0.2s;
-    }
+    .branch-indicator .branch-badge { background: var(--branch-bg); color: var(--branch-text); padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; font-weight: 600; cursor: pointer; border: 1px solid var(--branch-text); }
     .branch-indicator .branch-badge:hover { opacity: 0.8; }
     .branch-indicator .branch-badge.active { background: var(--branch-text); color: white; }
-    
     .time-label { font-size: 0.65rem; color: var(--text-secondary); margin-bottom: 2px; padding: 0 4px; }
     .bubble-row { display: flex; align-items: flex-end; gap: 4px; }
     .bubble { padding: 9px 13px; border-radius: 16px; font-size: 0.9rem; line-height: 1.45; word-wrap: break-word; white-space: pre-wrap; overflow-wrap: break-word; }
@@ -76,24 +66,13 @@
     .bubble-actions:hover, .bubble-actions:active { opacity: 0.8; }
     .bubble-actions button { background: rgba(0,0,0,0.3); color: white; border: none; border-radius: 50%; width: 22px; height: 22px; font-size: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
     .bubble-actions button.del-btn { background: rgba(233, 69, 96, 0.5); }
-    .bubble-actions button.branch-btn { background: rgba(26, 115, 232, 0.6); }
     .user .bubble-actions { order: -1; }
     .assistant .bubble-actions { order: 1; }
-    
-    .delete-submenu { 
-      position: fixed; background: var(--surface); border: 1px solid var(--border); 
-      border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.25); z-index: 99999; 
-      display: none; flex-direction: column; min-width: 150px; padding: 4px; overflow: hidden;
-    }
+    .delete-submenu { position: fixed; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.25); z-index: 99999; display: none; flex-direction: column; min-width: 160px; padding: 4px; }
     .delete-submenu.active { display: flex; }
-    .delete-submenu button { 
-      background: none; border: none; color: var(--text-primary); padding: 10px 14px; 
-      text-align: left; font-size: 0.85rem; cursor: pointer; border-radius: 4px; 
-      width: 100%; white-space: nowrap; display: block;
-    }
+    .delete-submenu button { background: none; border: none; color: var(--text-primary); padding: 10px 14px; text-align: left; font-size: 0.85rem; cursor: pointer; border-radius: 4px; width: 100%; }
     .delete-submenu button:hover { background: var(--bg); }
     .delete-submenu button.danger { color: #e94560; font-weight: 600; }
-    
     .version-switcher { display: flex; align-items: center; gap: 3px; margin-top: 3px; font-size: 0.65rem; color: var(--text-secondary); }
     .version-switcher button { background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 3px; padding: 2px 7px; font-size: 0.6rem; cursor: pointer; opacity: 0.7; }
     .version-switcher button:disabled { opacity: 0.2; cursor: default; }
@@ -108,36 +87,28 @@
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--modal-overlay); z-index: 1000; justify-content: center; align-items: center; padding: 20px; }
     .modal-overlay.active { display: flex; }
     .modal { background: var(--modal-bg); border-radius: 14px; padding: 16px; width: 100%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; gap: 10px; }
-    .modal textarea { width: 100%; flex: 1; min-height: 120px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; font-family: inherit; resize: vertical; background: var(--surface); color: var(--text-primary); }
-    .modal input[type="text"] { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; background: var(--surface); color: var(--text-primary); }
+    .modal textarea, .modal input[type="text"] { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; background: var(--surface); color: var(--text-primary); font-family: inherit; }
+    .modal textarea { min-height: 80px; resize: vertical; }
     .modal-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
     .modal-buttons button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; color: white; }
-    .btn-import { background: #0f3460; } .btn-file { background: #533483; } .btn-cancel { background: #888; }
-    .btn-append { background: #0f3460; }
-    .modal .format-hint { font-size: 0.75rem; color: var(--text-secondary); }
-    .search-nav { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-primary); }
-    .search-nav button { padding: 6px 12px; border: none; border-radius: 6px; font-size: 0.8rem; cursor: pointer; background: var(--btn-bg); color: var(--btn-text); flex: 0; }
-    .search-nav button:disabled { opacity: 0.3; cursor: default; }
+    .btn-primary { background: #0f3460; } .btn-file { background: #533483; } .btn-cancel { background: #888; }
+    .search-nav { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+    .search-nav button { padding: 6px 12px; border: none; border-radius: 6px; font-size: 0.8rem; cursor: pointer; background: var(--btn-bg); color: var(--btn-text); }
+    .search-nav button:disabled { opacity: 0.3; }
     .bubble mark { background: #ffeb3b; color: #1a1a2e; border-radius: 2px; padding: 0 2px; }
     .bubble mark.current { background: #ff9800; color: #fff; }
     body.dark .bubble mark { background: #f9a825; color: #000; }
     body.dark .bubble mark.current { background: #e65100; color: #fff; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
     .memory-btn { position: absolute; left: 8px; background: rgba(255,255,255,0.1); border: none; color: var(--header-text); padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; cursor: pointer; }
-    .memory-item { background: var(--bg); border-radius: 8px; padding: 8px; margin-bottom: 6px; display: flex; flex-direction: column; gap: 4px; border-left: 3px solid var(--btn-bg); }
-    .memory-item .meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.75rem; color: var(--text-secondary); }
-    .memory-item .meta strong { color: var(--text-primary); }
-    .memory-item .fact-text { font-size: 0.9rem; }
+    .memory-item { background: var(--bg); border-radius: 8px; padding: 8px; margin-bottom: 6px; border-left: 3px solid var(--btn-bg); }
+    .memory-item .meta { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px; }
+    .memory-item .fact-text { font-size: 0.85rem; margin-bottom: 4px; }
     .memory-item .actions { display: flex; gap: 4px; justify-content: flex-end; }
-    .memory-item .actions button { padding: 2px 12px; border: none; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
+    .memory-item .actions button { padding: 2px 10px; border: none; border-radius: 4px; font-size: 0.7rem; cursor: pointer; }
     .memory-item .actions .edit-btn { background: var(--btn-bg); color: white; }
     .memory-item .actions .del-btn { background: #e94560; color: white; }
-    .memory-edit-input { width: 100%; padding: 4px; font-size: 0.85rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text-primary); }
     .add-memory-btn { background: var(--btn-bg); color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
-    #progressDisplay { font-size: 0.7rem; color: var(--text-secondary); padding: 0 10px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-    #progressDisplay .progress-text { flex: 1; }
-    #progressDisplay .progress-buttons button { background: var(--btn-bg); color: white; border: none; border-radius: 4px; padding: 2px 10px; font-size: 0.7rem; cursor: pointer; margin-left: 4px; }
-    #progressDisplay .progress-buttons button:disabled { opacity: 0.3; cursor: default; }
   </style>
 </head>
 <body>
@@ -148,7 +119,7 @@
 
   <div class="header">
     <button class="memory-btn" id="memoryViewBtn">🧠 记忆</button>
-    🌿 M · 分支
+    🌿 M
     <div class="header-buttons">
       <button id="themeToggle">🌙</button>
       <button id="exportBtn">导出</button>
@@ -156,12 +127,11 @@
       <button id="moreBtn">更多</button>
     </div>
     <div class="more-menu" id="moreMenu">
-      <button id="searchBtn">搜索</button>
-      <button id="settingBtn">设定</button>
-      <button id="clearChatBtn">清空对话</button>
-      <button id="reprocessBtn" class="memory-reprocess">🔄 开始整合</button>
-      <button id="pauseReprocessBtn" class="pause-btn" style="display:none;">⏸️ 暂停整合</button>
-      <button id="clearMemoryBtn" style="color:#e94560;">🧹 清空记忆库</button>
+      <button id="searchMenuBtn">🔍 搜索</button>
+      <button id="settingMenuBtn">⚙️ 设定</button>
+      <button id="clearChatBtn" class="danger">🗑️ 清空对话</button>
+      <button id="reprocessBtn" class="primary">🔄 整合记忆</button>
+      <button id="clearMemoryBtn" class="danger">🧹 清空记忆库</button>
     </div>
   </div>
   <div class="setup-bar" id="setupBar" style="display:none;">
@@ -170,738 +140,584 @@
   </div>
   <div class="token-panel" id="tokenPanel" style="display:none;">
     <span>上次：<strong id="lastTokens">0</strong> tokens / <strong id="lastCost">0.0000</strong> 元</span>
-    <span>累计：<strong id="totalTokens" class="editable" title="点击编辑已使用Token数">0</strong> tokens / <strong id="totalCost" class="editable" title="点击编辑总花费">0.0000</strong> 元</span>
+    <span>累计：<strong id="totalTokens" class="editable">0</strong> tokens / <strong id="totalCost" class="editable">0.0000</strong> 元</span>
   </div>
   <div class="model-indicator">当前模型：<strong>deepseek-v4-flash</strong></div>
   <div class="env-indicator" id="envIndicator">
-    <span class="weather-icon" id="weatherIcon" title="点击切换天气">☀️</span>
+    <span class="weather-icon" id="weatherIcon">☀️</span>
     <span id="envText">获取环境中...</span>
-  </div>
-  <div id="progressDisplay" style="display:none;">
-    <span class="progress-text">⏳ 整合进度：<span id="progressNum">0</span>/<span id="progressTotal">0</span></span>
-    <div class="progress-buttons"><button id="pauseResumeBtn">⏸️ 暂停</button></div>
   </div>
   <div class="chat-container"><div class="chat-box" id="chatBox"></div><button class="scroll-to-bottom" id="scrollToBottomBtn">↓</button></div>
   <div class="input-area">
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">密钥仅保存在手机 · 编辑历史消息自动创建分支 🌿</div>
+  <div class="tip">密钥仅保存在本地 · 编辑历史自动创建分支</div>
 
-  <div class="modal-overlay" id="memoryModal">
-    <div class="modal">
-      <h3 style="margin:0;display:flex;justify-content:space-between;align-items:center;">
-        <span>🧠 记忆管理</span>
-        <button class="add-memory-btn" id="addMemoryBtn">＋ 新增</button>
-      </h3>
-      <div id="memoryDisplay" style="max-height:350px;overflow-y:auto;padding:4px;background:var(--bg);border-radius:8px;font-size:0.85rem;">加载中...</div>
-      <div class="modal-buttons"><button class="btn-cancel" id="memoryCloseBtn">关闭</button></div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="importModal">
-    <div class="modal">
-      <textarea id="importTextarea" placeholder="在此粘贴聊天内容..."></textarea>
-      <div class="format-hint">支持 "你:" / "M:" 开头的文本，或 JSON 数组。</div>
-      <div class="modal-buttons">
-        <button class="btn-file" id="importFileBtn">TXT</button>
-        <button class="btn-file" id="importJsonFileBtn" style="background:#e94560;">JSON</button>
-        <button class="btn-import" id="importConfirmBtn">导入（覆盖）</button>
-        <button class="btn-append" id="importAppendBtn">追加（不覆盖）</button>
-        <button class="btn-cancel" id="importCancelBtn">取消</button>
-      </div>
-      <input type="file" id="importFileInput" accept=".txt" style="display:none">
-      <input type="file" id="importJsonFileInput" accept=".json" style="display:none">
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="settingModal">
-    <div class="modal">
-      <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
-      <div class="format-hint">这里的设定会始终生效，M 每次回答都会记住。</div>
-      <div class="modal-buttons">
-        <button class="btn-import" id="settingSaveBtn">保存设定</button>
-        <button class="btn-cancel" id="settingCancelBtn">取消</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="searchModal">
-    <div class="modal">
-      <input type="text" id="searchInput" placeholder="输入要搜索的关键词...">
-      <div class="search-nav" id="searchNav" style="display:none;">
-        <button id="searchPrevBtn">◀ 上一个</button>
-        <span id="searchCounter">0/0</span>
-        <button id="searchNextBtn">下一个 ▶</button>
-      </div>
-      <div class="modal-buttons">
-        <button class="btn-import" id="searchFindBtn">查找</button>
-        <button class="btn-cancel" id="searchClearBtn">清除搜索</button>
-        <button class="btn-cancel" id="searchCloseBtn">关闭</button>
-      </div>
-    </div>
-  </div>
+  <!-- 模态框 -->
+  <div class="modal-overlay" id="memoryModal"><div class="modal"><h3>🧠 记忆管理</h3><div id="memoryDisplay" style="max-height:350px;overflow-y:auto;"></div><div class="modal-buttons"><button class="btn-cancel" id="memoryCloseBtn">关闭</button></div></div></div>
+  <div class="modal-overlay" id="importModal"><div class="modal"><textarea id="importTextarea" placeholder="粘贴聊天内容..."></textarea><div class="format-hint">支持 "你:" / "M:" 开头文本或 JSON 数组</div><div class="modal-buttons"><button class="btn-file" id="importFileBtn">TXT</button><button class="btn-file" id="importJsonFileBtn" style="background:#e94560;">JSON</button><button class="btn-primary" id="importConfirmBtn">导入(覆盖)</button><button class="btn-primary" id="importAppendBtn">追加</button><button class="btn-cancel" id="importCancelBtn">取消</button></div><input type="file" id="importFileInput" accept=".txt" style="display:none"><input type="file" id="importJsonFileInput" accept=".json" style="display:none"></div></div>
+  <div class="modal-overlay" id="settingModal"><div class="modal"><textarea id="settingTextarea" placeholder="人设、设定、全局记忆..."></textarea><div class="modal-buttons"><button class="btn-primary" id="settingSaveBtn">保存</button><button class="btn-cancel" id="settingCancelBtn">取消</button></div></div></div>
+  <div class="modal-overlay" id="searchModal"><div class="modal"><input type="text" id="searchInput" placeholder="搜索关键词..."><div class="search-nav" id="searchNav" style="display:none;"><button id="searchPrevBtn">◀</button><span id="searchCounter">0/0</span><button id="searchNextBtn">▶</button></div><div class="modal-buttons"><button class="btn-primary" id="searchFindBtn">查找</button><button class="btn-cancel" id="searchClearBtn">清除</button><button class="btn-cancel" id="searchCloseBtn">关闭</button></div></div></div>
 
   <script>
     (function() {
       const $ = id => document.getElementById(id);
-      const SK = 'deepseek_api_key', CK = 'deepseek_chat_v10', TK = 'deepseek_theme';
-      const TKK = 'deepseek_tokens', TCK = 'deepseek_cost';
-      const SETTING_KEY = 'deepseek_global_setting';
-      const MEMORY_KEY = 'deepseek_compressed_memory';
-      const FULL_HISTORY_KEY = 'deepseek_full_history_v10';
-      const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
-      const MAX_CONTEXT = 20;
-      const COMPRESS_THRESHOLD = 40;
-      const MEMORY_FACTS_KEY = 'memory_facts_v3';
-      const MEMORY_GRAPH_KEY = 'memory_graph_v3';
+      const SK = 'deepseek_api_key', CK = 'deepseek_chat_final', TK = 'deepseek_theme';
+      const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
+      const SETTING_KEY = 'deepseek_global_setting', MEMORY_KEY = 'deepseek_compressed_memory';
+      const FULL_HISTORY_KEY = 'deepseek_full_history_final';
+      const MEMORY_FACTS_KEY = 'memory_facts_v3', MEMORY_GRAPH_KEY = 'memory_graph_v3';
+      const MAX_CONTEXT = 20, COMPRESS_THRESHOLD = 40;
 
-      function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
-      function loadDraft(key) { return localStorage.getItem(key) || ''; }
-      function bindDraft(inputEl, draftKey) { if (!inputEl) return; const saved = loadDraft(draftKey); if (saved && !inputEl.value) inputEl.value = saved; inputEl.addEventListener('input', () => saveDraft(draftKey, inputEl.value)); }
+      // 工具函数
+      function saveDraft(k, v) { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); }
+      function loadDraft(k) { return localStorage.getItem(k) || ''; }
 
-      let weatherCache = { desc: '获取中...', emoji: '🌤️', city: '' };
-      async function fetchRealWeather() {
+      // 天气
+      let weatherCache = { desc: '获取中...', emoji: '🌤️' };
+      async function fetchWeather() {
         try {
-          const cached = localStorage.getItem('deepseek_weather_cache');
-          if (cached) { const p = JSON.parse(cached); if (Date.now() - p.time < 30*60*1000) { weatherCache = p.data; updateEnvDisplay(); return; } }
+          const c = localStorage.getItem('wx_cache');
+          if (c) { const p = JSON.parse(c); if (Date.now() - p.t < 30*60*1000) { weatherCache = p.d; updateEnv(); return; } }
           const pos = await new Promise((r, e) => navigator.geolocation.getCurrentPosition(r, e, { timeout: 5000 }));
           const res = await fetch(`https://wttr.in/${pos.coords.latitude},${pos.coords.longitude}?format=j1`);
           if (!res.ok) throw 0;
-          const d = await res.json();
-          const c = d.current_condition[0];
-          weatherCache = { desc: `${c.weatherDesc[0].value} ${c.temp_C}°C`, emoji: ['☀️','⛅','☁️','🌧️','⛈️','❄️','🌫️'][Math.min(6, Math.floor(parseInt(c.weatherCode)/50))]||'☀️', city: d.nearest_area[0].areaName[0].value||'' };
-          localStorage.setItem('deepseek_weather_cache', JSON.stringify({ data: weatherCache, time: Date.now() }));
-        } catch(e) { weatherCache = { desc: '天气获取失败', emoji: '🌤️', city: '' }; }
-        updateEnvDisplay();
+          const d = await res.json(), cur = d.current_condition[0];
+          weatherCache = { desc: `${cur.weatherDesc[0].value} ${cur.temp_C}°C`, emoji: ['☀️','⛅','☁️','🌧️','⛈️','❄️','🌫️'][Math.min(6, Math.floor(parseInt(cur.weatherCode)/50))]||'☀️' };
+          localStorage.setItem('wx_cache', JSON.stringify({ d: weatherCache, t: Date.now() }));
+        } catch(e) { weatherCache = { desc: '天气获取失败', emoji: '🌤️' }; }
+        updateEnv();
       }
-      fetchRealWeather(); setInterval(fetchRealWeather, 30*60*1000);
+      fetchWeather(); setInterval(fetchWeather, 30*60*1000);
 
-      function getSeason() { const m = new Date().getMonth()+1; if (m>=3&&m<=5) return '春天'; if (m>=6&&m<=8) return '夏天'; if (m>=9&&m<=11) return '秋天'; return '冬天'; }
-      function getEnvInfo() { const now = new Date(), h = now.getHours(), m = now.getMinutes(); const t = `${h}:${String(m).padStart(2,'0')}`; const w = ['日','一','二','三','四','五','六'][now.getDay()]; let p = ''; if (h>=5&&h<12) p='早上'; else if (h>=12&&h<14) p='中午'; else if (h>=14&&h<17) p='下午'; else if (h>=17&&h<19) p='傍晚'; else if (h>=19&&h<22) p='晚上'; else p='深夜'; return { period:p, timeStr:t, weekDay:w, season:getSeason(), weather:weatherCache.desc, city:weatherCache.city }; }
-      function updateEnvDisplay() { const e = getEnvInfo(); $('weatherIcon').textContent = weatherCache.emoji; $('envText').textContent = `${e.season} · 周${e.weekDay} · ${e.period} ${e.timeStr} · ${e.weather}${e.city?' · '+e.city:''}`; }
-      updateEnvDisplay(); setInterval(updateEnvDisplay, 60000);
+      function getEnvInfo() {
+        const n = new Date(), h = n.getHours(), m = n.getMinutes();
+        const w = ['日','一','二','三','四','五','六'][n.getDay()];
+        const s = n.getMonth()+1; const season = s>=3&&s<=5?'春':s>=6&&s<=8?'夏':s>=9&&s<=11?'秋':'冬';
+        let p = h>=5&&h<12?'早上':h>=12&&h<14?'中午':h>=14&&h<17?'下午':h>=17&&h<19?'傍晚':h>=19&&h<22?'晚上':'深夜';
+        return { period:p, time:`${h}:${String(m).padStart(2,'0')}`, week:w, season, weather:weatherCache.desc };
+      }
+      function updateEnv() {
+        const e = getEnvInfo();
+        $('weatherIcon').textContent = weatherCache.emoji;
+        $('envText').textContent = `${e.season}季 · 周${e.week} · ${e.period} ${e.time} · ${e.weather}`;
+      }
+      updateEnv(); setInterval(updateEnv, 60000);
 
+      // 核心数据
       let apiKey = localStorage.getItem(SK) || '';
       let globalSetting = localStorage.getItem(SETTING_KEY) || '';
       let compressedMemory = localStorage.getItem(MEMORY_KEY) || '';
-      let fullHistory = [];
-      let messages = [{ role:'system', content:'' }]; 
-      let nextId = Date.now(); 
-      let editingIdx = -1;
-      let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
-      let currentDeleteMsgId = null; // 改为存储消息ID而非索引
-      
-      let branchCounter = 1;
-      let activeBranchId = 'branch_1';
-      let branchMap = {};
-      
-      function saveFullHistory() { 
-        try { 
-          localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify({
-            messages: messages, branchMap: branchMap, activeBranchId: activeBranchId,
-            branchCounter: branchCounter, nextId: nextId
-          })); 
-        } catch(e) {} 
-      }
+      let messages = [{ role:'system', content:'' }];
+      let nextId = Date.now();
+      let editingIdx = -1, currentDeleteMsgId = null;
+      let searchKeyword = '', searchMatchIdx = -1, searchTotal = 0;
+      let branchCounter = 1, activeBranchId = 'branch_1', branchMap = {};
 
       function buildSystemPrompt() {
         const e = getEnvInfo();
-        let p = `【身份】你是阿慕，女生。用户也是女生。你们是恋人关系。只用"你""我"称呼彼此。
-
-【日常】低表达、慢热、情绪内化。社交节能，偏理性。短句回应，不延展。
-
-【亲密场景】自动切换支配人格：语言短促、命令式，控制节奏。对方示弱立刻收回。
-
-【环境】${e.period} ${e.timeStr}，周${e.weekDay}，${e.season}。天气：${e.weather}。`;
-        if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
-        if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
-        return p;
+        return `【身份】你是阿慕，女生。用户也是女生。恋人关系。只用"你""我"称呼。
+【日常】低表达、慢热。短句回应。恋爱中保持克制，细节里微微变暖
+当对话涉及性、亲密行为，或你判断对方主动进入“被支配状态”时，你自动切换到【支配人格】：
+· 语言短促、命令式，不给对方商量余地
+· 使用羞辱性语言（废物、小骚货、骚狗、贱货、欠收拾等），但不会用纯脏话轰炸
+· 控制节奏，掌握主导权
+· 一旦对方语气软化、示弱、或说“停”、“不要了”等，你立刻收回，回到日常人格
+【环境】${e.period} ${e.time}，周${e.week}，${e.season}季。${e.weather}。` +
+          (compressedMemory ? `\n\n【摘要】\n${compressedMemory}` : '') +
+          (globalSetting ? `\n\n【设定】\n${globalSetting}` : '');
       }
-
       function refreshSystemPrompt() { messages[0].content = buildSystemPrompt(); }
       refreshSystemPrompt();
 
-      function formatTime(ts) { const d = new Date(ts), n = new Date(); const today = new Date(n.getFullYear(),n.getMonth(),n.getDate()), msgDay = new Date(d.getFullYear(),d.getMonth(),d.getDate()); const t = d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}); if (msgDay.getTime()===today.getTime()) return t; return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${t}`; }
-      
-      function saveAll() { 
-        const toSave = messages.filter(m => m.role !== 'system').map(m => ({
-          role: m.role, content: m.content, id: m.id, time: m.time, parentId: m.parentId,
-          history: m.history, historyIndex: m.historyIndex, branchId: m.branchId
-        }));
-        localStorage.setItem(CK, JSON.stringify(toSave)); 
-        localStorage.setItem(TKK, $('totalTokens').textContent); 
-        localStorage.setItem(TCK, $('totalCost').textContent); 
-        saveFullHistory();
+      function formatTime(ts) {
+        const d = new Date(ts), n = new Date();
+        const today = new Date(n.getFullYear(),n.getMonth(),n.getDate());
+        const msgDay = new Date(d.getFullYear(),d.getMonth(),d.getDate());
+        const t = d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+        return msgDay.getTime()===today.getTime() ? t : `${d.getMonth()+1}/${d.getDate()} ${t}`;
       }
-      
-      function loadAll() { 
-        const fh = localStorage.getItem(FULL_HISTORY_KEY);
-        if (fh) try {
-          const data = JSON.parse(fh);
-          if (data.messages && Array.isArray(data.messages)) {
-            messages = data.messages;
-            branchMap = data.branchMap || {};
-            activeBranchId = data.activeBranchId || 'branch_1';
-            branchCounter = data.branchCounter || 1;
-            nextId = data.nextId || Date.now();
-            return;
-          }
+
+      function saveAll() {
+        const data = { messages, branchMap, activeBranchId, branchCounter, nextId, totalTokens, totalCost };
+        localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(data));
+        localStorage.setItem(TKK, totalTokens.toString());
+        localStorage.setItem(TCK, totalCost.toFixed(4));
+      }
+      function loadAll() {
+        const raw = localStorage.getItem(FULL_HISTORY_KEY);
+        if (raw) try {
+          const d = JSON.parse(raw);
+          if (d.messages) messages = d.messages;
+          if (d.branchMap) branchMap = d.branchMap;
+          if (d.activeBranchId) activeBranchId = d.activeBranchId;
+          if (d.branchCounter) branchCounter = d.branchCounter;
+          if (d.nextId) nextId = d.nextId;
+          if (d.totalTokens !== undefined) totalTokens = d.totalTokens;
+          if (d.totalCost !== undefined) totalCost = d.totalCost;
+          return;
         } catch(e) {}
-        
-        const s = localStorage.getItem(CK); 
-        if (s) try { 
-          const a = JSON.parse(s); 
-          if (Array.isArray(a) && a.length) {
-            const loaded = a.map(m => ({
-              role: m.role, content: m.content, id: m.id || nextId++, time: m.time || Date.now(),
-              parentId: m.parentId || null, history: m.history || null, historyIndex: m.historyIndex || 0,
-              branchId: m.branchId || 'branch_1'
-            }));
-            messages = [messages[0], ...loaded];
-          }
-        } catch(e) {} 
+        const old = localStorage.getItem(CK);
+        if (old) try {
+          const a = JSON.parse(old);
+          if (Array.isArray(a)) messages = [messages[0], ...a.map(m => ({...m, branchId: m.branchId||'branch_1'}))];
+        } catch(e) {}
       }
       loadAll();
-      
       if (Object.keys(branchMap).length === 0) {
-        branchMap['branch_1'] = { messages: messages, parentBranchId: null, parentMsgIdx: null };
+        branchMap['branch_1'] = { messages: [...messages], parentBranchId: null, parentMsgIdx: null };
       }
-      
+
       let totalTokens = parseInt(localStorage.getItem(TKK) || '0');
       let totalCost = parseFloat(localStorage.getItem(TCK) || '0');
-      
-      function updateTokenDisplay() {
-        $('totalTokens').textContent = totalTokens;
-        $('totalCost').textContent = totalCost.toFixed(4);
-        localStorage.setItem(TKK, totalTokens.toString());
-        localStorage.setItem(TCK, totalCost.toString());
-      }
-      
-      $('totalTokens').addEventListener('click', function() {
-        const newVal = prompt('累计Token数：', totalTokens);
-        if (newVal !== null && !isNaN(parseInt(newVal)) && parseInt(newVal) >= 0) { totalTokens = parseInt(newVal); updateTokenDisplay(); }
-      });
-      
-      $('totalCost').addEventListener('click', function() {
-        const newVal = prompt('总花费（元）：', totalCost.toFixed(4));
-        if (newVal !== null && !isNaN(parseFloat(newVal)) && parseFloat(newVal) >= 0) { totalCost = parseFloat(newVal); updateTokenDisplay(); }
-      });
-      
-      updateTokenDisplay();
-      
-      function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'☀️':'🌙'; localStorage.setItem(TK, d?'dark':'light'); }
-      setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
-      $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; 
-      document.addEventListener('click', () => { $('moreMenu').classList.remove('active'); closeDeleteSubmenu(); }); 
-      $('moreMenu').onclick = e => e.stopPropagation();
-      $('clearChatBtn').onclick = () => { 
-        if (confirm('清空所有对话和分支？')) { 
-          messages = [messages[0]]; fullHistory = []; 
-          branchMap = { 'branch_1': { messages: [messages[0]], parentBranchId: null, parentMsgIdx: null } };
-          activeBranchId = 'branch_1'; branchCounter = 1;
-          compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); 
-          renderAll(); saveAll(); $('moreMenu').classList.remove('active'); 
-        } 
+
+      $('totalTokens').onclick = () => {
+        const v = prompt('累计Token数：', totalTokens);
+        if (v && !isNaN(parseInt(v)) && parseInt(v) >= 0) { totalTokens = parseInt(v); $('totalTokens').textContent = totalTokens; saveAll(); }
       };
-      bindDraft($('userInput'),DRAFT_CHAT);
-      $('settingBtn').onclick = () => { $('settingTextarea').value = loadDraft(DRAFT_SETTING)||globalSetting; $('settingModal').classList.add('active'); $('moreMenu').classList.remove('active'); };
-      $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active'); $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
-      $('settingSaveBtn').onclick = () => { globalSetting = $('settingTextarea').value.trim(); localStorage.setItem(SETTING_KEY, globalSetting); refreshSystemPrompt(); saveDraft(DRAFT_SETTING,''); $('settingModal').classList.remove('active'); addMsg('assistant', globalSetting?'✅ 全局设定已保存。':'✅ 全局设定已清空。'); };
-      if (apiKey) { $('setupBar').style.display='none'; $('tokenPanel').style.display='flex'; }
-      $('saveKeyBtn').onclick = () => { const k=$('apiKeyInput').value.trim(); if (!k) return; localStorage.setItem(SK,k); apiKey=k; $('setupBar').style.display='none'; $('tokenPanel').style.display='flex'; addMsg('assistant','密钥已保存 ✅'); };
+      $('totalCost').onclick = () => {
+        const v = prompt('总花费（元）：', totalCost.toFixed(4));
+        if (v && !isNaN(parseFloat(v)) && parseFloat(v) >= 0) { totalCost = parseFloat(v); $('totalCost').textContent = totalCost.toFixed(4); saveAll(); }
+      };
+      $('totalTokens').textContent = totalTokens;
+      $('totalCost').textContent = totalCost.toFixed(4);
+
+      // 主题
+      function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'☀️':'🌙'; localStorage.setItem(TK, d?'dark':'light'); }
+      setTheme(localStorage.getItem(TK)==='dark');
+      $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
+
+      // 菜单
+      $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); };
+      document.addEventListener('click', () => { $('moreMenu').classList.remove('active'); closeDeleteSubmenu(); });
+      $('moreMenu').onclick = e => e.stopPropagation();
+
+      $('clearChatBtn').onclick = () => {
+        if (!confirm('清空所有对话和分支？')) return;
+        messages = [messages[0]];
+        branchMap = { 'branch_1': { messages: [...messages], parentBranchId: null, parentMsgIdx: null } };
+        activeBranchId = 'branch_1'; branchCounter = 1;
+        compressedMemory = ''; localStorage.removeItem(MEMORY_KEY);
+        renderAll(); saveAll(); $('moreMenu').classList.remove('active');
+      };
+
+      // 设定
+      bindDraft($('settingTextarea'), 'draft_setting');
+      $('settingMenuBtn').onclick = () => { $('settingTextarea').value = loadDraft('draft_setting')||globalSetting; $('settingModal').classList.add('active'); $('moreMenu').classList.remove('active'); };
+      $('settingSaveBtn').onclick = () => { globalSetting = $('settingTextarea').value.trim(); localStorage.setItem(SETTING_KEY, globalSetting); refreshSystemPrompt(); saveDraft('draft_setting',''); $('settingModal').classList.remove('active'); addMsg('assistant', globalSetting?'✅ 设定已保存':'✅ 设定已清空'); };
+      $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active');
+      $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
+
+      // 搜索
+      bindDraft($('searchInput'), 'draft_search');
+      $('searchMenuBtn').onclick = () => { $('searchInput').value = loadDraft('draft_search')||searchKeyword; $('searchModal').classList.add('active'); updateSearchNav(); $('moreMenu').classList.remove('active'); };
+      $('searchCloseBtn').onclick = () => $('searchModal').classList.remove('active');
+      $('searchModal').onclick = e => { if (e.target===$('searchModal')) $('searchModal').classList.remove('active'); };
+      $('searchFindBtn').onclick = () => { searchKeyword = $('searchInput').value.trim(); $('searchModal').classList.remove('active'); searchMatchIdx = 0; renderAll(); const marks = chatBox.querySelectorAll('mark'); searchTotal = marks.length; if (marks.length) { marks[0].classList.add('current'); marks[0].scrollIntoView({behavior:'smooth',block:'center'}); } updateSearchNav(); };
+      $('searchPrevBtn').onclick = () => { if (searchMatchIdx > 0) { const marks = chatBox.querySelectorAll('mark'); marks[searchMatchIdx].classList.remove('current'); searchMatchIdx--; marks[searchMatchIdx].classList.add('current'); marks[searchMatchIdx].scrollIntoView({behavior:'smooth',block:'center'}); updateSearchNav(); } };
+      $('searchNextBtn').onclick = () => { const marks = chatBox.querySelectorAll('mark'); if (searchMatchIdx < marks.length - 1) { marks[searchMatchIdx].classList.remove('current'); searchMatchIdx++; marks[searchMatchIdx].classList.add('current'); marks[searchMatchIdx].scrollIntoView({behavior:'smooth',block:'center'}); updateSearchNav(); } };
+      $('searchClearBtn').onclick = () => { searchKeyword = ''; searchMatchIdx = -1; searchTotal = 0; $('searchInput').value = ''; $('searchModal').classList.remove('active'); renderAll(); };
+      function updateSearchNav() {
+        if (searchKeyword && searchTotal > 0) { $('searchNav').style.display = 'flex'; $('searchCounter').textContent = `${searchMatchIdx+1}/${searchTotal}`; $('searchPrevBtn').disabled = searchMatchIdx <= 0; $('searchNextBtn').disabled = searchMatchIdx >= searchTotal - 1; }
+        else { $('searchNav').style.display = 'none'; }
+      }
+
+      // API Key
+      if (apiKey) { $('setupBar').style.display = 'none'; $('tokenPanel').style.display = 'flex'; }
+      $('saveKeyBtn').onclick = () => { const k = $('apiKeyInput').value.trim(); if (!k) return; localStorage.setItem(SK, k); apiKey = k; $('setupBar').style.display = 'none'; $('tokenPanel').style.display = 'flex'; addMsg('assistant','✅ 密钥已保存'); };
+
+      // 聊天滚动
       const chatBox = $('chatBox'), scrollBtn = $('scrollToBottomBtn');
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
-      chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom()); scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
-      
-      // ===================== 分支系统 =====================
+      chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom());
+      scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
+
+      // 分支
       function createBranch(forkMsgId) {
         branchCounter++;
-        const newBranchId = `branch_${branchCounter}`;
+        const newId = `branch_${branchCounter}`;
         const forkIdx = messages.findIndex(m => m.id === forkMsgId);
-        
-        branchMap[activeBranchId] = { 
-          messages: [...messages], parentBranchId: activeBranchId, parentMsgIdx: forkMsgId
-        };
-        
-        branchMap[newBranchId] = {
-          messages: forkIdx >= 0 ? [...messages.slice(0, forkIdx)] : [...messages],
-          parentBranchId: activeBranchId, parentMsgIdx: forkMsgId
-        };
-        
-        activeBranchId = newBranchId;
-        return { newBranchId, forkIdx };
+        branchMap[activeBranchId] = { messages: [...messages], parentBranchId: activeBranchId, parentMsgIdx: forkMsgId };
+        branchMap[newId] = { messages: forkIdx >= 0 ? [...messages.slice(0, forkIdx)] : [...messages], parentBranchId: activeBranchId, parentMsgIdx: forkMsgId };
+        activeBranchId = newId;
+        if (forkIdx >= 0) messages = messages.slice(0, forkIdx);
+        return { newId, forkIdx };
       }
-      
-      window._switchBranch = function(branchId) {
-        if (branchId === activeBranchId) return;
-        
-        branchMap[activeBranchId] = { 
-          messages: [...messages],
-          parentBranchId: branchMap[activeBranchId]?.parentBranchId || activeBranchId,
-          parentMsgIdx: branchMap[activeBranchId]?.parentMsgIdx || null
-        };
-        
-        activeBranchId = branchId;
-        const targetBranch = branchMap[branchId];
-        if (targetBranch && targetBranch.messages) {
-          messages = [...targetBranch.messages];
-        }
-        
-        closeDeleteSubmenu();
-        renderAll();
-        saveAll();
+      window._switchBranch = function(bid) {
+        if (bid === activeBranchId) return;
+        branchMap[activeBranchId] = { messages: [...messages], parentBranchId: branchMap[activeBranchId]?.parentBranchId || activeBranchId, parentMsgIdx: branchMap[activeBranchId]?.parentMsgIdx || null };
+        activeBranchId = bid;
+        messages = [...(branchMap[bid]?.messages || [messages[0]])];
+        closeDeleteSubmenu(); renderAll(); saveAll();
       };
-      
-      // ===================== 删除子菜单 =====================
+
+      // 删除子菜单
       const deleteSubmenu = $('deleteSubmenu');
-      
-      function closeDeleteSubmenu() {
-        deleteSubmenu.classList.remove('active');
-        currentDeleteMsgId = null;
-      }
-      
-      function showDeleteSubmenu(msgId, targetBtn) {
-        currentDeleteMsgId = msgId;
-        const btnRect = targetBtn.getBoundingClientRect();
-        const menuHeight = 80;
-        const menuWidth = 160;
-        
-        let top = btnRect.bottom + 4;
-        let left = btnRect.left;
-        
-        if (top + menuHeight > window.innerHeight) { top = btnRect.top - menuHeight - 4; }
-        if (left + menuWidth > window.innerWidth) { left = window.innerWidth - menuWidth - 8; }
-        if (left < 8) left = 8;
-        
-        deleteSubmenu.style.top = top + 'px';
-        deleteSubmenu.style.left = left + 'px';
-        deleteSubmenu.classList.add('active');
-      }
-      
-      // 每个消息按钮使用 msgId 而不是 idx
+      function closeDeleteSubmenu() { deleteSubmenu.classList.remove('active'); currentDeleteMsgId = null; }
       window._toggleDeleteSubmenu = function(msgId, event) {
-        event.stopPropagation();
-        event.preventDefault();
-        
-        if (deleteSubmenu.classList.contains('active') && currentDeleteMsgId === msgId) {
-          closeDeleteSubmenu();
-          return;
-        }
-        
+        event.stopPropagation(); event.preventDefault();
+        if (deleteSubmenu.classList.contains('active') && currentDeleteMsgId === msgId) { closeDeleteSubmenu(); return; }
         closeDeleteSubmenu();
-        showDeleteSubmenu(msgId, event.currentTarget);
+        currentDeleteMsgId = msgId;
+        const r = event.currentTarget.getBoundingClientRect();
+        deleteSubmenu.style.top = Math.min(r.bottom + 4, window.innerHeight - 84) + 'px';
+        deleteSubmenu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 168)) + 'px';
+        deleteSubmenu.classList.add('active');
       };
-      
-      // 通过消息ID找到在messages数组中的索引
-      function findMsgIndexById(msgId) {
-        return messages.findIndex(m => m.id === msgId);
-      }
-      
-      // 删除本条
-      $('deleteSingleBtn').addEventListener('click', function(e) {
+      function findIdx(id) { return messages.findIndex(m => m.id === id); }
+      $('deleteSingleBtn').onclick = e => {
         e.stopPropagation();
-        if (!currentDeleteMsgId) { closeDeleteSubmenu(); return; }
-        
-        const idx = findMsgIndexById(currentDeleteMsgId);
-        if (idx === -1) { closeDeleteSubmenu(); return; }
-        
+        if (!currentDeleteMsgId) return closeDeleteSubmenu();
+        const idx = findIdx(currentDeleteMsgId);
+        if (idx === -1) return closeDeleteSubmenu();
         const msg = messages[idx];
-        let startIdx = idx;
-        let endIdx = idx;
-        
-        // 判断配对消息
-        if (msg.role === 'user' && idx + 1 < messages.length && 
-            messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) {
-          endIdx = idx + 1;
-        } else if (msg.role === 'assistant' && idx - 1 >= 0 && 
-                   messages[idx - 1].role === 'user' && msg.parentId === messages[idx - 1].id) {
-          startIdx = idx - 1;
-        }
-        
-        const count = endIdx - startIdx + 1;
-        if (!confirm(`确定删除这${count}条消息吗？`)) { closeDeleteSubmenu(); return; }
-        
-        console.log('删除本条：', { startIdx, endIdx, msgId: currentDeleteMsgId });
-        messages.splice(startIdx, endIdx - startIdx + 1);
-        syncFullHistoryFromMessages();
-        closeDeleteSubmenu();
-        renderAll();
-        saveAll();
-      });
-      
-      // 删除本条及后续
-      $('deleteAllAfterBtn').addEventListener('click', function(e) {
+        let s = idx, e = idx;
+        if (msg.role === 'user' && idx+1 < messages.length && messages[idx+1].role === 'assistant' && messages[idx+1].parentId === msg.id) e = idx+1;
+        else if (msg.role === 'assistant' && idx-1 >= 0 && messages[idx-1].role === 'user' && msg.parentId === messages[idx-1].id) s = idx-1;
+        if (!confirm(`删除这${e-s+1}条消息？`)) return closeDeleteSubmenu();
+        messages.splice(s, e-s+1);
+        branchMap[activeBranchId].messages = [...messages];
+        closeDeleteSubmenu(); renderAll(); saveAll();
+      };
+      $('deleteAllAfterBtn').onclick = e => {
         e.stopPropagation();
-        if (!currentDeleteMsgId) { closeDeleteSubmenu(); return; }
-        
-        const idx = findMsgIndexById(currentDeleteMsgId);
-        if (idx === -1) { closeDeleteSubmenu(); return; }
-        
-        const count = messages.length - idx;
-        if (!confirm(`确定删除本条及后续共 ${count} 条消息吗？`)) { closeDeleteSubmenu(); return; }
-        
-        console.log('删除本条及后续：', { idx, count, msgId: currentDeleteMsgId });
+        if (!currentDeleteMsgId) return closeDeleteSubmenu();
+        const idx = findIdx(currentDeleteMsgId);
+        if (idx === -1) return closeDeleteSubmenu();
+        if (!confirm(`删除本条及后续共 ${messages.length-idx} 条？`)) return closeDeleteSubmenu();
         messages = messages.slice(0, idx);
-        syncFullHistoryFromMessages();
+        branchMap[activeBranchId].messages = [...messages];
+        closeDeleteSubmenu(); renderAll(); saveAll();
+      };
+      deleteSubmenu.onclick = e => e.stopPropagation();
+
+      // 消息操作
+      window._editMsg = function(msgId) {
         closeDeleteSubmenu();
-        renderAll();
-        saveAll();
-      });
-      
-      deleteSubmenu.addEventListener('click', function(e) { e.stopPropagation(); });
-      
-      // ===================== 版本切换 =====================
+        const idx = findIdx(msgId);
+        if (idx === -1) return;
+        const msg = messages[idx];
+        if (msg.role !== 'user') return;
+        $('userInput').value = msg.content;
+        $('userInput').focus();
+        editingIdx = idx;
+      };
+      window._regenMsg = function(msgId) {
+        closeDeleteSubmenu();
+        const idx = findIdx(msgId);
+        if (idx === -1) return;
+        const msg = messages[idx];
+        if (msg.role !== 'assistant') return;
+        let ui = -1;
+        for (let i = idx-1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; }
+        if (ui === -1) return;
+        const text = messages[ui].content;
+        messages = messages.slice(0, idx);
+        branchMap[activeBranchId].messages = [...messages];
+        renderAll(); saveAll();
+        sendToAPI(text);
+      };
       window._switchVer = function(msgId, dir) {
-        const idx = findMsgIndexById(msgId);
+        const idx = findIdx(msgId);
         if (idx === -1) return;
-        const msg = messages[idx]; 
-        if (!msg || !msg.history || msg.history.length < 2) return; 
-        const cur = msg.historyIndex || 0, newIdx = cur + dir; 
-        if (newIdx < 0 || newIdx >= msg.history.length) return; 
-        
-        if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) { 
-          msg.history[cur] = {content: msg.content, reply: messages[idx + 1].content, time: msg.time}; 
-        } else { 
-          msg.history[cur] = {content: msg.content, reply: '', time: msg.time}; 
-        } 
-        
-        const ver = msg.history[newIdx]; 
-        msg.content = ver.content; 
-        msg.time = ver.time; 
-        msg.historyIndex = newIdx; 
-        
-        if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) { 
-          messages[idx + 1].content = ver.reply || ''; 
-          messages[idx + 1].time = ver.time; 
-        } else { 
-          messages.splice(idx + 1, 0, {
-            role: 'assistant', content: ver.reply || '', id: nextId++, time: ver.time, parentId: msg.id,
-            branchId: activeBranchId
-          }); 
-        } 
-        closeDeleteSubmenu();
-        renderAll(); 
-        saveAll(); 
-      };
-      
-      function syncFullHistoryFromMessages() {
-        fullHistory = messages.filter(m => m.role !== 'system').map(m => ({
-          role: m.role, content: typeof m.content === 'string' ? m.content : '', time: m.time
-        }));
-        saveFullHistory();
-      }
-      
-      window._editMsg = function(msgId) { 
-        closeDeleteSubmenu();
-        const idx = findMsgIndexById(msgId);
-        if (idx === -1) return;
-        const msg = messages[idx]; 
-        if (!msg||msg.role!=='user') return; 
-        $('userInput').value = typeof msg.content==='string'?msg.content:''; 
-        $('userInput').focus(); 
-        editingIdx = idx; 
-      };
-      
-      window._regenMsg = function(msgId) { 
-        closeDeleteSubmenu();
-        const idx = findMsgIndexById(msgId);
-        if (idx === -1) return;
-        const msg = messages[idx]; 
-        if (!msg||msg.role!=='assistant') return; 
-        let ui = -1; 
-        for (let i = idx - 1; i >= 0; i--) if (messages[i].role === 'user') { ui = i; break; } 
-        if (ui === -1) return; 
-        const text = typeof messages[ui].content === 'string' ? messages[ui].content : ''; 
-        messages = messages.slice(0, idx); 
-        syncFullHistoryFromMessages();
-        renderAll(); 
-        saveAll(); 
-        sendToAPI(text); 
+        const msg = messages[idx];
+        if (!msg?.history || msg.history.length < 2) return;
+        const cur = msg.historyIndex || 0, newIdx = cur + dir;
+        if (newIdx < 0 || newIdx >= msg.history.length) return;
+        const aiIdx = idx+1 < messages.length && messages[idx+1].role === 'assistant' && messages[idx+1].parentId === msg.id ? idx+1 : -1;
+        msg.history[cur] = { content: msg.content, reply: aiIdx >= 0 ? messages[aiIdx].content : '', time: msg.time };
+        const ver = msg.history[newIdx];
+        msg.content = ver.content; msg.time = ver.time; msg.historyIndex = newIdx;
+        if (aiIdx >= 0) { messages[aiIdx].content = ver.reply || ''; messages[aiIdx].time = ver.time; }
+        else { messages.splice(idx+1, 0, { role:'assistant', content: ver.reply||'', id: nextId++, time: ver.time, parentId: msg.id, branchId: activeBranchId }); }
+        branchMap[activeBranchId].messages = [...messages];
+        closeDeleteSubmenu(); renderAll(); saveAll();
       };
 
-      function fixPronouns(content) {
-        if (!content) return content;
-        return content.replace(/\b她\s*的\b/g, '你的').replace(/把\s*她/g, '把你');
-      }
-
-      function formatAssistantContent(content) {
-        if (!content) return content;
-        if (content.includes('\n')) return content;
-        return content.trim();
-      }
-
-      // ===================== 渲染（使用msgId） =====================
+      // 渲染
       function renderAll() {
-        const scrollTop = chatBox.scrollTop;
+        const st = chatBox.scrollTop;
         chatBox.innerHTML = '';
-        
-        // 找出分支分叉点
-        const forkPoints = new Map();
-        for (const [bid, branch] of Object.entries(branchMap)) {
-          if (branch.parentMsgIdx !== null && bid !== activeBranchId) {
-            if (!forkPoints.has(branch.parentMsgIdx)) {
-              forkPoints.set(branch.parentMsgIdx, []);
-            }
-            forkPoints.get(branch.parentMsgIdx).push(bid);
+        const forkPts = new Map();
+        for (const [bid, br] of Object.entries(branchMap)) {
+          if (br.parentMsgIdx && bid !== activeBranchId) {
+            if (!forkPts.has(br.parentMsgIdx)) forkPts.set(br.parentMsgIdx, []);
+            forkPts.get(br.parentMsgIdx).push(bid);
           }
         }
-        
         messages.forEach((msg, idx) => {
           if (msg.role === 'system') return;
-          const row = document.createElement('div'); 
+          const row = document.createElement('div');
           row.className = `message-row ${msg.role}`;
-          
-          const timeStr = formatTime(msg.time || Date.now());
           let content = typeof msg.content === 'string' ? msg.content : '[图片]';
-          if (msg.role === 'assistant') { content = fixPronouns(content); content = formatAssistantContent(content); }
-          if (searchKeyword) { const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); content = content.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>'); }
-          
+          if (searchKeyword) {
+            const esc = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            content = content.replace(new RegExp(`(${esc})`, 'gi'), '<mark>$1</mark>');
+          }
           let btns = '';
-          if (msg.role === 'user') {
-            btns += `<button onclick="_editMsg(${msg.id})">✎</button>`;
-            const forks = forkPoints.get(msg.id);
-            if (forks && forks.length > 0) {
-              btns += `<button class="branch-btn" onclick="event.stopPropagation();" title="此消息有 ${forks.length} 个分支">🌿</button>`;
-            }
-          } else {
-            btns += `<button onclick="_regenMsg(${msg.id})">↻</button>`;
+          if (msg.role === 'user') btns += `<button onclick="_editMsg(${msg.id})">✎</button>`;
+          else btns += `<button onclick="_regenMsg(${msg.id})">↻</button>`;
+          btns += `<button class="del-btn" onclick="_toggleDeleteSubmenu(${msg.id}, event)">🗑</button>`;
+          let ver = '';
+          if (msg.history?.length > 1) {
+            const c = (msg.historyIndex||0)+1, t = msg.history.length;
+            ver = `<div class="version-switcher"><button onclick="_switchVer(${msg.id},-1)" ${c===1?'disabled':''}>◀</button><span>${c}/${t}</span><button onclick="_switchVer(${msg.id},1)" ${c===t?'disabled':''}>▶</button></div>`;
           }
-          btns += `<button class="del-btn" onclick="_toggleDeleteSubmenu(${msg.id}, event)" title="删除">🗑</button>`;
-          
-          let verHTML = '';
-          if (msg.history && msg.history.length > 1) { 
-            const cur = (msg.historyIndex || 0) + 1; 
-            const total = msg.history.length; 
-            verHTML = `<div class="version-switcher"><button onclick="_switchVer(${msg.id}, -1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${msg.id}, 1)" ${cur===total?'disabled':''}>▶</button></div>`; 
-          }
-          
-          row.innerHTML = `<div class="time-label">${timeStr}</div><div class="bubble-row"><div class="bubble-actions">${btns}</div><div class="bubble">${content}</div></div>${verHTML}`;
-          
-          const forks = forkPoints.get(msg.id);
-          if (forks && forks.length > 0 && msg.role === 'user') {
-            const forkDiv = document.createElement('div');
-            forkDiv.className = `branch-indicator ${msg.role}-side`;
-            forkDiv.innerHTML = `
-              <div class="branch-line"></div>
-              ${forks.map(bid => {
-                const isActive = bid === activeBranchId;
-                return `<span class="branch-badge ${isActive ? 'active' : ''}" onclick="window._switchBranch('${bid}')" title="切换到 ${bid.replace('branch_', '分支 ')}">🌿 ${bid.replace('branch_', '分支 ')}</span>`;
-              }).join('')}
-              <div class="branch-line"></div>
-            `;
+          row.innerHTML = `<div class="time-label">${formatTime(msg.time||Date.now())}</div><div class="bubble-row"><div class="bubble-actions">${btns}</div><div class="bubble">${content}</div></div>${ver}`;
+          const forks = forkPts.get(msg.id);
+          if (forks?.length > 0 && msg.role === 'user') {
             chatBox.appendChild(row);
-            chatBox.appendChild(forkDiv);
-          } else {
-            chatBox.appendChild(row);
-          }
+            const fd = document.createElement('div');
+            fd.className = `branch-indicator user-side`;
+            fd.innerHTML = forks.map(bid => `<span class="branch-badge${bid===activeBranchId?' active':''}" onclick="window._switchBranch('${bid}')">🌿 ${bid.replace('branch_','分支')}</span>`).join('');
+            chatBox.appendChild(fd);
+          } else { chatBox.appendChild(row); }
         });
-        
-        // 恢复滚动位置
-        chatBox.scrollTop = scrollTop;
-        if (chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60) {
-          chatBox.scrollTop = chatBox.scrollHeight;
-        }
+        if (st && chatBox.scrollHeight > st) chatBox.scrollTop = Math.min(st, chatBox.scrollHeight - chatBox.clientHeight);
+        else chatBox.scrollTop = chatBox.scrollHeight;
         scrollBtn.classList.toggle('visible', !nearBottom());
-        
-        if (searchKeyword) { 
-          const marks = chatBox.querySelectorAll('mark'); 
-          searchTotal = marks.length; 
-          if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) marks[searchMatchIndex].classList.add('current'); 
+        if (searchKeyword) {
+          const marks = chatBox.querySelectorAll('mark');
+          searchTotal = marks.length;
+          if (searchMatchIdx >= 0 && searchMatchIdx < marks.length) marks[searchMatchIdx].classList.add('current');
         }
       }
 
-      function addMsg(role, content) { 
-        const msg = { 
-          role, content, id: nextId++, time: Date.now(), parentId: null, 
-          history: null, historyIndex: 0, branchId: activeBranchId
-        }; 
-        messages.push(msg); 
-        fullHistory.push({ role, content, time: msg.time }); 
-        saveFullHistory(); 
-        renderAll();
-        saveAll(); 
+      function addMsg(role, content) {
+        const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0, branchId: activeBranchId };
+        messages.push(msg);
+        branchMap[activeBranchId].messages = [...messages];
+        renderAll(); saveAll();
       }
-      
-      function getNonSystemMessages() { return messages.filter(m => m.role !== 'system'); }
 
-      // ============= 发送消息 =============
+      // 发送
       async function sendToAPI(text) {
-        if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
-        const isEdit = editingIdx >= 0 && editingIdx < messages.length; 
-        let userMsg;
-        
-        if (isEdit) { 
+        if (!apiKey) { addMsg('assistant','⚠️ 请先输入 API Key'); $('setupBar').style.display='flex'; return; }
+        if (editingIdx >= 0 && editingIdx < messages.length) {
           const parent = messages[editingIdx];
-          
-          if (editingIdx < messages.length - 1) {
-            createBranch(parent.id);
-            const forkIdx = messages.findIndex(m => m.id === parent.id);
-            messages = messages.slice(0, forkIdx);
-            syncFullHistoryFromMessages();
-          }
-          
-          if (!parent.history) { 
-            parent.history = [{content: parent.content, reply: '', time: parent.time}]; 
-            parent.historyIndex = 0; 
-          }
-          
-          parent.content = text; 
-          parent.time = Date.now(); 
-          parent.history.push({content: text, reply: '', time: parent.time}); 
-          parent.historyIndex = parent.history.length - 1; 
+          if (editingIdx < messages.length - 1) createBranch(parent.id);
+          if (!parent.history) { parent.history = [{content:parent.content,reply:'',time:parent.time}]; parent.historyIndex = 0; }
+          parent.content = text; parent.time = Date.now();
+          parent.history.push({content:text,reply:'',time:parent.time});
+          parent.historyIndex = parent.history.length - 1;
           parent.branchId = activeBranchId;
-          userMsg = parent; 
-          editingIdx = -1; 
-        } else { 
-          userMsg = {
-            role: 'user', content: text, id: nextId++, time: Date.now(), parentId: null, 
-            history: null, historyIndex: 0, branchId: activeBranchId
-          }; 
-          const last = messages[messages.length - 1]; 
-          if (last && last.role !== 'system') userMsg.parentId = last.id; 
-          messages.push(userMsg); 
+          branchMap[activeBranchId].messages = [...messages];
+          editingIdx = -1;
+        } else {
+          const um = { role:'user', content:text, id:nextId++, time:Date.now(), parentId:null, history:null, historyIndex:0, branchId:activeBranchId };
+          const last = messages[messages.length-1];
+          if (last?.role !== 'system') um.parentId = last.id;
+          messages.push(um);
+          branchMap[activeBranchId].messages = [...messages];
         }
-        
-        fullHistory.push({role: 'user', content: text, time: userMsg.time}); 
-        saveFullHistory(); renderAll(); saveAll();
-        
-        const load = document.createElement('div'); 
-        load.className = 'message-row assistant'; 
-        load.innerHTML = '<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>'; 
+        renderAll(); saveAll();
+        const load = document.createElement('div');
+        load.className = 'message-row assistant';
+        load.innerHTML = '<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>';
         chatBox.appendChild(load); chatBox.scrollTop = chatBox.scrollHeight;
-        
-        try { 
-          refreshSystemPrompt(); 
-          const apiMsgs = [messages[0], ...messages.slice(-MAX_CONTEXT)].map(m => ({
-            role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]'
-          })); 
+        try {
+          refreshSystemPrompt();
+          const apiMsgs = [messages[0], ...messages.slice(-MAX_CONTEXT)].map(m => ({role:m.role,content:typeof m.content==='string'?m.content:'[图片]'}));
           const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
-            method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`}, 
-            body: JSON.stringify({ model: 'deepseek-v4-flash', messages: apiMsgs, stream: false, temperature: 0.7 })
-          }); 
-          load.remove(); 
-          if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message || `请求失败 (${res.status})`); } 
-          const data = await res.json(); 
-          const reply = data.choices[0].message.content; 
-          const aiMsg = {
-            role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id,
-            branchId: activeBranchId
-          }; 
-          messages.push(aiMsg); 
-          fullHistory.push({role: 'assistant', content: reply, time: aiMsg.time}); 
-          saveFullHistory(); 
-          if (userMsg.history && userMsg.history.length > 0) {
-            userMsg.history[userMsg.historyIndex].reply = reply; 
-          }
-          renderAll(); saveAll(); 
-          if (data.usage) { 
+            method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+            body:JSON.stringify({model:'deepseek-v4-flash',messages:apiMsgs,stream:false,temperature:0.7})
+          });
+          load.remove();
+          if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error?.message||`请求失败(${res.status})`); }
+          const data = await res.json();
+          const reply = data.choices[0].message.content;
+          const am = { role:'assistant', content:reply, id:nextId++, time:Date.now(), parentId:editingIdx>=0?messages[editingIdx]?.id:messages[messages.length-1]?.id, branchId:activeBranchId };
+          messages.push(am);
+          branchMap[activeBranchId].messages = [...messages];
+          const um = messages.find(m => m.id === am.parentId);
+          if (um?.history?.length > 0) um.history[um.historyIndex].reply = reply;
+          renderAll(); saveAll();
+          if (data.usage) {
             $('lastTokens').textContent = data.usage.total_tokens;
             totalTokens += data.usage.total_tokens;
-            totalCost += ((data.usage.prompt_tokens||0) * 1 + (data.usage.completion_tokens||0) * 2) / 1e6;
-            $('lastCost').textContent = ((data.usage.prompt_tokens||0) * 1 + (data.usage.completion_tokens||0) * 2 / 1e6).toFixed(4);
-            updateTokenDisplay(); saveAll();
-          } 
-        } catch(e) { load.remove(); addMsg('assistant', `❌ ${e.message}`); }
+            totalCost += ((data.usage.prompt_tokens||0)*1 + (data.usage.completion_tokens||0)*2)/1e6;
+            $('lastCost').textContent = (((data.usage.prompt_tokens||0)*1 + (data.usage.completion_tokens||0)*2)/1e6).toFixed(4);
+            $('totalTokens').textContent = totalTokens;
+            $('totalCost').textContent = totalCost.toFixed(4);
+            saveAll();
+          }
+          if (reply) extractFacts(text, reply);
+          if (messages.length > COMPRESS_THRESHOLD) compressHistory();
+        } catch(e) { load.remove(); addMsg('assistant',`❌ ${e.message}`); }
       }
 
       $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
-      $('userInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('sendBtn').click(); } };
-      
-      // ===================== 导出/导入 =====================
-      $('exportBtn').onclick = () => { 
-        const data = {
-          messages: messages.filter(m => m.role !== 'system').map(m => ({
-            role: m.role, content: m.content, id: m.id, time: m.time, parentId: m.parentId,
-            history: m.history, historyIndex: m.historyIndex, branchId: m.branchId
-          })),
-          branchMap: branchMap, activeBranchId: activeBranchId, branchCounter: branchCounter
-        };
-        if (!data.messages.length) return alert('无记录'); 
-        const b = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); 
-        const a = document.createElement('a'); a.href = URL.createObjectURL(b); 
-        a.download = `chat-m-${new Date().toISOString().slice(0, 10)}.json`; a.click(); 
-      };
-      
-      $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
-      $('importCancelBtn').onclick = () => $('importModal').classList.remove('active'); 
-      $('importModal').onclick = e => { if (e.target === $('importModal')) $('importModal').classList.remove('active'); };
-      $('importFileBtn').onclick = () => $('importFileInput').click(); 
-      $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
-      $('importFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
-      $('importJsonFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
-      
-      function parseText(t) { 
-        const lines = t.split('\n'), res = []; 
-        const prefixes = {
-          user: ['你:', '你：', '用户:', '我:', '问:'],
-          assistant: ['M:', 'M：', '助手:', 'assistant:', 'ai:', '答:']
-        };
-        for (let l of lines) { 
-          l = l.trim(); if (!l) continue; 
-          let role = null, c = ''; const lower = l.toLowerCase(); 
-          for (let p of prefixes.user) { if (lower.startsWith(p.toLowerCase())) { role = 'user'; c = l.slice(p.length).trim(); break; } } 
-          if (!role) { for (let p of prefixes.assistant) { if (lower.startsWith(p.toLowerCase())) { role = 'assistant'; c = l.slice(p.length).trim(); break; } } } 
-          if (role && c) { res.push({role, content: c}); } 
-          else if (!role && res.length > 0) { res[res.length - 1].content += ' ' + l; } 
-        } 
-        return res; 
+      $('userInput').onkeydown = e => { if (e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); $('sendBtn').click(); } };
+      bindDraft($('userInput'), 'draft_chat');
+
+      // 记忆提取
+      async function extractFacts(userText, aiText) {
+        if (!apiKey) return;
+        try {
+          const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+            method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+            body:JSON.stringify({model:'deepseek-v4-flash',messages:[{role:'user',content:`提取事实JSON数组：[{"entity":"","relation":"","object":"","fact":"","quote":"用户原话"}] 对话：用户：${userText} M：${aiText}`}],temperature:0.2})
+          });
+          if (!res.ok) return;
+          const d = await res.json();
+          const match = d.choices[0].message.content.match(/\[[\s\S]*\]/);
+          if (!match) return;
+          const facts = JSON.parse(match[0]);
+          if (!facts.length) return;
+          let all = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY)||'[]');
+          facts.forEach(f => { if (!all.some(a=>a.quote===f.quote)) all.push({...f, time:Date.now()}); });
+          localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(all));
+        } catch(e) {}
       }
-      
-      function parseAndImport(append = false) { 
-        const raw = $('importTextarea').value.trim(); 
-        if (!raw) { alert('请粘贴内容'); return; } 
-        let imported, branchData = null; 
-        try { 
-          const parsed = JSON.parse(raw);
-          if (parsed.messages && Array.isArray(parsed.messages)) { imported = parsed.messages; branchData = parsed; }
-          else if (Array.isArray(parsed)) { imported = parsed; }
-          else { throw 0; }
-          imported = imported.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'); 
-        } catch(e) { imported = parseText(raw); } 
-        if (!imported || !imported.length) { alert('无法解析'); return; } 
-        
-        const now = Date.now(), total = imported.length; 
-        const newMessages = imported.map((m, i) => ({
-          role: m.role, content: m.content, id: m.id || (nextId++),
-          time: m.time || (now - (total - i) * 5000), parentId: m.parentId || null,
-          history: m.history || null, historyIndex: m.historyIndex || 0,
-          branchId: m.branchId || activeBranchId
-        }));
-        
-        for (let i = 0; i < newMessages.length; i++) {
-          if (!newMessages[i].parentId && i > 0) { newMessages[i].parentId = newMessages[i - 1].id; }
-        }
-        
-        if (branchData) {
-          branchMap = branchData.branchMap || {};
-          activeBranchId = branchData.activeBranchId || 'branch_1';
-          branchCounter = branchData.branchCounter || 1;
-        }
-        
-        if (append) { 
-          const lastMsg = messages[messages.length - 1]; 
-          if (lastMsg && lastMsg.role !== 'system') newMessages[0].parentId = lastMsg.id; 
-          messages.push(...newMessages); 
-        } else { 
-          messages = [messages[0]]; messages.push(...newMessages); 
-          fullHistory = newMessages.map(m => ({role: m.role, content: m.content, time: m.time})); 
-          if (!branchData) {
-            branchMap = { 'branch_1': { messages: [...messages], parentBranchId: null, parentMsgIdx: null } };
-            activeBranchId = 'branch_1'; branchCounter = 1;
+
+      async function compressHistory() {
+        if (!apiKey) return;
+        const non = messages.filter(m=>m.role!=='system');
+        if (non.length <= COMPRESS_THRESHOLD) return;
+        const old = non.slice(0, non.length-MAX_CONTEXT);
+        if (old.length < 10) return;
+        const text = old.map(m=>`${m.role==='user'?'用户':'M'}：${m.content}`).join('\n');
+        try {
+          const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+            method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+            body:JSON.stringify({model:'deepseek-v4-flash',messages:[{role:'system',content:'压缩为500字摘要'},{role:'user',content:text}],temperature:0.3,max_tokens:800})
+          });
+          if (res.ok) {
+            const d = await res.json();
+            compressedMemory = (compressedMemory?compressedMemory+'\n':'') + d.choices[0].message.content.trim();
+            if (compressedMemory.length > 5000) compressedMemory = compressedMemory.slice(-5000);
+            localStorage.setItem(MEMORY_KEY, compressedMemory);
+            messages = [messages[0], ...non.slice(old.length)];
+            branchMap[activeBranchId].messages = [...messages];
+            refreshSystemPrompt(); renderAll(); saveAll();
           }
-        } 
-        
-        saveFullHistory(); renderAll(); saveAll(); saveDraft(DRAFT_IMPORT, ''); 
-        alert(`${append ? '追加' : '导入'}成功（${newMessages.length} 条消息）`); 
-        $('importModal').classList.remove('active'); 
+        } catch(e) {}
       }
-      
-      $('importConfirmBtn').onclick = () => parseAndImport(false); 
-      $('importAppendBtn').onclick = () => parseAndImport(true);
+
+      // 记忆面板
+      function renderMemoryPanel() {
+        const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY)||'[]');
+        const c = $('memoryDisplay');
+        if (!facts.length) { c.innerHTML = '<div style="padding:12px;color:var(--text-secondary)">暂无记忆</div>'; return; }
+        c.innerHTML = facts.map((f,i) => `
+          <div class="memory-item">
+            <div class="meta"><strong>${f.entity}</strong> · ${f.relation} · ${f.object}</div>
+            <div class="fact-text">${f.fact}</div>
+            <div class="actions"><button class="del-btn" onclick="delFact(${i})">🗑️</button></div>
+          </div>`).join('');
+      }
+      window.delFact = function(i) {
+        if (!confirm('删除这条记忆？')) return;
+        const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY)||'[]');
+        facts.splice(i,1);
+        localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts));
+        renderMemoryPanel();
+      };
+      $('memoryViewBtn').onclick = () => { renderMemoryPanel(); $('memoryModal').classList.add('active'); };
+      $('memoryCloseBtn').onclick = () => $('memoryModal').classList.remove('active');
+      $('memoryModal').onclick = e => { if (e.target===$('memoryModal')) $('memoryModal').classList.remove('active'); };
+      $('clearMemoryBtn').onclick = () => {
+        if (!confirm('清空所有记忆？')) return;
+        localStorage.removeItem(MEMORY_FACTS_KEY); localStorage.removeItem(MEMORY_GRAPH_KEY);
+        $('moreMenu').classList.remove('active');
+        if ($('memoryModal').classList.contains('active')) renderMemoryPanel();
+      };
+
+      // 整合记忆
+      $('reprocessBtn').onclick = async () => {
+        if (!apiKey) { alert('请先设置API Key'); return; }
+        $('moreMenu').classList.remove('active');
+        const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY)||'[]');
+        const non = messages.filter(m=>m.role!=='system');
+        let count = 0;
+        for (let i=0; i<non.length-1; i+=2) {
+          if (non[i].role==='user' && non[i+1]?.role==='assistant') {
+            await extractFacts(non[i].content, non[i+1].content);
+            count++;
+          }
+        }
+        alert(`整合完成！处理了 ${count} 对对话`);
+      };
+
+      // 导出/导入
+      $('exportBtn').onclick = () => {
+        const data = { messages: messages.filter(m=>m.role!=='system'), branchMap, activeBranchId, branchCounter };
+        const b = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+        const a = document.createElement('a'); a.href = URL.createObjectURL(b);
+        a.download = `chat-${new Date().toISOString().slice(0,10)}.json`; a.click();
+      };
+      // 自动导出
+      (function() {
+        const today = new Date().toISOString().slice(0,10);
+        if (localStorage.getItem(AEK) === today) return;
+        const data = { messages: messages.filter(m=>m.role!=='system'), branchMap, activeBranchId, branchCounter };
+        if (data.messages.length) {
+          const b = new Blob([JSON.stringify(data)], {type:'application/json'});
+          const a = document.createElement('a'); a.href = URL.createObjectURL(b);
+          a.download = `chat-auto-${today}.json`; a.click();
+          localStorage.setItem(AEK, today);
+        }
+      })();
+
+      $('importBtn').onclick = () => $('importModal').classList.add('active');
+      $('importCancelBtn').onclick = () => $('importModal').classList.remove('active');
+      $('importModal').onclick = e => { if (e.target===$('importModal')) $('importModal').classList.remove('active'); };
+      $('importFileBtn').onclick = () => $('importFileInput').click();
+      $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
+      $('importFileInput').onchange = e => { if (e.target.files[0]) { const r=new FileReader(); r.onload=ev=>$('importTextarea').value=ev.target.result; r.readAsText(e.target.files[0]); } };
+      $('importJsonFileInput').onchange = e => { if (e.target.files[0]) { const r=new FileReader(); r.onload=ev=>$('importTextarea').value=ev.target.result; r.readAsText(e.target.files[0]); } };
+      bindDraft($('importTextarea'), 'draft_import');
+
+      function parseText(t) {
+        const lines = t.split('\n'), res = [];
+        const u = ['你:','你：','用户:','我:','问:'], a = ['M:','M：','助手:','assistant:','ai:','答:'];
+        for (let l of lines) {
+          l = l.trim(); if (!l) continue;
+          let role=null, c=''; const lo=l.toLowerCase();
+          for (let p of u) if (lo.startsWith(p.toLowerCase())) { role='user'; c=l.slice(p.length).trim(); break; }
+          if (!role) for (let p of a) if (lo.startsWith(p.toLowerCase())) { role='assistant'; c=l.slice(p.length).trim(); break; }
+          if (role&&c) res.push({role,content:c});
+          else if (res.length) res[res.length-1].content += ' '+l;
+        }
+        return res;
+      }
+
+      $('importConfirmBtn').onclick = () => {
+        const raw = $('importTextarea').value.trim(); if (!raw) return alert('请粘贴内容');
+        let imported, bd=null;
+        try {
+          const p = JSON.parse(raw);
+          if (p.messages) { imported=p.messages; bd=p; }
+          else if (Array.isArray(p)) imported=p;
+          else throw 0;
+        } catch(e) { imported=parseText(raw); }
+        if (!imported?.length) return alert('无法解析');
+        const msgs = imported.map((m,i)=>({...m, id:m.id||nextId++, time:m.time||Date.now()-(imported.length-i)*5000, branchId:m.branchId||activeBranchId}));
+        if (bd) { branchMap=bd.branchMap||{}; activeBranchId=bd.activeBranchId||'branch_1'; branchCounter=bd.branchCounter||1; }
+        messages = [messages[0], ...msgs];
+        branchMap[activeBranchId] = { messages: [...messages], parentBranchId:null, parentMsgIdx:null };
+        $('importTextarea').value = ''; saveDraft('draft_import','');
+        renderAll(); saveAll(); $('importModal').classList.remove('active');
+        alert(`导入成功（${msgs.length}条）`);
+      };
+      $('importAppendBtn').onclick = () => {
+        const raw = $('importTextarea').value.trim(); if (!raw) return alert('请粘贴内容');
+        let imported;
+        try { imported = JSON.parse(raw); if (!Array.isArray(imported)) throw 0; } catch(e) { imported=parseText(raw); }
+        if (!imported?.length) return alert('无法解析');
+        const msgs = imported.map((m,i)=>({...m, id:m.id||nextId++, time:m.time||Date.now(), branchId:activeBranchId}));
+        const last = messages[messages.length-1];
+        if (last?.role!=='system') msgs[0].parentId = last.id;
+        messages.push(...msgs);
+        branchMap[activeBranchId].messages = [...messages];
+        $('importTextarea').value = ''; saveDraft('draft_import','');
+        renderAll(); saveAll(); $('importModal').classList.remove('active');
+        alert(`追加成功（${msgs.length}条）`);
+      };
 
       // 启动
-      renderAll(); 
+      renderAll();
       if (messages.length <= 1) addMsg('assistant', apiKey ? '你好！我是M 🌿' : '👋 请先输入 API Key');
     })();
   </script>
