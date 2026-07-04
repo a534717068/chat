@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>M · 智能助手（分页加载版）</title>
+  <title>M · 智能助手</title>
   <link rel="manifest" href="manifest.json">
   <script>
     if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); }); }
   </script>
   <style>
+    /* 全局样式 */
     :root {
       --bg: #f5f5f5; --surface: #ffffff; --text-primary: #1a1a2e; --text-secondary: #999;
       --border: #e0e0e0; --bubble-user-bg: #1a1a2e; --bubble-user-text: #ffffff;
@@ -104,7 +105,6 @@
     #progressDisplay .progress-text { flex: 1; }
     #progressDisplay .progress-buttons button { background: var(--btn-bg); color: white; border: none; border-radius: 4px; padding: 2px 10px; font-size: 0.7rem; cursor: pointer; margin-left: 4px; }
     #progressDisplay .progress-buttons button:disabled { opacity: 0.3; cursor: default; }
-    .page-indicator { text-align: center; padding: 6px; font-size: 0.75rem; color: var(--text-secondary); background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -153,7 +153,7 @@
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">密钥仅保存在手机 · 点击Token/花费可编辑 · 分页加载（每页30条）</div>
+  <div class="tip">密钥仅保存在手机 · 点击Token/花费可编辑 · 分页加载已修复</div>
 
   <!-- 记忆管理面板 -->
   <div class="modal-overlay" id="memoryModal">
@@ -232,7 +232,7 @@
       const MEMORY_FACTS_KEY = 'memory_facts_v3';
       const MEMORY_GRAPH_KEY = 'memory_graph_v3';
       const REPROGRESS_KEY = 'reprocess_progress_index';
-      const PAGE_SIZE = 30;  // 每页30条
+      const PAGE_SIZE = 30;
 
       // ---------- 工具函数 ----------
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
@@ -402,7 +402,7 @@
         return content.trim();
       }
 
-      // ============= 分页渲染核心 =============
+      // ============= 分页渲染核心（修复版） =============
       let currentPage = 1;
       let totalPages = 1;
       let allRenderableMessages = [];
@@ -411,23 +411,23 @@
         allRenderableMessages = messages.filter(m => m.role !== 'system');
         totalPages = Math.ceil(allRenderableMessages.length / PAGE_SIZE);
         if (totalPages === 0) totalPages = 1;
-        currentPage = totalPages; // 默认显示最新页
-        renderPage(currentPage);
+        currentPage = totalPages;
+        renderPage(currentPage, true);
         updateScrollListener();
       }
 
-      function renderPage(page) {
+      function renderPage(page, scrollToBottom = true) {
         const start = Math.max(0, (page - 1) * PAGE_SIZE);
         const end = Math.min(allRenderableMessages.length, page * PAGE_SIZE);
         const pageMessages = allRenderableMessages.slice(start, end);
         
         chatBox.innerHTML = '';
         
-        // 顶部提示：显示当前页范围
+        // 顶部信息
         if (allRenderableMessages.length > PAGE_SIZE) {
           const info = document.createElement('div');
           info.style.textAlign = 'center';
-          info.style.padding = '6px';
+          info.style.padding = '4px';
           info.style.fontSize = '0.7rem';
           info.style.color = 'var(--text-secondary)';
           info.style.background = 'var(--surface)';
@@ -440,14 +440,14 @@
           chatBox.appendChild(info);
         }
         
-        // 如果还有更早的消息，在顶部显示加载提示
+        // 如果还有更早的消息，在顶部显示提示
         if (page > 1) {
           const tip = document.createElement('div');
           tip.style.textAlign = 'center';
           tip.style.padding = '10px';
           tip.style.color = 'var(--text-secondary)';
           tip.style.fontSize = '0.8rem';
-          tip.style.cursor = 'pointer';
+          tip.style.cursor = 'default';
           tip.id = 'loadMoreTip';
           tip.textContent = '⬆️ 继续上滑，加载更早的消息';
           chatBox.appendChild(tip);
@@ -460,34 +460,22 @@
           renderSingleMessage(msg, idx);
         });
         
-        // 滚动到底部（最新消息）
-        chatBox.scrollTop = chatBox.scrollHeight;
+        if (scrollToBottom) {
+          chatBox.scrollTop = chatBox.scrollHeight;
+        }
       }
 
       function loadPreviousPage() {
         if (currentPage <= 1) return;
-        // 记录当前滚动位置附近的消息ID，用于恢复位置
-        const firstMsg = chatBox.querySelector('.message-row');
-        let anchorId = null;
-        if (firstMsg) {
-          const idx = Array.from(chatBox.children).indexOf(firstMsg);
-          // 简单处理：用时间戳做锚点
-          const msgEl = firstMsg;
-          anchorId = msgEl.querySelector('.time-label')?.textContent;
-        }
-        
+        const oldScrollHeight = chatBox.scrollHeight;
+        const oldScrollTop = chatBox.scrollTop;
         currentPage--;
-        renderPage(currentPage);
-        
-        // 滚动到顶部附近（让用户看到刚加载的内容）
-        chatBox.scrollTop = 80;
-      }
-
-      function loadNextPage() {
-        if (currentPage >= totalPages) return;
-        currentPage++;
-        renderPage(currentPage);
-        chatBox.scrollTop = 80;
+        renderPage(currentPage, false);
+        const newScrollHeight = chatBox.scrollHeight;
+        let newScrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight);
+        const maxScroll = chatBox.scrollHeight - chatBox.clientHeight;
+        if (newScrollTop > maxScroll) newScrollTop = maxScroll;
+        chatBox.scrollTop = newScrollTop;
       }
 
       function updateScrollListener() {
@@ -499,7 +487,6 @@
 
       function handleScrollToTop() {
         if (scrollLoadLock) return;
-        // 滚动到顶部附近（距离顶部 < 30px），且还有更早的页
         if (chatBox.scrollTop < 30 && currentPage > 1) {
           scrollLoadLock = true;
           loadPreviousPage();
@@ -768,7 +755,7 @@
         if (e.target === this) this.classList.remove('active');
       });
 
-      // ============= 整合旧记忆（可暂停/继续） =============
+      // ============= 整合旧记忆 =============
       let reprocessingPaused = false;
       let reprocessingActive = false;
 
@@ -919,7 +906,7 @@
 
       // 启动
       renderAll(); 
-      if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，分页加载已启用（每页30条） 🧠':'👋 请先输入 API Key');
+      if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，分页已修复，可顺畅查看历史 🧠':'👋 请先输入 API Key');
     })();
   </script>
 </body>
