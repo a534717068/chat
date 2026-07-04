@@ -9,7 +9,6 @@
     if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); }); }
   </script>
   <style>
-    /* 全局样式 */
     :root {
       --bg: #f5f5f5; --surface: #ffffff; --text-primary: #1a1a2e; --text-secondary: #999;
       --border: #e0e0e0; --bubble-user-bg: #1a1a2e; --bubble-user-text: #ffffff;
@@ -153,7 +152,7 @@
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">密钥仅保存在手机 · 点击Token/花费可编辑 · 分页加载已修复</div>
+  <div class="tip">密钥仅保存在手机 · 点击Token/花费可编辑 · 无限加载历史</div>
 
   <!-- 记忆管理面板 -->
   <div class="modal-overlay" id="memoryModal">
@@ -232,7 +231,7 @@
       const MEMORY_FACTS_KEY = 'memory_facts_v3';
       const MEMORY_GRAPH_KEY = 'memory_graph_v3';
       const REPROGRESS_KEY = 'reprocess_progress_index';
-      const PAGE_SIZE = 30;
+      const BATCH_SIZE = 30;
 
       // ---------- 工具函数 ----------
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
@@ -364,6 +363,7 @@
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
       chatBox.addEventListener('scroll', () => scrollBtn.classList.toggle('visible', !nearBottom()));
       scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
+      
       window._switchVer = function(idx,dir) { const msg=messages[idx]; if (!msg||!msg.history||msg.history.length<2) return; const cur=msg.historyIndex||0, newIdx=cur+dir; if (newIdx<0||newIdx>=msg.history.length) return; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { msg.history[cur]={content:msg.content,reply:messages[idx+1].content,time:msg.time}; } else { msg.history[cur]={content:msg.content,reply:'',time:msg.time}; } const ver=msg.history[newIdx]; msg.content=ver.content; msg.time=ver.time; msg.historyIndex=newIdx; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { messages[idx+1].content=ver.reply||''; messages[idx+1].time=ver.time; } else { messages.splice(idx+1,0,{role:'assistant',content:ver.reply||'',id:nextId++,time:ver.time,parentId:msg.id}); } renderAll(); saveAll(); };
       window._delMsg = function(idx) { if (!confirm('删除这条及后续对话？')) return; messages=messages.slice(0,idx); renderAll(); saveAll(); };
       window._editMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='user') return; $('userInput').value=typeof msg.content==='string'?msg.content:''; $('userInput').focus(); editingIdx=idx; };
@@ -402,97 +402,8 @@
         return content.trim();
       }
 
-      // ============= 分页渲染核心（修复版） =============
-      let currentPage = 1;
-      let totalPages = 1;
-      let allRenderableMessages = [];
-
-      function renderAll() {
-        allRenderableMessages = messages.filter(m => m.role !== 'system');
-        totalPages = Math.ceil(allRenderableMessages.length / PAGE_SIZE);
-        if (totalPages === 0) totalPages = 1;
-        currentPage = totalPages;
-        renderPage(currentPage, true);
-        updateScrollListener();
-      }
-
-      function renderPage(page, scrollToBottom = true) {
-        const start = Math.max(0, (page - 1) * PAGE_SIZE);
-        const end = Math.min(allRenderableMessages.length, page * PAGE_SIZE);
-        const pageMessages = allRenderableMessages.slice(start, end);
-        
-        chatBox.innerHTML = '';
-        
-        // 顶部信息
-        if (allRenderableMessages.length > PAGE_SIZE) {
-          const info = document.createElement('div');
-          info.style.textAlign = 'center';
-          info.style.padding = '4px';
-          info.style.fontSize = '0.7rem';
-          info.style.color = 'var(--text-secondary)';
-          info.style.background = 'var(--surface)';
-          info.style.borderRadius = '4px';
-          info.style.marginBottom = '4px';
-          const total = allRenderableMessages.length;
-          const showStart = start + 1;
-          const showEnd = Math.min(end, total);
-          info.textContent = `显示 ${showStart} - ${showEnd} 条，共 ${total} 条消息`;
-          chatBox.appendChild(info);
-        }
-        
-        // 如果还有更早的消息，在顶部显示提示
-        if (page > 1) {
-          const tip = document.createElement('div');
-          tip.style.textAlign = 'center';
-          tip.style.padding = '10px';
-          tip.style.color = 'var(--text-secondary)';
-          tip.style.fontSize = '0.8rem';
-          tip.style.cursor = 'default';
-          tip.id = 'loadMoreTip';
-          tip.textContent = '⬆️ 继续上滑，加载更早的消息';
-          chatBox.appendChild(tip);
-        }
-        
-        // 渲染当前页消息
-        pageMessages.forEach((msg) => {
-          const idx = messages.indexOf(msg);
-          if (idx === -1) return;
-          renderSingleMessage(msg, idx);
-        });
-        
-        if (scrollToBottom) {
-          chatBox.scrollTop = chatBox.scrollHeight;
-        }
-      }
-
-      function loadPreviousPage() {
-        if (currentPage <= 1) return;
-        const oldScrollHeight = chatBox.scrollHeight;
-        const oldScrollTop = chatBox.scrollTop;
-        currentPage--;
-        renderPage(currentPage, false);
-        const newScrollHeight = chatBox.scrollHeight;
-        let newScrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight);
-        const maxScroll = chatBox.scrollHeight - chatBox.clientHeight;
-        if (newScrollTop > maxScroll) newScrollTop = maxScroll;
-        chatBox.scrollTop = newScrollTop;
-      }
-
-      function updateScrollListener() {
-        chatBox.removeEventListener('scroll', handleScrollToTop);
-        chatBox.addEventListener('scroll', handleScrollToTop);
-      }
-
-      let scrollLoadLock = false;
-
-      function handleScrollToTop() {
-        if (scrollLoadLock) return;
-        if (chatBox.scrollTop < 30 && currentPage > 1) {
-          scrollLoadLock = true;
-          loadPreviousPage();
-          setTimeout(() => { scrollLoadLock = false; }, 500);
-        }
-      }
+      // ============= 核心：无限加载（追加渲染） =============
+      let isLoadingMore = false;
 
       // 渲染单条消息
       function renderSingleMessage(msg, idx) {
@@ -520,16 +431,125 @@
           verHTML = `<div class="version-switcher"><button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button></div>`; 
         }
         row.innerHTML = `<div class="time-label">${timeStr}</div><div class="bubble-row"><div class="bubble-actions">${btns}</div><div class="bubble">${content}</div></div>${verHTML}`;
-        chatBox.appendChild(row);
+        return row;
       }
 
-      function addMsg(role, content) { 
-        const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 }; 
-        messages.push(msg); 
-        fullHistory.push({ role, content, time: msg.time }); 
-        saveFullHistory(); 
-        renderAll(); 
-        saveAll(); 
+      // 主渲染函数：显示最近 BATCH_SIZE 条 + 加载按钮
+      function renderAll() {
+        const allMessages = messages.filter(m => m.role !== 'system');
+        const total = allMessages.length;
+
+        chatBox.innerHTML = '';
+
+        // 如果总消息数 > BATCH_SIZE，在顶部加一个“加载更多”按钮
+        if (total > BATCH_SIZE) {
+          const loadBtn = document.createElement('div');
+          loadBtn.id = 'loadMoreBtn';
+          loadBtn.style.textAlign = 'center';
+          loadBtn.style.padding = '10px';
+          loadBtn.style.cursor = 'pointer';
+          loadBtn.style.color = 'var(--text-secondary)';
+          loadBtn.style.fontSize = '0.85rem';
+          loadBtn.style.background = 'var(--surface)';
+          loadBtn.style.borderRadius = '8px';
+          loadBtn.style.marginBottom = '6px';
+          loadBtn.textContent = `⬆️ 加载更早的 ${total - BATCH_SIZE} 条消息`;
+          loadBtn.onclick = function() {
+            loadMoreMessages();
+          };
+          chatBox.appendChild(loadBtn);
+        }
+
+        // 渲染最近 BATCH_SIZE 条
+        const startIdx = Math.max(0, total - BATCH_SIZE);
+        for (let i = startIdx; i < total; i++) {
+          const msg = allMessages[i];
+          const idx = messages.indexOf(msg);
+          if (idx === -1) continue;
+          const row = renderSingleMessage(msg, idx);
+          chatBox.appendChild(row);
+        }
+
+        // 滚动到底部
+        chatBox.scrollTop = chatBox.scrollHeight;
+        // 更新搜索高亮
+        if (searchKeyword) {
+          const marks = chatBox.querySelectorAll('mark');
+          searchTotal = marks.length;
+          if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) {
+            marks[searchMatchIndex].classList.add('current');
+          }
+        }
+        isLoadingMore = false;
+      }
+
+      // 加载更早的消息（追加到顶部）
+      function loadMoreMessages() {
+        if (isLoadingMore) return;
+        const allMessages = messages.filter(m => m.role !== 'system');
+        const total = allMessages.length;
+        const currentRendered = chatBox.querySelectorAll('.message-row').length;
+        
+        if (currentRendered >= total) {
+          const btn = document.getElementById('loadMoreBtn');
+          if (btn) {
+            btn.textContent = '✅ 已加载全部消息';
+            btn.style.cursor = 'default';
+            btn.onclick = null;
+          }
+          return;
+        }
+
+        isLoadingMore = true;
+
+        const remaining = total - currentRendered;
+        const loadCount = Math.min(BATCH_SIZE, remaining);
+        const startIdx = total - currentRendered - loadCount;
+        const endIdx = total - currentRendered - 1;
+
+        const fragment = document.createDocumentFragment();
+        for (let i = startIdx; i <= endIdx; i++) {
+          const msg = allMessages[i];
+          const idx = messages.indexOf(msg);
+          if (idx === -1) continue;
+          const row = renderSingleMessage(msg, idx);
+          fragment.appendChild(row);
+        }
+
+        const loadBtn = document.getElementById('loadMoreBtn');
+        if (loadBtn) {
+          const oldScrollTop = chatBox.scrollTop;
+          chatBox.insertBefore(fragment, loadBtn.nextSibling);
+          const newRemaining = total - chatBox.querySelectorAll('.message-row').length;
+          if (newRemaining > 0) {
+            loadBtn.textContent = `⬆️ 加载更早的 ${newRemaining} 条消息`;
+          } else {
+            loadBtn.textContent = '✅ 已加载全部消息';
+            loadBtn.style.cursor = 'default';
+            loadBtn.onclick = null;
+          }
+          chatBox.scrollTop = oldScrollTop;
+        } else {
+          chatBox.prepend(fragment);
+        }
+
+        isLoadingMore = false;
+        if (searchKeyword) {
+          const marks = chatBox.querySelectorAll('mark');
+          searchTotal = marks.length;
+          if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) {
+            marks[searchMatchIndex].classList.add('current');
+          }
+        }
+      }
+
+      function addMsg(role, content) {
+        const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 };
+        messages.push(msg);
+        fullHistory.push({ role, content, time: msg.time });
+        saveFullHistory();
+        renderAll();
+        saveAll();
       }
       
       function getNonSystemMessages() { return messages.filter(m => m.role !== 'system'); }
@@ -906,7 +926,7 @@
 
       // 启动
       renderAll(); 
-      if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，分页已修复，可顺畅查看历史 🧠':'👋 请先输入 API Key');
+      if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，无限加载已启用 🧠':'👋 请先输入 API Key');
     })();
   </script>
 </body>
