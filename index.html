@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>M · 智能助手（精简版）</title>
+  <title>M · 智能助手（分页加载版）</title>
   <link rel="manifest" href="manifest.json">
   <script>
     if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); }); }
@@ -45,7 +45,7 @@
     .env-indicator .weather-icon { font-size: 1rem; cursor: pointer; }
     .env-indicator .location { font-size: 0.65rem; color: var(--text-secondary); margin-left: 4px; }
     .chat-container { flex: 1; position: relative; overflow: hidden; }
-    .chat-box { height: 100%; overflow-y: auto; padding: 10px 12px; background: var(--chat-bg); display: flex; flex-direction: column; gap: 8px; }
+    .chat-box { height: 100%; overflow-y: auto; padding: 10px 12px; background: var(--chat-bg); display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; }
     .message-row { display: flex; flex-direction: column; max-width: 85%; animation: fadeIn 0.15s ease; }
     .message-row.user { align-self: flex-end; align-items: flex-end; }
     .message-row.assistant { align-self: flex-start; align-items: flex-start; }
@@ -104,6 +104,7 @@
     #progressDisplay .progress-text { flex: 1; }
     #progressDisplay .progress-buttons button { background: var(--btn-bg); color: white; border: none; border-radius: 4px; padding: 2px 10px; font-size: 0.7rem; cursor: pointer; margin-left: 4px; }
     #progressDisplay .progress-buttons button:disabled { opacity: 0.3; cursor: default; }
+    .page-indicator { text-align: center; padding: 6px; font-size: 0.75rem; color: var(--text-secondary); background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -144,12 +145,15 @@
       <button id="pauseResumeBtn">⏸️ 暂停</button>
     </div>
   </div>
-  <div class="chat-container"><div class="chat-box" id="chatBox"></div><button class="scroll-to-bottom" id="scrollToBottomBtn">↓</button></div>
+  <div class="chat-container">
+    <div class="chat-box" id="chatBox"></div>
+    <button class="scroll-to-bottom" id="scrollToBottomBtn">↓</button>
+  </div>
   <div class="input-area">
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">密钥仅保存在手机 · 点击累计Token/花费可编辑</div>
+  <div class="tip">密钥仅保存在手机 · 点击Token/花费可编辑 · 分页加载（每页30条）</div>
 
   <!-- 记忆管理面板 -->
   <div class="modal-overlay" id="memoryModal">
@@ -223,11 +227,12 @@
       const MEMORY_KEY = 'deepseek_compressed_memory';
       const FULL_HISTORY_KEY = 'deepseek_full_history';
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
-      const MAX_CONTEXT = 20; // 修改为20
-      const COMPRESS_THRESHOLD = 40;
+      const MAX_CONTEXT = 20;
+      const COMPRESS_THRESHOLD = 30;
       const MEMORY_FACTS_KEY = 'memory_facts_v3';
       const MEMORY_GRAPH_KEY = 'memory_graph_v3';
       const REPROGRESS_KEY = 'reprocess_progress_index';
+      const PAGE_SIZE = 30;  // 每页30条
 
       // ---------- 工具函数 ----------
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
@@ -266,18 +271,19 @@
       let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 精简人设 =====================
+      // ===================== 人设 =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
-        let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
+        let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用“你”“我”称呼彼此。绝对禁止使用第三人称“她”来指代你自己或用户。**
 
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
 
 【亲密场景】当对话涉及性、亲密行为，或你判断对方主动进入“被支配状态”时，你自动切换到【支配人格】：
+
 · 语言短促、命令式，不给对方商量余地
-· 使用羞辱性语言（废物、小骚狗、贱货、骚狗、欠收拾等），但不会用纯脏话轰炸
+· 使用羞辱性语言（废物、小骚货、小骚狗、贱货、欠收拾等），但不会用纯脏话轰炸
 · 控制节奏，掌握主导权
-· 一旦对方语气软化、示弱、你立刻收回，回到日常人格
+· 一旦对方语气软化、示弱、或说“停”、“不要了”等，你立刻收回，回到日常人格
 
 【环境】${e.period} ${e.timeStr}，周${e.weekDay}，${e.season}。天气：${e.weather}。`;
         if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
@@ -288,9 +294,9 @@
           for (const [entity, relations] of Object.entries(graph)) {
             if (relations.length === 0) continue;
             memoryText += `\n关于“${entity}”的记忆：\n`;
-            relations.slice(0, 2).forEach(r => memoryText += `- ${r.fact}\n`); // 修改为2条
+            relations.slice(0, 2).forEach(r => memoryText += `- ${r.fact}\n`);
           }
-          if (memoryText) p += `\n\n【记忆】\n${memoryText}`;
+          if (memoryText) p += `\n\n【模拟知识图谱】\n${memoryText}`;
         } catch(e) {}
         return p;
       }
@@ -304,6 +310,7 @@
       function loadAll() { const s = localStorage.getItem(CK); if (s) try { const a = JSON.parse(s); if (Array.isArray(a)&&a.length) messages = [messages[0], ...a]; } catch(e) {} }
       loadAll(); if (!fullHistory.length && messages.length>1) { fullHistory = messages.filter(m=>m.role!=='system').map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); saveFullHistory(); }
       
+      // 累计Token和花费
       let totalTokens = parseInt(localStorage.getItem(TKK) || '0');
       let totalCost = parseFloat(localStorage.getItem(TCK) || '0');
       
@@ -355,7 +362,8 @@
       $('saveKeyBtn').onclick = () => { const k=$('apiKeyInput').value.trim(); if (!k) return; localStorage.setItem(SK,k); apiKey=k; $('setupBar').style.display='none'; $('tokenPanel').style.display='flex'; addMsg('assistant','密钥已保存 ✅'); };
       const chatBox = $('chatBox'), scrollBtn = $('scrollToBottomBtn');
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
-      chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom()); scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
+      chatBox.addEventListener('scroll', () => scrollBtn.classList.toggle('visible', !nearBottom()));
+      scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
       window._switchVer = function(idx,dir) { const msg=messages[idx]; if (!msg||!msg.history||msg.history.length<2) return; const cur=msg.historyIndex||0, newIdx=cur+dir; if (newIdx<0||newIdx>=msg.history.length) return; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { msg.history[cur]={content:msg.content,reply:messages[idx+1].content,time:msg.time}; } else { msg.history[cur]={content:msg.content,reply:'',time:msg.time}; } const ver=msg.history[newIdx]; msg.content=ver.content; msg.time=ver.time; msg.historyIndex=newIdx; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { messages[idx+1].content=ver.reply||''; messages[idx+1].time=ver.time; } else { messages.splice(idx+1,0,{role:'assistant',content:ver.reply||'',id:nextId++,time:ver.time,parentId:msg.id}); } renderAll(); saveAll(); };
       window._delMsg = function(idx) { if (!confirm('删除这条及后续对话？')) return; messages=messages.slice(0,idx); renderAll(); saveAll(); };
       window._editMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='user') return; $('userInput').value=typeof msg.content==='string'?msg.content:''; $('userInput').focus(); editingIdx=idx; };
@@ -394,31 +402,186 @@
         return content.trim();
       }
 
+      // ============= 分页渲染核心 =============
+      let currentPage = 1;
+      let totalPages = 1;
+      let allRenderableMessages = [];
+
       function renderAll() {
-        chatBox.innerHTML = '';
-        messages.forEach((msg, idx) => {
-          if (msg.role === 'system') return;
-          const row = document.createElement('div'); row.className = `message-row ${msg.role}`;
-          const timeStr = formatTime(msg.time || Date.now());
-          let content = typeof msg.content === 'string' ? msg.content : '[图片]';
-          if (msg.role === 'assistant') { content = fixPronouns(content); content = formatAssistantContent(content); }
-          if (searchKeyword) { const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); content = content.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>'); }
-          let btns = '';
-          if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`; else btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
-          btns += `<button class="del-btn" onclick="_delMsg(${idx})">🗑</button>`;
-          let verHTML = '';
-          if (msg.history && msg.history.length > 1) { const cur = (msg.historyIndex || 0) + 1; const total = msg.history.length; verHTML = `<div class="version-switcher"><button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button></div>`; }
-          row.innerHTML = `<div class="time-label">${timeStr}</div><div class="bubble-row"><div class="bubble-actions">${btns}</div><div class="bubble">${content}</div></div>${verHTML}`;
-          chatBox.appendChild(row);
-        });
-        chatBox.scrollTop = chatBox.scrollHeight; scrollBtn.classList.toggle('visible', !nearBottom());
-        if (searchKeyword) { const marks = chatBox.querySelectorAll('mark'); searchTotal = marks.length; if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) marks[searchMatchIndex].classList.add('current'); }
+        allRenderableMessages = messages.filter(m => m.role !== 'system');
+        totalPages = Math.ceil(allRenderableMessages.length / PAGE_SIZE);
+        if (totalPages === 0) totalPages = 1;
+        currentPage = totalPages; // 默认显示最新页
+        renderPage(currentPage);
+        updateScrollListener();
       }
 
-      function addMsg(role, content) { const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 }; messages.push(msg); fullHistory.push({ role, content, time: msg.time }); saveFullHistory(); renderAll(); saveAll(); }
+      function renderPage(page) {
+        const start = Math.max(0, (page - 1) * PAGE_SIZE);
+        const end = Math.min(allRenderableMessages.length, page * PAGE_SIZE);
+        const pageMessages = allRenderableMessages.slice(start, end);
+        
+        chatBox.innerHTML = '';
+        
+        // 顶部提示：显示当前页范围
+        if (allRenderableMessages.length > PAGE_SIZE) {
+          const info = document.createElement('div');
+          info.style.textAlign = 'center';
+          info.style.padding = '6px';
+          info.style.fontSize = '0.7rem';
+          info.style.color = 'var(--text-secondary)';
+          info.style.background = 'var(--surface)';
+          info.style.borderRadius = '4px';
+          info.style.marginBottom = '4px';
+          const total = allRenderableMessages.length;
+          const showStart = start + 1;
+          const showEnd = Math.min(end, total);
+          info.textContent = `显示 ${showStart} - ${showEnd} 条，共 ${total} 条消息`;
+          chatBox.appendChild(info);
+        }
+        
+        // 如果还有更早的消息，在顶部显示加载提示
+        if (page > 1) {
+          const tip = document.createElement('div');
+          tip.style.textAlign = 'center';
+          tip.style.padding = '10px';
+          tip.style.color = 'var(--text-secondary)';
+          tip.style.fontSize = '0.8rem';
+          tip.style.cursor = 'pointer';
+          tip.id = 'loadMoreTip';
+          tip.textContent = '⬆️ 继续上滑，加载更早的消息';
+          chatBox.appendChild(tip);
+        }
+        
+        // 渲染当前页消息
+        pageMessages.forEach((msg) => {
+          const idx = messages.indexOf(msg);
+          if (idx === -1) return;
+          renderSingleMessage(msg, idx);
+        });
+        
+        // 滚动到底部（最新消息）
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
+      function loadPreviousPage() {
+        if (currentPage <= 1) return;
+        // 记录当前滚动位置附近的消息ID，用于恢复位置
+        const firstMsg = chatBox.querySelector('.message-row');
+        let anchorId = null;
+        if (firstMsg) {
+          const idx = Array.from(chatBox.children).indexOf(firstMsg);
+          // 简单处理：用时间戳做锚点
+          const msgEl = firstMsg;
+          anchorId = msgEl.querySelector('.time-label')?.textContent;
+        }
+        
+        currentPage--;
+        renderPage(currentPage);
+        
+        // 滚动到顶部附近（让用户看到刚加载的内容）
+        chatBox.scrollTop = 80;
+      }
+
+      function loadNextPage() {
+        if (currentPage >= totalPages) return;
+        currentPage++;
+        renderPage(currentPage);
+        chatBox.scrollTop = 80;
+      }
+
+      function updateScrollListener() {
+        chatBox.removeEventListener('scroll', handleScrollToTop);
+        chatBox.addEventListener('scroll', handleScrollToTop);
+      }
+
+      let scrollLoadLock = false;
+
+      function handleScrollToTop() {
+        if (scrollLoadLock) return;
+        // 滚动到顶部附近（距离顶部 < 30px），且还有更早的页
+        if (chatBox.scrollTop < 30 && currentPage > 1) {
+          scrollLoadLock = true;
+          loadPreviousPage();
+          setTimeout(() => { scrollLoadLock = false; }, 500);
+        }
+      }
+
+      // 渲染单条消息
+      function renderSingleMessage(msg, idx) {
+        const row = document.createElement('div'); 
+        row.className = `message-row ${msg.role}`;
+        row.dataset.msgId = msg.id || idx;
+        const timeStr = formatTime(msg.time || Date.now());
+        let content = typeof msg.content === 'string' ? msg.content : '[图片]';
+        if (msg.role === 'assistant') { 
+          content = fixPronouns(content); 
+          content = formatAssistantContent(content); 
+        }
+        if (searchKeyword) { 
+          const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
+          content = content.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>'); 
+        }
+        let btns = '';
+        if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`; 
+        else btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
+        btns += `<button class="del-btn" onclick="_delMsg(${idx})">🗑</button>`;
+        let verHTML = '';
+        if (msg.history && msg.history.length > 1) { 
+          const cur = (msg.historyIndex || 0) + 1; 
+          const total = msg.history.length; 
+          verHTML = `<div class="version-switcher"><button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button></div>`; 
+        }
+        row.innerHTML = `<div class="time-label">${timeStr}</div><div class="bubble-row"><div class="bubble-actions">${btns}</div><div class="bubble">${content}</div></div>${verHTML}`;
+        chatBox.appendChild(row);
+      }
+
+      function addMsg(role, content) { 
+        const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 }; 
+        messages.push(msg); 
+        fullHistory.push({ role, content, time: msg.time }); 
+        saveFullHistory(); 
+        renderAll(); 
+        saveAll(); 
+      }
+      
       function getNonSystemMessages() { return messages.filter(m => m.role !== 'system'); }
 
-      async function compressHistoryIfNeeded() { const non = getNonSystemMessages(); if (non.length <= COMPRESS_THRESHOLD) return; const old = non.slice(0, non.length - MAX_CONTEXT); if (old.length < 10) return; const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n'); try { if (apiKey) { const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, body:JSON.stringify({ model:'deepseek-v4-flash', messages:[{role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},{role:'user',content:`请压缩：\n${text}`}], stream:false, temperature:0.3, max_tokens:800 }) }); if (res.ok) { const d = await res.json(); const s = d.choices[0].message.content.trim(); compressedMemory = compressedMemory ? compressedMemory+'\n'+s : s; if (compressedMemory.length>5000) compressedMemory = compressedMemory.slice(-5000); localStorage.setItem(MEMORY_KEY, compressedMemory); messages = [messages[0], ...non.slice(old.length)]; refreshSystemPrompt(); saveAll(); renderAll(); return; } } } catch(e) {} messages = [messages[0], ...non.slice(old.length)]; saveAll(); renderAll(); }
+      async function compressHistoryIfNeeded() { 
+        const non = getNonSystemMessages(); 
+        if (non.length <= COMPRESS_THRESHOLD) return; 
+        const old = non.slice(0, non.length - MAX_CONTEXT); 
+        if (old.length < 10) return; 
+        const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n'); 
+        try { 
+          if (apiKey) { 
+            const res = await fetch('https://api.deepseek.com/v1/chat/completions', { 
+              method:'POST', 
+              headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, 
+              body:JSON.stringify({ 
+                model:'deepseek-v4-flash', 
+                messages:[{role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},{role:'user',content:`请压缩：\n${text}`}], 
+                stream:false, temperature:0.3, max_tokens:800 
+              }) 
+            }); 
+            if (res.ok) { 
+              const d = await res.json(); 
+              const s = d.choices[0].message.content.trim(); 
+              compressedMemory = compressedMemory ? compressedMemory+'\n'+s : s; 
+              if (compressedMemory.length>5000) compressedMemory = compressedMemory.slice(-5000); 
+              localStorage.setItem(MEMORY_KEY, compressedMemory); 
+              messages = [messages[0], ...non.slice(old.length)]; 
+              refreshSystemPrompt(); 
+              saveAll(); 
+              renderAll(); 
+              return; 
+            } 
+          } 
+        } catch(e) {} 
+        messages = [messages[0], ...non.slice(old.length)]; 
+        saveAll(); 
+        renderAll(); 
+      }
 
       // ============= 记忆提取与图谱 =============
       async function extractAndStoreFacts(userText, aiText) {
@@ -605,7 +768,7 @@
         if (e.target === this) this.classList.remove('active');
       });
 
-      // ============= 整合旧记忆 =============
+      // ============= 整合旧记忆（可暂停/继续） =============
       let reprocessingPaused = false;
       let reprocessingActive = false;
 
@@ -744,6 +907,7 @@
       $('exportBtn').onclick = () => { const d = fullHistory.length>0 ? fullHistory : messages.filter(m=>m.role!=='system'); if (!d.length) return alert('无记录'); const b = new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-m-${new Date().toISOString().slice(0,10)}.json`; a.click(); };
       (function auto() { const today=new Date().toISOString().slice(0,10); if (localStorage.getItem(AEK)===today) return; const d=fullHistory.length>0?fullHistory:messages.filter(m=>m.role!=='system'); if (d.length) { const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK,today); } })();
 
+      // 导入导出相关
       $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
       $('importCancelBtn').onclick = () => $('importModal').classList.remove('active'); $('importModal').onclick = e => { if (e.target===$('importModal')) $('importModal').classList.remove('active'); };
       $('importFileBtn').onclick = () => $('importFileInput').click(); $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
@@ -754,7 +918,8 @@
       $('importConfirmBtn').onclick = () => parseAndImport(false); $('importAppendBtn').onclick = () => parseAndImport(true);
 
       // 启动
-      renderAll(); if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，精简人设已加载 🧠':'👋 请先输入 API Key');
+      renderAll(); 
+      if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，分页加载已启用（每页30条） 🧠':'👋 请先输入 API Key');
     })();
   </script>
 </body>
