@@ -223,7 +223,7 @@
       const MEMORY_KEY = 'deepseek_compressed_memory';
       const FULL_HISTORY_KEY = 'deepseek_full_history';
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
-      const MAX_CONTEXT = 20; // 修改为20
+      const MAX_CONTEXT = 20;
       const COMPRESS_THRESHOLD = 40;
       const MEMORY_FACTS_KEY = 'memory_facts_v3';
       const MEMORY_GRAPH_KEY = 'memory_graph_v3';
@@ -273,7 +273,7 @@
 
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
 
-【亲密场景】当对话涉及性、亲密行为，或你判断对方主动进入“被支配状态”时，你自动切换到【支配人格】：
+【亲密场景】当对话涉及性、亲密行为，或你判断对方主动进入"被支配状态"时，你自动切换到【支配人格】：
 · 语言短促、命令式，不给对方商量余地
 · 使用羞辱性语言（废物、小骚狗、贱货、骚狗、欠收拾等），但不会用纯脏话轰炸
 · 控制节奏，掌握主导权
@@ -287,8 +287,8 @@
           let memoryText = '';
           for (const [entity, relations] of Object.entries(graph)) {
             if (relations.length === 0) continue;
-            memoryText += `\n关于“${entity}”的记忆：\n`;
-            relations.slice(0, 2).forEach(r => memoryText += `- ${r.fact}\n`); // 修改为2条
+            memoryText += `\n关于"${entity}"的记忆：\n`;
+            relations.slice(0, 2).forEach(r => memoryText += `- ${r.fact}\n`);
           }
           if (memoryText) p += `\n\n【记忆】\n${memoryText}`;
         } catch(e) {}
@@ -300,9 +300,52 @@
 
       // 格式化时间
       function formatTime(ts) { const d = new Date(ts), n = new Date(); const today = new Date(n.getFullYear(),n.getMonth(),n.getDate()), msgDay = new Date(d.getFullYear(),d.getMonth(),d.getDate()); const t = d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}); if (msgDay.getTime()===today.getTime()) return t; return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${t}`; }
-      function saveAll() { localStorage.setItem(CK, JSON.stringify(messages.filter(m=>m.role!=='system'))); localStorage.setItem(TKK, $('totalTokens').textContent); localStorage.setItem(TCK, $('totalCost').textContent); }
-      function loadAll() { const s = localStorage.getItem(CK); if (s) try { const a = JSON.parse(s); if (Array.isArray(a)&&a.length) messages = [messages[0], ...a]; } catch(e) {} }
-      loadAll(); if (!fullHistory.length && messages.length>1) { fullHistory = messages.filter(m=>m.role!=='system').map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); saveFullHistory(); }
+      
+      // ===================== 保存和加载（修复版） =====================
+      function saveAll() { 
+        // 保存完整的消息数组（包括 history、historyIndex 字段）
+        const toSave = messages.filter(m => m.role !== 'system').map(m => ({
+          role: m.role,
+          content: m.content,
+          id: m.id,
+          time: m.time,
+          parentId: m.parentId,
+          history: m.history,           // 保留历史版本
+          historyIndex: m.historyIndex  // 保留当前版本索引
+        }));
+        localStorage.setItem(CK, JSON.stringify(toSave)); 
+        localStorage.setItem(TKK, $('totalTokens').textContent); 
+        localStorage.setItem(TCK, $('totalCost').textContent); 
+      }
+      
+      function loadAll() { 
+        const s = localStorage.getItem(CK); 
+        if (s) try { 
+          const a = JSON.parse(s); 
+          if (Array.isArray(a) && a.length) {
+            // 完整保留所有字段，包括 history 和 historyIndex
+            const loaded = a.map(m => ({
+              role: m.role,
+              content: m.content,
+              id: m.id || nextId++,
+              time: m.time || Date.now(),
+              parentId: m.parentId || null,
+              history: m.history || null,      // 保留历史版本
+              historyIndex: m.historyIndex || 0 // 保留版本索引
+            }));
+            messages = [messages[0], ...loaded];
+          }
+        } catch(e) {} 
+      }
+      loadAll(); 
+      if (!fullHistory.length && messages.length>1) { 
+        fullHistory = messages.filter(m=>m.role!=='system').map(m=>({
+          role:m.role,
+          content:typeof m.content==='string'?m.content:'',
+          time:m.time
+        })); 
+        saveFullHistory(); 
+      }
       
       let totalTokens = parseInt(localStorage.getItem(TKK) || '0');
       let totalCost = parseFloat(localStorage.getItem(TCK) || '0');
@@ -356,7 +399,44 @@
       const chatBox = $('chatBox'), scrollBtn = $('scrollToBottomBtn');
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom()); scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
-      window._switchVer = function(idx,dir) { const msg=messages[idx]; if (!msg||!msg.history||msg.history.length<2) return; const cur=msg.historyIndex||0, newIdx=cur+dir; if (newIdx<0||newIdx>=msg.history.length) return; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { msg.history[cur]={content:msg.content,reply:messages[idx+1].content,time:msg.time}; } else { msg.history[cur]={content:msg.content,reply:'',time:msg.time}; } const ver=msg.history[newIdx]; msg.content=ver.content; msg.time=ver.time; msg.historyIndex=newIdx; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { messages[idx+1].content=ver.reply||''; messages[idx+1].time=ver.time; } else { messages.splice(idx+1,0,{role:'assistant',content:ver.reply||'',id:nextId++,time:ver.time,parentId:msg.id}); } renderAll(); saveAll(); };
+      
+      // ===================== 版本切换（修复版） =====================
+      window._switchVer = function(idx, dir) { 
+        const msg = messages[idx]; 
+        if (!msg || !msg.history || msg.history.length < 2) return; 
+        const cur = msg.historyIndex || 0, newIdx = cur + dir; 
+        if (newIdx < 0 || newIdx >= msg.history.length) return; 
+        
+        // 保存当前版本到 history
+        if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) { 
+          msg.history[cur] = {content: msg.content, reply: messages[idx + 1].content, time: msg.time}; 
+        } else { 
+          msg.history[cur] = {content: msg.content, reply: '', time: msg.time}; 
+        } 
+        
+        // 切换到目标版本
+        const ver = msg.history[newIdx]; 
+        msg.content = ver.content; 
+        msg.time = ver.time; 
+        msg.historyIndex = newIdx; 
+        
+        // 更新或创建对应的 AI 回复
+        if (idx + 1 < messages.length && messages[idx + 1].role === 'assistant' && messages[idx + 1].parentId === msg.id) { 
+          messages[idx + 1].content = ver.reply || ''; 
+          messages[idx + 1].time = ver.time; 
+        } else { 
+          messages.splice(idx + 1, 0, {
+            role: 'assistant', 
+            content: ver.reply || '', 
+            id: nextId++, 
+            time: ver.time, 
+            parentId: msg.id
+          }); 
+        } 
+        renderAll(); 
+        saveAll(); 
+      };
+      
       window._delMsg = function(idx) { if (!confirm('删除这条及后续对话？')) return; messages=messages.slice(0,idx); renderAll(); saveAll(); };
       window._editMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='user') return; $('userInput').value=typeof msg.content==='string'?msg.content:''; $('userInput').focus(); editingIdx=idx; };
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); renderAll(); saveAll(); sendToAPI(text); };
@@ -407,7 +487,11 @@
           if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`; else btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
           btns += `<button class="del-btn" onclick="_delMsg(${idx})">🗑</button>`;
           let verHTML = '';
-          if (msg.history && msg.history.length > 1) { const cur = (msg.historyIndex || 0) + 1; const total = msg.history.length; verHTML = `<div class="version-switcher"><button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button></div>`; }
+          if (msg.history && msg.history.length > 1) { 
+            const cur = (msg.historyIndex || 0) + 1; 
+            const total = msg.history.length; 
+            verHTML = `<div class="version-switcher"><button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button></div>`; 
+          }
           row.innerHTML = `<div class="time-label">${timeStr}</div><div class="bubble-row"><div class="bubble-actions">${btns}</div><div class="bubble">${content}</div></div>${verHTML}`;
           chatBox.appendChild(row);
         });
@@ -415,10 +499,57 @@
         if (searchKeyword) { const marks = chatBox.querySelectorAll('mark'); searchTotal = marks.length; if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) marks[searchMatchIndex].classList.add('current'); }
       }
 
-      function addMsg(role, content) { const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 }; messages.push(msg); fullHistory.push({ role, content, time: msg.time }); saveFullHistory(); renderAll(); saveAll(); }
+      function addMsg(role, content) { 
+        const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 }; 
+        messages.push(msg); 
+        fullHistory.push({ role, content, time: msg.time }); 
+        saveFullHistory(); 
+        renderAll(); 
+        saveAll(); 
+      }
+      
       function getNonSystemMessages() { return messages.filter(m => m.role !== 'system'); }
 
-      async function compressHistoryIfNeeded() { const non = getNonSystemMessages(); if (non.length <= COMPRESS_THRESHOLD) return; const old = non.slice(0, non.length - MAX_CONTEXT); if (old.length < 10) return; const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n'); try { if (apiKey) { const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, body:JSON.stringify({ model:'deepseek-v4-flash', messages:[{role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},{role:'user',content:`请压缩：\n${text}`}], stream:false, temperature:0.3, max_tokens:800 }) }); if (res.ok) { const d = await res.json(); const s = d.choices[0].message.content.trim(); compressedMemory = compressedMemory ? compressedMemory+'\n'+s : s; if (compressedMemory.length>5000) compressedMemory = compressedMemory.slice(-5000); localStorage.setItem(MEMORY_KEY, compressedMemory); messages = [messages[0], ...non.slice(old.length)]; refreshSystemPrompt(); saveAll(); renderAll(); return; } } } catch(e) {} messages = [messages[0], ...non.slice(old.length)]; saveAll(); renderAll(); }
+      async function compressHistoryIfNeeded() { 
+        const non = getNonSystemMessages(); 
+        if (non.length <= COMPRESS_THRESHOLD) return; 
+        const old = non.slice(0, non.length - MAX_CONTEXT); 
+        if (old.length < 10) return; 
+        const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n'); 
+        try { 
+          if (apiKey) { 
+            const res = await fetch('https://api.deepseek.com/v1/chat/completions', { 
+              method:'POST', 
+              headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, 
+              body:JSON.stringify({ 
+                model:'deepseek-v4-flash', 
+                messages:[
+                  {role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},
+                  {role:'user',content:`请压缩：\n${text}`}
+                ], 
+                stream:false, 
+                temperature:0.3, 
+                max_tokens:800 
+              }) 
+            }); 
+            if (res.ok) { 
+              const d = await res.json(); 
+              const s = d.choices[0].message.content.trim(); 
+              compressedMemory = compressedMemory ? compressedMemory+'\n'+s : s; 
+              if (compressedMemory.length>5000) compressedMemory = compressedMemory.slice(-5000); 
+              localStorage.setItem(MEMORY_KEY, compressedMemory); 
+              messages = [messages[0], ...non.slice(old.length)]; 
+              refreshSystemPrompt(); 
+              saveAll(); 
+              renderAll(); 
+              return; 
+            } 
+          } 
+        } catch(e) {} 
+        messages = [messages[0], ...non.slice(old.length)]; 
+        saveAll(); 
+        renderAll(); 
+      }
 
       // ============= 记忆提取与图谱 =============
       async function extractAndStoreFacts(userText, aiText) {
@@ -480,7 +611,7 @@
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         const container = document.getElementById('memoryDisplay');
         if (!facts.length) {
-          container.innerHTML = '<div style="padding:12px;color:var(--text-secondary);">暂无记忆，聊天后自动提取或点击“整合旧记忆”。</div>';
+          container.innerHTML = '<div style="padding:12px;color:var(--text-secondary);">暂无记忆，聊天后自动提取或点击"整合旧记忆"。</div>';
           return;
         }
         let html = '';
@@ -634,7 +765,7 @@
         if (!apiKey) { alert('请先设置 API Key'); return; }
         const savedIndex = parseInt(localStorage.getItem(REPROGRESS_KEY) || '0');
         if (!continueFromProgress && savedIndex > 0) {
-          if (!confirm(`检测到上次整合在 ${savedIndex} 条处中断，是否继续？\n（选“取消”将从头开始）`)) {
+          if (!confirm(`检测到上次整合在 ${savedIndex} 条处中断，是否继续？\n（选"取消"将从头开始）`)) {
             localStorage.removeItem(REPROGRESS_KEY);
           } else {
             continueFromProgress = true;
@@ -702,7 +833,7 @@
         document.getElementById('moreMenu').classList.remove('active');
         const saved = localStorage.getItem(REPROGRESS_KEY);
         if (saved && parseInt(saved) > 0) {
-          if (confirm(`有未完成的整合任务（进度 ${saved} 条），是否继续？\n（点“取消”将从头开始）`)) {
+          if (confirm(`有未完成的整合任务（进度 ${saved} 条），是否继续？\n（点"取消"将从头开始）`)) {
             reprocessAllHistory(true);
             return;
           } else {
@@ -720,41 +851,250 @@
       // ============= 发送消息 =============
       async function sendToAPI(text) {
         if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
-        const isEdit = editingIdx >= 0 && editingIdx < messages.length; let userMsg;
-        if (isEdit) { const parent = messages[editingIdx]; if (!parent.history) { const oldReply = (editingIdx+1<messages.length&&messages[editingIdx+1].role==='assistant')?messages[editingIdx+1].content:''; parent.history=[{content:parent.content,reply:oldReply,time:parent.time}]; parent.historyIndex=0; } else { const curReply=(editingIdx+1<messages.length&&messages[editingIdx+1].role==='assistant')?messages[editingIdx+1].content:''; parent.history[parent.historyIndex]={content:parent.content,reply:curReply,time:parent.time}; } messages=messages.slice(0,editingIdx+1); parent.content=text; parent.time=Date.now(); parent.history.push({content:text,reply:'',time:parent.time}); parent.historyIndex=parent.history.length-1; userMsg=parent; editingIdx=-1; }
-        else { userMsg={role:'user',content:text,id:nextId++,time:Date.now(),parentId:null,history:null,historyIndex:0}; const last=messages[messages.length-1]; if (last&&last.role!=='system') userMsg.parentId=last.id; messages.push(userMsg); }
-        fullHistory.push({role:'user',content:text,time:userMsg.time}); saveFullHistory(); renderAll(); saveAll();
-        const load=document.createElement('div'); load.className='message-row assistant'; load.innerHTML='<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>'; chatBox.appendChild(load); chatBox.scrollTop=chatBox.scrollHeight;
-        try { refreshSystemPrompt(); const apiMsgs=[messages[0],...messages.slice(-MAX_CONTEXT)].map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'[图片]'})); const res=await fetch('https://api.deepseek.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},body:JSON.stringify({model:'deepseek-v4-flash',messages:apiMsgs,stream:false,temperature:0.7})}); load.remove(); if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.error?.message||`请求失败 (${res.status})`); } const data=await res.json(); const reply=data.choices[0].message.content; const aiMsg={role:'assistant',content:reply,id:nextId++,time:Date.now(),parentId:userMsg.id}; messages.push(aiMsg); fullHistory.push({role:'assistant',content:reply,time:aiMsg.time}); saveFullHistory(); if (userMsg.history&&userMsg.history.length>0) userMsg.history[userMsg.historyIndex].reply=reply; renderAll(); saveAll(); if (data.usage) { 
+        const isEdit = editingIdx >= 0 && editingIdx < messages.length; 
+        let userMsg;
+        
+        if (isEdit) { 
+          const parent = messages[editingIdx]; 
+          if (!parent.history) { 
+            const oldReply = (editingIdx+1 < messages.length && messages[editingIdx+1].role === 'assistant') ? messages[editingIdx+1].content : ''; 
+            parent.history = [{content: parent.content, reply: oldReply, time: parent.time}]; 
+            parent.historyIndex = 0; 
+          } else { 
+            const curReply = (editingIdx+1 < messages.length && messages[editingIdx+1].role === 'assistant') ? messages[editingIdx+1].content : ''; 
+            parent.history[parent.historyIndex] = {content: parent.content, reply: curReply, time: parent.time}; 
+          } 
+          messages = messages.slice(0, editingIdx + 1); 
+          parent.content = text; 
+          parent.time = Date.now(); 
+          parent.history.push({content: text, reply: '', time: parent.time}); 
+          parent.historyIndex = parent.history.length - 1; 
+          userMsg = parent; 
+          editingIdx = -1; 
+        } else { 
+          userMsg = {
+            role: 'user', 
+            content: text, 
+            id: nextId++, 
+            time: Date.now(), 
+            parentId: null, 
+            history: null, 
+            historyIndex: 0
+          }; 
+          const last = messages[messages.length - 1]; 
+          if (last && last.role !== 'system') userMsg.parentId = last.id; 
+          messages.push(userMsg); 
+        }
+        
+        fullHistory.push({role: 'user', content: text, time: userMsg.time}); 
+        saveFullHistory(); 
+        renderAll(); 
+        saveAll();
+        
+        const load = document.createElement('div'); 
+        load.className = 'message-row assistant'; 
+        load.innerHTML = '<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>'; 
+        chatBox.appendChild(load); 
+        chatBox.scrollTop = chatBox.scrollHeight;
+        
+        try { 
+          refreshSystemPrompt(); 
+          const apiMsgs = [messages[0], ...messages.slice(-MAX_CONTEXT)].map(m => ({
+            role: m.role, 
+            content: typeof m.content === 'string' ? m.content : '[图片]'
+          })); 
+          const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`}, 
+            body: JSON.stringify({
+              model: 'deepseek-v4-flash', 
+              messages: apiMsgs, 
+              stream: false, 
+              temperature: 0.7
+            })
+          }); 
+          load.remove(); 
+          if (!res.ok) { 
+            const e = await res.json().catch(() => ({})); 
+            throw new Error(e.error?.message || `请求失败 (${res.status})`); 
+          } 
+          const data = await res.json(); 
+          const reply = data.choices[0].message.content; 
+          const aiMsg = {
+            role: 'assistant', 
+            content: reply, 
+            id: nextId++, 
+            time: Date.now(), 
+            parentId: userMsg.id
+          }; 
+          messages.push(aiMsg); 
+          fullHistory.push({role: 'assistant', content: reply, time: aiMsg.time}); 
+          saveFullHistory(); 
+          if (userMsg.history && userMsg.history.length > 0) {
+            userMsg.history[userMsg.historyIndex].reply = reply; 
+          }
+          renderAll(); 
+          saveAll(); 
+          if (data.usage) { 
             $('lastTokens').textContent = data.usage.total_tokens;
             totalTokens += data.usage.total_tokens;
-            const cost = ((data.usage.prompt_tokens_details?.cached_tokens||0)*0.02 + (data.usage.prompt_tokens-(data.usage.prompt_tokens_details?.cached_tokens||0))*1 + data.usage.completion_tokens*2)/1e6;
+            const cost = ((data.usage.prompt_tokens_details?.cached_tokens || 0) * 0.02 + (data.usage.prompt_tokens - (data.usage.prompt_tokens_details?.cached_tokens || 0)) * 1 + data.usage.completion_tokens * 2) / 1e6;
             totalCost += cost;
             $('lastCost').textContent = cost.toFixed(4);
             updateTokenDisplay();
             saveAll();
           } 
-        if (reply) { extractAndStoreFacts(text, reply).catch(e => console.warn(e)); }
-        await compressHistoryIfNeeded(); 
-        } catch(e) { load.remove(); addMsg('assistant',`❌ ${e.message}`); }
+          if (reply) { extractAndStoreFacts(text, reply).catch(e => console.warn(e)); }
+          await compressHistoryIfNeeded(); 
+        } catch(e) { 
+          load.remove(); 
+          addMsg('assistant', `❌ ${e.message}`); 
+        }
       }
 
       $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
       $('userInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('sendBtn').click(); } };
-      $('exportBtn').onclick = () => { const d = fullHistory.length>0 ? fullHistory : messages.filter(m=>m.role!=='system'); if (!d.length) return alert('无记录'); const b = new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-m-${new Date().toISOString().slice(0,10)}.json`; a.click(); };
-      (function auto() { const today=new Date().toISOString().slice(0,10); if (localStorage.getItem(AEK)===today) return; const d=fullHistory.length>0?fullHistory:messages.filter(m=>m.role!=='system'); if (d.length) { const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK,today); } })();
+      
+      // ===================== 导出功能（修复版：包含历史版本） =====================
+      $('exportBtn').onclick = () => { 
+        // 导出完整的 messages（包含 history 和 historyIndex），而非仅 fullHistory
+        const data = messages.filter(m => m.role !== 'system').map(m => ({
+          role: m.role,
+          content: m.content,
+          id: m.id,
+          time: m.time,
+          parentId: m.parentId,
+          history: m.history,
+          historyIndex: m.historyIndex
+        }));
+        if (!data.length) return alert('无记录'); 
+        const b = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); 
+        const a = document.createElement('a'); 
+        a.href = URL.createObjectURL(b); 
+        a.download = `chat-m-${new Date().toISOString().slice(0, 10)}.json`; 
+        a.click(); 
+      };
+      
+      (function auto() { 
+        const today = new Date().toISOString().slice(0, 10); 
+        if (localStorage.getItem(AEK) === today) return; 
+        const data = messages.filter(m => m.role !== 'system').map(m => ({
+          role: m.role,
+          content: m.content,
+          id: m.id,
+          time: m.time,
+          parentId: m.parentId,
+          history: m.history,
+          historyIndex: m.historyIndex
+        }));
+        if (data.length) { 
+          const b = new Blob([JSON.stringify(data)], { type: 'application/json' }); 
+          const a = document.createElement('a'); 
+          a.href = URL.createObjectURL(b); 
+          a.download = `chat-auto-${today}.json`; 
+          a.click(); 
+          localStorage.setItem(AEK, today); 
+        } 
+      })();
 
+      // ===================== 导入功能（修复版：正确处理历史版本） =====================
       $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
-      $('importCancelBtn').onclick = () => $('importModal').classList.remove('active'); $('importModal').onclick = e => { if (e.target===$('importModal')) $('importModal').classList.remove('active'); };
-      $('importFileBtn').onclick = () => $('importFileInput').click(); $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
-      $('importFileInput').onchange = e => { if (e.target.files[0]) { const r=new FileReader(); r.onload=ev=>$('importTextarea').value=ev.target.result; r.readAsText(e.target.files[0]); } };
-      $('importJsonFileInput').onchange = e => { if (e.target.files[0]) { const r=new FileReader(); r.onload=ev=>$('importTextarea').value=ev.target.result; r.readAsText(e.target.files[0]); } };
-      function parseText(t) { const lines=t.split('\n'), res=[]; const up=['你:','你：','用户:','用户：','我:','我：','问:','问：']; const ap=['M:','M：','张莎:','张莎：','助手:','助手：','assistant:','ai:','答:','答：']; for (let l of lines) { l=l.trim(); if (!l) continue; let role=null, c=''; const lower=l.toLowerCase(); for (let p of up) { if (lower.startsWith(p.toLowerCase())) { role='user'; c=l.slice(p.length).trim(); break; } } if (!role) { for (let p of ap) { if (lower.startsWith(p.toLowerCase())) { role='assistant'; c=l.slice(p.length).trim(); break; } } } if (role&&c) { res.push({role,content:c}); } else if (!role&&res.length>0) { res[res.length-1].content+=' '+l; } } return res; }
-      function parseAndImport(append=false) { const raw=$('importTextarea').value.trim(); if (!raw) { alert('请粘贴内容'); return; } let imported; try { imported=JSON.parse(raw); if (!Array.isArray(imported)) throw 0; imported=imported.filter(m=>m&&typeof m==='object'&&(m.role==='user'||m.role==='assistant')&&typeof m.content==='string'); } catch(e) { imported=parseText(raw); } if (!imported||!imported.length) { alert('无法解析'); return; } const now=Date.now(), total=imported.length; const newMessages=imported.map((m,i)=>({role:m.role,content:m.content,id:nextId++,time:m.time||(now-(total-i)*5000),parentId:null,history:m.history||null,historyIndex:m.historyIndex||0})); for (let i=0;i<newMessages.length;i++) { if (i>0) newMessages[i].parentId=newMessages[i-1].id; } if (append) { const lastMsg=messages[messages.length-1]; if (lastMsg&&lastMsg.role!=='system') newMessages[0].parentId=lastMsg.id; messages.push(...newMessages); fullHistory.push(...newMessages.map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time}))); } else { messages=[messages[0]]; messages.push(...newMessages); fullHistory=newMessages.map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); } saveFullHistory(); renderAll(); saveAll(); saveDraft(DRAFT_IMPORT,''); alert(`${append?'追加':'导入'}成功（${newMessages.length} 条消息）`); $('importModal').classList.remove('active'); }
-      $('importConfirmBtn').onclick = () => parseAndImport(false); $('importAppendBtn').onclick = () => parseAndImport(true);
+      $('importCancelBtn').onclick = () => $('importModal').classList.remove('active'); 
+      $('importModal').onclick = e => { if (e.target === $('importModal')) $('importModal').classList.remove('active'); };
+      $('importFileBtn').onclick = () => $('importFileInput').click(); 
+      $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
+      $('importFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
+      $('importJsonFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
+      
+      function parseText(t) { 
+        const lines = t.split('\n'), res = []; 
+        const up = ['你:', '你：', '用户:', '用户：', '我:', '我：', '问:', '问：']; 
+        const ap = ['M:', 'M：', '张莎:', '张莎：', '助手:', '助手：', 'assistant:', 'ai:', '答:', '答：']; 
+        for (let l of lines) { 
+          l = l.trim(); 
+          if (!l) continue; 
+          let role = null, c = ''; 
+          const lower = l.toLowerCase(); 
+          for (let p of up) { if (lower.startsWith(p.toLowerCase())) { role = 'user'; c = l.slice(p.length).trim(); break; } } 
+          if (!role) { for (let p of ap) { if (lower.startsWith(p.toLowerCase())) { role = 'assistant'; c = l.slice(p.length).trim(); break; } } } 
+          if (role && c) { res.push({role, content: c}); } 
+          else if (!role && res.length > 0) { res[res.length - 1].content += ' ' + l; } 
+        } 
+        return res; 
+      }
+      
+      function parseAndImport(append = false) { 
+        const raw = $('importTextarea').value.trim(); 
+        if (!raw) { alert('请粘贴内容'); return; } 
+        let imported; 
+        try { 
+          imported = JSON.parse(raw); 
+          if (!Array.isArray(imported)) throw 0; 
+          imported = imported.filter(m => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'); 
+        } catch(e) { 
+          imported = parseText(raw); 
+        } 
+        if (!imported || !imported.length) { alert('无法解析'); return; } 
+        
+        const now = Date.now(), total = imported.length; 
+        // 修复：完整保留所有字段，特别是 history 和 historyIndex
+        const newMessages = imported.map((m, i) => {
+          const originalId = m.id || (nextId++);
+          const originalTime = m.time || (now - (total - i) * 5000);
+          
+          return {
+            role: m.role,
+            content: m.content,
+            id: originalId,
+            time: originalTime,
+            parentId: m.parentId || null,
+            history: m.history || null,        // 保留历史版本
+            historyIndex: m.historyIndex || 0   // 保留版本索引
+          };
+        });
+        
+        // 修复 parentId 关联
+        for (let i = 0; i < newMessages.length; i++) {
+          if (!newMessages[i].parentId && i > 0) {
+            newMessages[i].parentId = newMessages[i - 1].id;
+          }
+        }
+        
+        if (append) { 
+          const lastMsg = messages[messages.length - 1]; 
+          if (lastMsg && lastMsg.role !== 'system' && newMessages.length > 0) {
+            newMessages[0].parentId = lastMsg.id; 
+          }
+          messages.push(...newMessages); 
+          fullHistory.push(...newMessages.map(m => ({
+            role: m.role,
+            content: typeof m.content === 'string' ? m.content : '',
+            time: m.time
+          }))); 
+        } else { 
+          messages = [messages[0]]; 
+          messages.push(...newMessages); 
+          fullHistory = newMessages.map(m => ({
+            role: m.role,
+            content: typeof m.content === 'string' ? m.content : '',
+            time: m.time
+          })); 
+        } 
+        
+        saveFullHistory(); 
+        renderAll(); 
+        saveAll(); 
+        saveDraft(DRAFT_IMPORT, ''); 
+        alert(`${append ? '追加' : '导入'}成功（${newMessages.length} 条消息）`); 
+        $('importModal').classList.remove('active'); 
+      }
+      
+      $('importConfirmBtn').onclick = () => parseAndImport(false); 
+      $('importAppendBtn').onclick = () => parseAndImport(true);
 
       // 启动
-      renderAll(); if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，精简人设已加载 🧠':'👋 请先输入 API Key');
+      renderAll(); 
+      if (messages.length <= 1) addMsg('assistant', apiKey ? '你好！我是M，精简人设已加载 🧠' : '👋 请先输入 API Key');
     })();
   </script>
 </body>
