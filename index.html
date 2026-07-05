@@ -286,7 +286,7 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设（完全保留） =====================
+      // ===================== 人设 =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
@@ -391,7 +391,7 @@
       function deletePair(idx) { const msg = messages[idx]; if (!msg) return; let pairStart = idx, pairEnd = idx; if (msg.role === 'user') { if (idx + 1 < messages.length && messages[idx+1].role === 'assistant') pairEnd = idx + 1; } else if (msg.role === 'assistant') { if (idx > 0 && messages[idx-1].role === 'user') pairStart = idx - 1; } if (!confirm(`确定删除这组对话吗？`)) return; const removedUserQuotes = []; for (let i = pairStart; i <= pairEnd; i++) { if (messages[i].role === 'user') removedUserQuotes.push(messages[i].content); } messages.splice(pairStart, pairEnd - pairStart + 1); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
       function deleteAfter(idx) { if (!confirm(`确定删除从第 ${idx} 条开始之后的所有对话吗？`)) return; const removedUserQuotes = []; for (let i = idx; i < messages.length; i++) { if (messages[i].role === 'user') removedUserQuotes.push(messages[i].content); } messages = messages.slice(0, idx); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
       function cleanMemoryByQuotes(quotes) { if (!quotes.length) return; let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]'); if (!facts.length) return; const quoteSet = new Set(quotes.map(q => q.trim())); facts = facts.filter(f => !quoteSet.has(f.quote)); localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); }
-      function afterMessagesDelete() { fullHistory = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content, time: m.time })); saveFullHistory(); renderAll(); saveAll(); }
+      function afterMessagesDelete() { fullHistory = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content, time: m.time })); saveFullHistory(); renderAll(true); saveAll(); }
 
       window._editMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='user') return; $('userInput').value=typeof msg.content==='string'?msg.content:''; $('userInput').focus(); editingIdx=idx; };
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); renderAll(); saveAll(); sendToAPI(text); };
@@ -428,7 +428,7 @@
           chatBox.appendChild(row);
         });
         if (multiSelectMode) { document.querySelectorAll('.multi-select-checkbox').forEach(cb => { cb.addEventListener('change', function() { const idx = parseInt(this.dataset.index); if (this.checked) selectedIndices.add(idx); else selectedIndices.delete(idx); updateMultiSelectCount(); }); }); }
-        // 如果不跳过滚动，才滚到底部；切换分支时 skipScroll=true 保持原位
+        // 如果不跳过滚动，才滚到底部
         if (!skipScroll) {
           chatBox.scrollTop = chatBox.scrollHeight;
           scrollBtn.classList.toggle('visible', !nearBottom());
