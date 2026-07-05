@@ -254,7 +254,7 @@
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
       function bindDraft(inputEl, draftKey) { if (!inputEl) return; const saved = loadDraft(draftKey); if (saved && !inputEl.value) inputEl.value = saved; inputEl.addEventListener('input', () => saveDraft(draftKey, inputEl.value)); }
-      
+
       let weatherCache = { desc: '获取中...', emoji: '🌤️', city: '' };
       async function fetchRealWeather() {
         try {
@@ -286,7 +286,6 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设（完全保留） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
@@ -428,7 +427,7 @@
           chatBox.appendChild(row);
         });
         if (multiSelectMode) { document.querySelectorAll('.multi-select-checkbox').forEach(cb => { cb.addEventListener('change', function() { const idx = parseInt(this.dataset.index); if (this.checked) selectedIndices.add(idx); else selectedIndices.delete(idx); updateMultiSelectCount(); }); }); }
-        // 如果不跳过滚动，才滚到底部
+        // 不跳过滚动时才滚到底部
         if (!skipScroll) {
           chatBox.scrollTop = chatBox.scrollHeight;
           scrollBtn.classList.toggle('visible', !nearBottom());
@@ -438,7 +437,7 @@
       }
 
       function enterMultiSelectMode() { multiSelectMode = true; selectedIndices.clear(); document.body.classList.add('multi-select'); $('moreMenu').classList.remove('active'); renderAll(); }
-      function exitMultiSelectMode() { multiSelectMode = false; selectedIndices.clear(); document.body.classList.remove('multi-select'); renderAll(); }
+      function exitMultiSelectMode() { multiSelectMode = false; selectedIndices.clear(); document.body.classList.remove('multi-select'); renderAll(true); } // 修复：不滚动
       function updateMultiSelectCount() { $('multiSelectCount').textContent = selectedIndices.size; }
       $('multiSelectBtn').addEventListener('click', enterMultiSelectMode);
       $('cancelMultiSelectBtn').addEventListener('click', exitMultiSelectMode);
