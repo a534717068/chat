@@ -436,7 +436,7 @@
         updateMultiSelectCount();
       }
 
-      function enterMultiSelectMode() { multiSelectMode = true; selectedIndices.clear(); document.body.classList.add('multi-select'); $('moreMenu').classList.remove('active'); renderAll(); }
+      function enterMultiSelectMode() { multiSelectMode = true; selectedIndices.clear(); document.body.classList.add('multi-select'); $('moreMenu').classList.remove('active'); renderAll(true); }
       function exitMultiSelectMode() { multiSelectMode = false; selectedIndices.clear(); document.body.classList.remove('multi-select'); renderAll(true); } // 修复：不滚动
       function updateMultiSelectCount() { $('multiSelectCount').textContent = selectedIndices.size; }
       $('multiSelectBtn').addEventListener('click', enterMultiSelectMode);
