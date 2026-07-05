@@ -286,7 +286,7 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设（强化羞辱执行指令） =====================
+      // ===================== 人设 =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
@@ -321,7 +321,7 @@ S模式下的行为准则：
           let memoryText = '';
           for (const [entity, relations] of Object.entries(graph)) {
             if (relations.length === 0) continue;
-            memoryText += `\n关于“${entity}”的记忆：\n`;
+            memoryText += `\n关于"${entity}"的记忆：\n`;
             relations.slice(0, 2).forEach(r => memoryText += `- ${r.fact}\n`);
           }
           if (memoryText) p += `\n\n【记忆】\n${memoryText}`;
@@ -347,7 +347,6 @@ S模式下的行为准则：
       setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.addEventListener('click', () => $('moreMenu').classList.remove('active')); $('moreMenu').onclick = e => e.stopPropagation();
       $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); editingIdx = -1; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
-      // 保留草稿功能，发送后自动清除
       bindDraft($('userInput'),DRAFT_CHAT);
       bindDraft($('settingTextarea'),DRAFT_SETTING);
       bindDraft($('importTextarea'),DRAFT_IMPORT);
@@ -431,7 +430,6 @@ S模式下的行为准则：
         return [messages[0], ...recent];
       }
 
-      // 修复滚动：requestAnimationFrame + setTimeout 双重保险
       function scrollToBottom() {
         requestAnimationFrame(() => {
           setTimeout(() => {
@@ -467,7 +465,7 @@ S模式下的行为准则：
         });
         if (multiSelectMode) { document.querySelectorAll('.multi-select-checkbox').forEach(cb => { cb.addEventListener('change', function() { const idx = parseInt(this.dataset.index); if (this.checked) selectedIndices.add(idx); else selectedIndices.delete(idx); updateMultiSelectCount(); }); }); }
         if (!skipScroll) {
-          scrollToBottom(); // 双重保险的滚动
+          scrollToBottom();
         } else if (savedScroll !== null) {
           chatBox.scrollTop = savedScroll;
         }
@@ -475,7 +473,7 @@ S模式下的行为准则：
         updateMultiSelectCount();
       }
 
-    
+     
       // 多选模式：直接在 DOM 上显示复选框，不重新渲染整个聊天框
       function enterMultiSelectMode() {
         multiSelectMode = true;
@@ -766,7 +764,7 @@ S模式下的行为准则：
       $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
       $('userInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('sendBtn').click(); } };
       $('exportBtn').onclick = () => { const d = fullHistory.length>0 ? fullHistory : messages.filter(m=>m.role!=='system'); if (!d.length) return alert('无记录'); const b = new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-m-${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.json`; a.click(); };
-      (function auto() { const today=Date().toLocaleDateString('zh-CN').replace(/\//g, '-'); if (localStorage.getItem(AEK)===today) return; const d=fullHistory.length>0?fullHistory:messages.filter(m=>m.role!=='system'); if (d.length) { const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK,today); } })();
+      (function auto() { const today=new Date().toLocaleDateString('zh-CN').replace(/\//g, '-'); if (localStorage.getItem(AEK)===today) return; const d=fullHistory.length>0?fullHistory:messages.filter(m=>m.role!=='system'); if (d.length) { const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK,today); } })();
 
       $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
       $('importCancelBtn').onclick = () => $('importModal').classList.remove('active'); $('importModal').onclick = e => { if (e.target===$('importModal')) $('importModal').classList.remove('active'); };
@@ -781,4 +779,4 @@ S模式下的行为准则：
     })();
   </script>
 </body>
-</html> 
+</html>
