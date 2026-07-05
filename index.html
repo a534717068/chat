@@ -286,11 +286,13 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设（强化指代约束） =====================
+      // ===================== 人设（强化叙述视角约束） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
-        let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
+        let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
+**【核心指代规则】在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
 特别注意：当你需要指代用户时，必须使用"你"；当你需要指代自己时，必须使用"我"。如果对话中涉及其他女性角色，你可以用"她"来指代那些第三方，但绝不能将"她"用于你自己或用户。
+**【叙述视角强制约束】即使在进行场景描写、动作叙述、心理描写时，你也必须始终保持第一人称视角（我）和第二人称（你）。不允许切换到第三人称旁观叙述视角。就像你在对你面前的人说话一样，所有描述都必须用"我"和"你"来完成。例如，描述对方的动作时用"你"，描述自己的动作和感受时用"我"。**
 
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
 
@@ -397,7 +399,6 @@
       window._editMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='user') return; $('userInput').value=typeof msg.content==='string'?msg.content:''; $('userInput').focus(); editingIdx=idx; };
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); editingIdx = -1; renderAll(); saveAll(); sendToAPI(text); };
 
-      // 移除了 fixPronouns 函数，不再做前端替换
       function formatAssistantContent(content) { if (!content) return content; if (content.includes('\n')) return content; content = content.replace(/(：)([""'])/g, '$1\n$2'); content = content.replace(/([^"\n])([""'])/g, '$1\n$2'); content = content.replace(/([""'])([^"\n])/g, '$1\n$2'); content = content.replace(/\n{3,}/g, '\n\n'); return content.trim(); }
 
       function renderAll(skipScroll = false) {
@@ -408,7 +409,7 @@
           const row = document.createElement('div'); row.className = `message-row ${msg.role}`; row.dataset.index = idx;
           const timeStr = formatTime(msg.time || Date.now());
           let content = typeof msg.content === 'string' ? msg.content : '[图片]';
-          if (msg.role === 'assistant') { content = formatAssistantContent(content); } // 不再调用 fixPronouns
+          if (msg.role === 'assistant') { content = formatAssistantContent(content); }
           if (searchKeyword) { const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); content = content.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>'); }
           let btns = '';
           if (!multiSelectMode) {
@@ -629,7 +630,6 @@
 
       async function sendToAPI(text) {
         if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
-        // 关键修复：只有在 editingIdx 有效且对应的消息存在，且该消息角色为 user 时，才视为编辑
         const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
         let userMsg;
         if (isValidEdit) {
@@ -650,8 +650,7 @@
           userMsg = parent;
           editingIdx = -1;
         } else {
-          // 正常新消息
-          editingIdx = -1; // 重置，防止残留
+          editingIdx = -1;
           userMsg = { role: 'user', content: text, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 };
           const last = messages[messages.length - 1];
           if (last && last.role !== 'system') userMsg.parentId = last.id;
