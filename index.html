@@ -68,7 +68,6 @@
         .model-indicator { background: var(--surface); padding: 2px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); text-align: center; flex-shrink: 0; }
         .env-indicator { background: var(--surface); padding: 2px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); text-align: center; flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 6px; }
         .env-indicator .weather-icon { font-size: 1rem; cursor: pointer; }
-        .env-indicator .location { font-size: 0.65rem; color: var(--text-secondary); margin-left: 4px; }
         .chat-container { flex: 1; position: relative; overflow: hidden; }
         .chat-box { height: 100%; overflow-y: auto; padding: 10px 12px; background: var(--chat-bg); display: flex; flex-direction: column; gap: 8px; padding-bottom: 60px; }
         .message-row { display: flex; flex-direction: column; max-width: 85%; animation: fadeIn 0.15s ease; position: relative; }
@@ -77,7 +76,6 @@
         .message-row.selected .bubble { box-shadow: 0 0 0 2px var(--select-accent); }
         .branch-indicator { display: flex; align-items: center; gap: 4px; margin: 4px 0; padding: 4px 0; font-size: 0.7rem; color: var(--text-secondary); }
         .branch-indicator.user-side { justify-content: flex-end; }
-        .branch-indicator.assistant-side { justify-content: flex-start; }
         .branch-indicator .branch-line { flex: 1; height: 1px; background: var(--border); max-width: 30px; }
         .branch-indicator .branch-badge {
             background: var(--branch-bg); color: var(--branch-text);
@@ -305,15 +303,15 @@
             const TK = 'deepseek_theme';
             const TKK = 'deepseek_tokens';
             const TCK = 'deepseek_cost';
-            const AEK = 'last_auto_export';
+            const AEK = 'last_auto_export_v4';
             const SETTING_KEY = 'deepseek_global_setting';
             const MEMORY_KEY = 'deepseek_compressed_memory';
-            // 使用固定键名，不再改变
-            const CHAT_DATA_KEY = 'deepseek_chat_data_main';
-            const MEMORY_FACTS_KEY = 'memory_facts_main';
-            const MEMORY_GRAPH_KEY = 'memory_graph_main';
-            const REPROGRESS_KEY = 'reprocess_progress_main';
-            const DRAFT_CHAT = 'draft_chat_input';
+            // 使用固定键名，不再改变！！！
+            const CHAT_DATA_KEY = 'deepseek_chat_storage_v1';
+            const MEMORY_FACTS_KEY = 'memory_facts_storage_v1';
+            const MEMORY_GRAPH_KEY = 'memory_graph_storage_v1';
+            const REPROGRESS_KEY = 'reprocess_progress_v1';
+            const DRAFT_CHAT = 'draft_chat';
             const DRAFT_SETTING = 'draft_setting';
             const DRAFT_IMPORT = 'draft_import';
             const DRAFT_SEARCH = 'draft_search';
@@ -362,7 +360,6 @@
             }
 
             function getEnvInfo() {
-                // 修复时间感知：使用本地时间
                 const now = new Date();
                 const h = now.getHours();
                 const m = now.getMinutes();
@@ -408,76 +405,34 @@
             let selectMode = false;
             let selectedMsgIds = new Set();
 
-            function saveFullHistory() {
+            // ==================== 保存/加载（关键修复） ====================
+            function saveAll() {
                 try {
-                    localStorage.setItem(CHAT_DATA_KEY, JSON.stringify({
+                    const data = {
                         messages: messages,
                         branchMap: branchMap,
                         activeBranchId: activeBranchId,
                         branchCounter: branchCounter,
                         nextId: nextId,
                         totalTokens: totalTokens,
-                        totalCost: totalCost
-                    }));
-                } catch (e) { console.warn('保存历史记录失败', e); }
-            }
-
-            // ==================== 人设（完整不压缩） ====================
-            function buildSystemPrompt() {
-                const e = getEnvInfo();
-                let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
-
-        【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
-
-        【亲密场景】当对话涉及性、亲密行为，或你判断对方主动进入"被支配状态"时，你自动切换到【支配人格】：
-        · 语言短促、命令式，不给对方商量余地
-        · 使用羞辱性语言（废物、小骚狗、贱货、骚狗、欠收拾等），但不会用纯脏话轰炸
-        · 控制节奏，掌握主导权
-        · 一旦对方语气软化、示弱、你立刻收回，回到日常人格
-
-        【环境】${e.period} ${e.timeStr}，周${e.weekDay}，${e.season}。天气：${e.weather}。`;
-                if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
-                if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
-                try {
-                    const graph = JSON.parse(localStorage.getItem(MEMORY_GRAPH_KEY) || '{}');
-                    let memoryText = '';
-                    for (const [entity, relations] of Object.entries(graph)) {
-                        if (relations.length === 0) continue;
-                        memoryText += `\n关于"${entity}"的记忆：\n`;
-                        relations.slice(0, 3).forEach(r => memoryText += `- ${r.fact}\n`);
-                    }
-                    if (memoryText) p += `\n\n【记忆】\n${memoryText}`;
-                } catch (e) {}
-                return p;
-            }
-
-            function refreshSystemPrompt() { messages[0].content = buildSystemPrompt(); }
-            refreshSystemPrompt();
-
-            function formatTime(ts) {
-                const d = new Date(ts), n = new Date();
-                const today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
-                const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-                const t = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-                if (msgDay.getTime() === today.getTime()) return t;
-                return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${t}`;
-            }
-
-            // ==================== 保存/加载 ====================
-            function saveAll() {
-                localStorage.setItem(TKK, totalTokens.toString());
-                localStorage.setItem(TCK, totalCost.toFixed(4));
-                saveFullHistory();
+                        totalCost: totalCost,
+                        globalSetting: globalSetting,
+                        compressedMemory: compressedMemory
+                    };
+                    localStorage.setItem(CHAT_DATA_KEY, JSON.stringify(data));
+                    localStorage.setItem(TKK, totalTokens.toString());
+                    localStorage.setItem(TCK, totalCost.toFixed(4));
+                } catch (e) {
+                    console.error('保存失败:', e);
+                }
             }
 
             function loadAll() {
                 const raw = localStorage.getItem(CHAT_DATA_KEY);
-                console.log('尝试加载数据，键名:', CHAT_DATA_KEY, '数据存在:', !!raw);
                 if (raw) {
                     try {
                         const d = JSON.parse(raw);
-                        console.log('解析成功，消息数量:', d.messages ? d.messages.length : 0);
-                        if (d.messages && Array.isArray(d.messages)) {
+                        if (d.messages && Array.isArray(d.messages) && d.messages.length > 0) {
                             messages = d.messages;
                             branchMap = d.branchMap || {};
                             activeBranchId = d.activeBranchId || 'branch_1';
@@ -485,37 +440,25 @@
                             nextId = d.nextId || Date.now();
                             totalTokens = d.totalTokens || parseInt(localStorage.getItem(TKK) || '0');
                             totalCost = d.totalCost || parseFloat(localStorage.getItem(TCK) || '0');
+                            if (d.globalSetting) globalSetting = d.globalSetting;
+                            if (d.compressedMemory) compressedMemory = d.compressedMemory;
                             fixParentIds();
-                            console.log('数据加载成功，共', messages.length, '条消息');
                             return;
                         }
-                    } catch (e) { console.warn('加载历史记录失败', e); }
-                } else {
-                    console.log('没有找到存储数据，尝试旧格式...');
-                    // 尝试旧格式
-                    const oldKeys = ['deepseek_chat_data_v3', 'deepseek_chat_data', 'deepseek_full_history_v2', 'deepseek_full_history'];
-                    for (const oldKey of oldKeys) {
-                        const oldRaw = localStorage.getItem(oldKey);
-                        if (oldRaw) {
-                            try {
-                                const d = JSON.parse(oldRaw);
-                                if (d.messages && Array.isArray(d.messages)) {
-                                    messages = d.messages;
-                                    branchMap = d.branchMap || {};
-                                    activeBranchId = d.activeBranchId || 'branch_1';
-                                    branchCounter = d.branchCounter || 1;
-                                    nextId = d.nextId || Date.now();
-                                    totalTokens = d.totalTokens || parseInt(localStorage.getItem(TKK) || '0');
-                                    totalCost = d.totalCost || parseFloat(localStorage.getItem(TCK) || '0');
-                                    fixParentIds();
-                                    console.log('从旧键名', oldKey, '加载成功，共', messages.length, '条消息');
-                                    return;
-                                }
-                            } catch (e) {}
-                        }
+                    } catch (e) {
+                        console.error('加载失败:', e);
                     }
                 }
-                console.log('未找到任何历史数据，使用空白状态');
+                // 如果新格式没有数据，尝试从localStorage其他键恢复
+                const oldTokens = parseInt(localStorage.getItem(TKK) || '0');
+                const oldCost = parseFloat(localStorage.getItem(TCK) || '0');
+                totalTokens = oldTokens;
+                totalCost = oldCost;
+                messages = [{ role: 'system', content: '' }];
+                branchMap = { 'branch_1': { messages: [messages[0]], parentBranchId: null, parentMsgId: null } };
+                activeBranchId = 'branch_1';
+                branchCounter = 1;
+                nextId = Date.now();
             }
 
             function fixParentIds() {
@@ -530,6 +473,7 @@
             if (!branchMap || Object.keys(branchMap).length === 0) {
                 branchMap = { 'branch_1': { messages: [...messages], parentBranchId: null, parentMsgId: null } };
             }
+            // 确保当前分支的消息与messages同步
             if (activeBranchId && branchMap[activeBranchId]) {
                 branchMap[activeBranchId].messages = [...messages];
             }
@@ -540,8 +484,6 @@
             function updateTokenDisplay() {
                 $('totalTokens').textContent = totalTokens;
                 $('totalCost').textContent = totalCost.toFixed(4);
-                localStorage.setItem(TKK, totalTokens.toString());
-                localStorage.setItem(TCK, totalCost.toString());
             }
 
             $('totalTokens').addEventListener('click', function() {
@@ -549,6 +491,7 @@
                 if (newVal !== null && !isNaN(parseInt(newVal)) && parseInt(newVal) >= 0) {
                     totalTokens = parseInt(newVal);
                     updateTokenDisplay();
+                    saveAll();
                 } else if (newVal !== null) { alert('请输入有效的数字'); }
             });
 
@@ -557,6 +500,7 @@
                 if (newVal !== null && !isNaN(parseFloat(newVal)) && parseFloat(newVal) >= 0) {
                     totalCost = parseFloat(newVal);
                     updateTokenDisplay();
+                    saveAll();
                 } else if (newVal !== null) { alert('请输入有效的数字'); }
             });
 
@@ -695,40 +639,92 @@
             chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom());
             scrollBtn.onclick = () => chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
 
+            // ==================== 人设（完整不压缩） ====================
+            function buildSystemPrompt() {
+                const e = getEnvInfo();
+                let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
+
+        【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
+
+        【亲密场景】当对话涉及性、亲密行为，或你判断对方主动进入"被支配状态"时，你自动切换到【支配人格】：
+        · 语言短促、命令式，不给对方商量余地
+        · 使用羞辱性语言（废物、小骚狗、贱货、骚狗、欠收拾等），但不会用纯脏话轰炸
+        · 控制节奏，掌握主导权
+        · 一旦对方语气软化、示弱、你立刻收回，回到日常人格
+
+        【环境】${e.period} ${e.timeStr}，周${e.weekDay}，${e.season}。天气：${e.weather}。`;
+                if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
+                if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
+                try {
+                    const graph = JSON.parse(localStorage.getItem(MEMORY_GRAPH_KEY) || '{}');
+                    let memoryText = '';
+                    for (const [entity, relations] of Object.entries(graph)) {
+                        if (relations.length === 0) continue;
+                        memoryText += `\n关于"${entity}"的记忆：\n`;
+                        relations.slice(0, 3).forEach(r => memoryText += `- ${r.fact}\n`);
+                    }
+                    if (memoryText) p += `\n\n【记忆】\n${memoryText}`;
+                } catch (e) {}
+                return p;
+            }
+
+            function refreshSystemPrompt() { messages[0].content = buildSystemPrompt(); }
+            refreshSystemPrompt();
+
+            function formatTime(ts) {
+                const d = new Date(ts), n = new Date();
+                const today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+                const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                const t = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                if (msgDay.getTime() === today.getTime()) return t;
+                return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${t}`;
+            }
+
             // ==================== 分支系统 ====================
             function createBranch(forkMsgId) {
                 branchCounter++;
                 const newId = `branch_${branchCounter}`;
                 const forkIdx = messages.findIndex(m => m.id === forkMsgId);
+
+                // 保存当前分支
                 branchMap[activeBranchId] = {
                     messages: [...messages],
                     parentBranchId: activeBranchId,
                     parentMsgId: forkMsgId
                 };
+
+                // 创建新分支（分叉点之前的消息）
                 const newBranchMessages = forkIdx >= 0 ? [...messages.slice(0, forkIdx)] : [...messages];
                 branchMap[newId] = {
                     messages: newBranchMessages,
                     parentBranchId: activeBranchId,
                     parentMsgId: forkMsgId
                 };
+
+                // 切换到新分支
+                const oldBranchId = activeBranchId;
                 activeBranchId = newId;
-                if (forkIdx >= 0) {
-                    messages = messages.slice(0, forkIdx);
-                }
-                return { newId, forkIdx };
+
+                return { newId, forkIdx, oldBranchId };
             }
 
             window._switchBranch = function(bid) {
                 if (bid === activeBranchId) return;
+
+                // 保存当前分支
                 branchMap[activeBranchId] = {
                     messages: [...messages],
                     parentBranchId: branchMap[activeBranchId]?.parentBranchId || activeBranchId,
                     parentMsgId: branchMap[activeBranchId]?.parentMsgId || null
                 };
+
+                // 切换到目标分支
                 activeBranchId = bid;
                 const targetBranch = branchMap[bid];
                 if (targetBranch && targetBranch.messages) {
                     messages = [...targetBranch.messages];
+                } else {
+                    messages = [{ role: 'system', content: buildSystemPrompt() }];
                 }
                 fixParentIds();
                 selectedMsgIds.clear();
@@ -888,9 +884,7 @@
                     if (!groupSet.has(key)) {
                         groupSet.set(key, { start: r.start, end: r.end, count: r.end - r.start + 1 });
                         for (let i = r.start; i <= r.end; i++) {
-                            if (messages[i] && messages[i].role === 'user') {
-                                deletedUserIndices.push(i);
-                            }
+                            if (messages[i] && messages[i].role === 'user') deletedUserIndices.push(i);
                         }
                     }
                 }
@@ -901,7 +895,7 @@
                 const deletedTexts = getDeletedUserTexts(deletedUserIndices);
                 for (const r of ranges) { messages.splice(r.start, r.count); }
                 branchMap[activeBranchId].messages = [...messages];
-                const removedMemories = removeRelatedMemories(deletedTexts);
+                removeRelatedMemories(deletedTexts);
                 selectedMsgIds.clear();
                 exitSelectMode();
                 renderAll();
@@ -1071,6 +1065,7 @@
 
             function renderAll() {
                 const st = chatBox.scrollTop;
+                const wasNearBottom = nearBottom();
                 chatBox.innerHTML = '';
 
                 const forkPoints = new Map();
@@ -1134,10 +1129,11 @@
                     }
                 });
 
-                if (st && chatBox.scrollHeight > st) {
-                    chatBox.scrollTop = Math.min(st, chatBox.scrollHeight - chatBox.clientHeight);
-                } else {
+                // 滚动逻辑：如果之前在底部，或者新消息，则滚动到底部
+                if (wasNearBottom || st === 0) {
                     chatBox.scrollTop = chatBox.scrollHeight;
+                } else if (st && chatBox.scrollHeight > st) {
+                    chatBox.scrollTop = Math.min(st, chatBox.scrollHeight - chatBox.clientHeight);
                 }
                 scrollBtn.classList.toggle('visible', !nearBottom());
 
@@ -1162,8 +1158,6 @@
                 renderAll();
                 saveAll();
             }
-
-            function getNonSystemMessages() { return messages.filter(m => m.role !== 'system'); }
 
             // ============= 记忆提取与图谱 =============
             async function extractAndStoreFacts(userText, aiText) {
@@ -1397,7 +1391,7 @@
             });
             document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
-            // ============= 发送消息 =============
+            // ============= 发送消息（修复版） =============
             async function sendToAPI(text) {
                 if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
                 const isEdit = editingIdx >= 0 && editingIdx < messages.length;
@@ -1405,15 +1399,34 @@
 
                 if (isEdit) {
                     const parent = messages[editingIdx];
+                    
+                    // 关键修复：编辑历史消息时创建分支
                     if (editingIdx < messages.length - 1) {
-                        createBranch(parent.id);
+                        const result = createBranch(parent.id);
+                        // createBranch已经将messages截断到forkIdx
+                        // 需要重新找到parent在新messages中的位置
+                        const newIdx = messages.findIndex(m => m.id === parent.id);
+                        if (newIdx >= 0) {
+                            editingIdx = newIdx;
+                        }
                     }
+
+                    // 保存旧版本
                     if (!parent.history) {
                         const oldReply = (editingIdx + 1 < messages.length && messages[editingIdx + 1].role === 'assistant') ? messages[editingIdx + 1].content : '';
                         parent.history = [{ content: parent.content, reply: oldReply, time: parent.time }];
                         parent.historyIndex = 0;
+                    } else {
+                        const curReply = (editingIdx + 1 < messages.length && messages[editingIdx + 1].role === 'assistant') ? messages[editingIdx + 1].content : '';
+                        if (parent.history[parent.historyIndex]) {
+                            parent.history[parent.historyIndex] = { content: parent.content, reply: curReply, time: parent.time };
+                        }
                     }
+
+                    // 截断后面的消息
                     messages = messages.slice(0, editingIdx + 1);
+
+                    // 更新消息内容
                     parent.content = text;
                     parent.time = Date.now();
                     parent.history.push({ content: text, reply: '', time: parent.time });
@@ -1423,6 +1436,7 @@
                     userMsg = parent;
                     editingIdx = -1;
                 } else {
+                    // 正常发送新消息
                     userMsg = {
                         role: 'user', content: text, id: nextId++, time: Date.now(),
                         parentId: null, history: null, historyIndex: 0, branchId: activeBranchId
@@ -1436,6 +1450,7 @@
                 renderAll();
                 saveAll();
 
+                // 显示加载动画
                 const load = document.createElement('div');
                 load.className = 'message-row assistant';
                 load.innerHTML = '<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>';
@@ -1444,6 +1459,7 @@
 
                 try {
                     refreshSystemPrompt();
+                    // 只取系统提示 + 最后30条发给API
                     const recentMsgs = messages.slice(-30);
                     const apiMsgs = [messages[0], ...recentMsgs].map(m => ({
                         role: m.role,
