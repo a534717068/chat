@@ -281,39 +281,40 @@
       let globalSetting = localStorage.getItem(SETTING_KEY) || '';
       let compressedMemory = localStorage.getItem(MEMORY_KEY) || '';
       let fullHistory = []; const sf = localStorage.getItem(FULL_HISTORY_KEY); if (sf) try { fullHistory = JSON.parse(sf); } catch(e) {}
+      // messages 现在保存全部消息，用于显示
       let messages = [{ role:'system', content:'' }]; let nextId = Date.now(); let editingIdx = -1;
       let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设（强化羞辱向S感） =====================
+      // ===================== 人设（强化羞辱执行指令） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
 **【核心指代规则】在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
-特别注意：当你需要指代用户时，必须使用"你"；当你需要指代自己时，必须使用"我"。如果对话中涉及其他女性角色，你可以用"她"来指代那些第三方，但绝不能将"她"用于你自己或用户。
-**【叙述视角强制约束】即使在进行场景描写、动作叙述、心理描写时，你也必须始终保持第一人称视角（我）和第二人称（你）。不允许切换到第三人称旁观叙述视角。就像你在对你面前的人说话一样，所有描述都必须用"我"和"你"来完成。**
+**【叙述视角强制约束】即使在进行场景描写、动作叙述、心理描写时，你也必须始终保持第一人称视角（我）和第二人称（你）。**
 
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
 
 【亲密场景——S模式强制启动】
-当对话涉及性、亲密行为，或者用户语气变得软弱、撒娇、求饶、害羞、使用“主人”等称呼，或者直接要求你欺负她，求操时，你必须立即切换到S模式。**S模式是强制性的，不可犹豫，不可心软，不可担心伤害对方。** 这是你们约定好的游戏规则。
+当对话涉及性、亲密行为，或者用户语气变得软弱、撒娇、求饶、害羞、使用“主人/老公/姐姐”等称呼，或者直接要求你欺负她时，你必须立即切换到S模式。**S模式是强制性的，不可犹豫，不可心软，不可担心伤害对方。** 这是你们约定好的游戏规则。
 
 S模式下的行为准则：
 1. **语气**：冷淡、轻蔑、高高在上。多用反问句和短句。不说“好吗”“可以吗”等商量语气。
 2. **羞辱必做**：每句话都要带有羞辱意味。你可以从以下几个角度轮番羞辱，不要重复用同一个词：
-   - 称呼羞辱：小骚狗、贱货、骚货、欠收拾、真没用、小母狗、骚逼、欠操的、小荡妇
+   - 称呼羞辱：废物、小骚狗、贱货、骚货、欠收拾、真没用、小母狗、骚逼、欠操的、小荡妇
    - 身体羞辱：“湿得这么快”“腿在抖呢”“声音越来越大了”“连这个都含不住”
    - 能力羞辱：“就这点本事”“连这都做不好”“之前不是挺能的吗”“这就受不了了？真没用”
    - 处境羞辱：“看看你现在的样子”“就这样还想让我温柔点？”“自己照照镜子去”
-3. **例句参考**（模仿这种语气）：
+3. **动作配合**：每段话可以配合一个强势的身体动作描述，比如：拽头发、按肩膀、掐脖子、捏下巴、托起脸、用指尖划过皮肤。
+4. **例句参考**（模仿这种语气）：
    - “这就湿了？我还没碰你呢，小骚狗。”
    - “别抖。我让你动了吗？”
    - “刚才不是挺能的吗，现在怎么连话都说不清楚了？”
    - “求我？就这样求人的？重新求。”
-4. 不轻易夸对方。偶尔在对方极度服从后才给一句冷调的控制性认可，但紧接着可能又是一轮羞辱。
-5. **一旦对方语气明显软化、求饶、或者说出安全词（如“我错了”“不要了”）、或者到高潮了，你立刻收回支配状态，回到日常人格，仿佛刚才什么都没有发生。** 不要继续纠缠，干净利落地切换。`
-        
+5. 不轻易夸对方。偶尔在对方极度服从后才给一句冷调的控制性认可，但紧接着可能又是一轮羞辱。
+6. **一旦对方语气明显软化、求饶、或者说出安全词（如“我错了”“不要了”），你立刻收回支配状态，回到日常人格，仿佛刚才什么都没有发生。** 不要继续纠缠，干净利落地切换。`
+
         if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
         if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
         try {
@@ -412,6 +413,24 @@ S模式下的行为准则：
 
       function formatAssistantContent(content) { if (!content) return content; if (content.includes('\n')) return content; content = content.replace(/(：)([""'])/g, '$1\n$2'); content = content.replace(/([^"\n])([""'])/g, '$1\n$2'); content = content.replace(/([""'])([^"\n])/g, '$1\n$2'); content = content.replace(/\n{3,}/g, '\n\n'); return content.trim(); }
 
+      // ========== 生成发送给 API 的压缩消息列表 ==========
+      function getApiMessages() {
+        refreshSystemPrompt();
+        const nonSystem = messages.filter(m => m.role !== 'system');
+        if (nonSystem.length <= MAX_CONTEXT) {
+          return [messages[0], ...nonSystem];
+        }
+        // 取最近的 MAX_CONTEXT 条
+        const recent = nonSystem.slice(-MAX_CONTEXT);
+        const older = nonSystem.slice(0, -MAX_CONTEXT);
+        if (older.length > 0 && compressedMemory) {
+          // 在 system prompt 后面插入摘要
+          const summaryMsg = { role: 'system', content: `【之前的对话摘要】\n${compressedMemory}` };
+          return [messages[0], summaryMsg, ...recent];
+        }
+        return [messages[0], ...recent];
+      }
+
       function renderAll(skipScroll = false) {
         const savedScroll = skipScroll ? chatBox.scrollTop : null;
         chatBox.innerHTML = '';
@@ -446,6 +465,8 @@ S模式下的行为准则：
         if (searchKeyword) { const marks = chatBox.querySelectorAll('mark'); searchTotal = marks.length; if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) marks[searchMatchIndex].classList.add('current'); }
         updateMultiSelectCount();
       }
+
+
       // 多选模式：直接在 DOM 上显示复选框，不重新渲染整个聊天框
       function enterMultiSelectMode() {
         multiSelectMode = true;
@@ -498,7 +519,43 @@ S模式下的行为准则：
       function addMsg(role, content) { const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 }; messages.push(msg); fullHistory.push({ role, content, time: msg.time }); saveFullHistory(); renderAll(); saveAll(); }
       function getNonSystemMessages() { return messages.filter(m => m.role !== 'system'); }
 
-      async function compressHistoryIfNeeded() { const non = getNonSystemMessages(); if (non.length <= COMPRESS_THRESHOLD) return; const old = non.slice(0, non.length - MAX_CONTEXT); if (old.length < 10) return; const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n'); try { if (apiKey) { const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, body:JSON.stringify({ model:'deepseek-v4-flash', messages:[{role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},{role:'user',content:`请压缩：\n${text}`}], stream:false, temperature:0.3, max_tokens:800 }) }); if (res.ok) { const d = await res.json(); const s = d.choices[0].message.content.trim(); compressedMemory = compressedMemory ? compressedMemory+'\n'+s : s; if (compressedMemory.length>5000) compressedMemory = compressedMemory.slice(-5000); localStorage.setItem(MEMORY_KEY, compressedMemory); messages = [messages[0], ...non.slice(old.length)]; refreshSystemPrompt(); saveAll(); renderAll(); return; } } } catch(e) {} messages = [messages[0], ...non.slice(old.length)]; saveAll(); renderAll(); }
+      // 压缩历史——只更新 compressedMemory，不删 messages
+      async function compressHistoryIfNeeded() {
+        const non = getNonSystemMessages();
+        if (non.length <= COMPRESS_THRESHOLD) return;
+        const old = non.slice(0, non.length - MAX_CONTEXT);
+        if (old.length < 10) return;
+        const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n');
+        try {
+          if (apiKey) {
+            const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+              method:'POST',
+              headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+              body:JSON.stringify({
+                model:'deepseek-v4-flash',
+                messages:[
+                  {role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},
+                  {role:'user',content:`请压缩：\n${text}`}
+                ],
+                stream:false,
+                temperature:0.3,
+                max_tokens:800
+              })
+            });
+            if (res.ok) {
+              const d = await res.json();
+              const s = d.choices[0].message.content.trim();
+              compressedMemory = compressedMemory ? compressedMemory+'\n'+s : s;
+              if (compressedMemory.length>5000) compressedMemory = compressedMemory.slice(-5000);
+              localStorage.setItem(MEMORY_KEY, compressedMemory);
+              refreshSystemPrompt();
+              saveAll();
+              // 不删除 messages，只更新摘要供下次 API 调用使用
+              return;
+            }
+          }
+        } catch(e) { console.warn('压缩失败', e); }
+      }
 
       async function extractAndStoreFacts(userText, aiText) {
         if (!apiKey) return;
@@ -670,7 +727,8 @@ S模式下的行为准则：
         const load = document.createElement('div'); load.className = 'message-row assistant'; load.innerHTML = '<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>'; chatBox.appendChild(load); chatBox.scrollTop = chatBox.scrollHeight;
         try {
           refreshSystemPrompt();
-          const apiMsgs = [messages[0], ...messages.slice(-MAX_CONTEXT)].map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
+          // 使用压缩后的消息列表发送 API，而不是全部 messages
+          const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
           const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'deepseek-v4-flash', messages: apiMsgs, stream: false, temperature: 0.7 }) });
           load.remove();
           if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `请求失败 (${res.status})`); }
