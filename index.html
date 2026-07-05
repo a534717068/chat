@@ -234,22 +234,90 @@
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
       function bindDraft(inputEl, draftKey) { if (!inputEl) return; const saved = loadDraft(draftKey); if (saved && !inputEl.value) inputEl.value = saved; inputEl.addEventListener('input', () => saveDraft(draftKey, inputEl.value)); }
 
-      // 天气与环境
+      // 天气与环境（修改：增强错误处理和 CORS 兜底）
       let weatherCache = { desc: '获取中...', emoji: '🌤️', city: '' };
       async function fetchRealWeather() {
         try {
+          // 先尝试读取缓存
           const cached = localStorage.getItem('deepseek_weather_cache');
-          if (cached) { const p = JSON.parse(cached); if (Date.now() - p.time < 30*60*1000) { weatherCache = p.data; updateEnvDisplay(); return; } }
-          const pos = await new Promise((r, e) => navigator.geolocation.getCurrentPosition(r, e, { timeout: 5000 }));
-          const res = await fetch(`https://wttr.in/${pos.coords.latitude},${pos.coords.longitude}?format=j1`);
-          if (!res.ok) throw 0;
+          if (cached) {
+            const p = JSON.parse(cached);
+            if (Date.now() - p.time < 30 * 60 * 1000) {
+              weatherCache = p.data;
+              updateEnvDisplay();
+              return;
+            }
+          }
+          // 尝试获取位置
+          let pos;
+          try {
+            pos = await new Promise((r, e) =>
+              navigator.geolocation.getCurrentPosition(r, e, { timeout: 5000 })
+            );
+          } catch (geoErr) {
+            // 位置获取失败，使用默认城市或上次位置
+            console.warn('无法获取位置，使用缓存或默认', geoErr);
+            if (cached) {
+              weatherCache = JSON.parse(cached).data;
+              updateEnvDisplay();
+            } else {
+              weatherCache = { desc: '位置未授权', emoji: '📍', city: '' };
+              updateEnvDisplay();
+            }
+            return;
+          }
+          // 请求天气，增加超时处理
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+          let res;
+          try {
+            res = await fetch(
+              `https://wttr.in/${pos.coords.latitude},${pos.coords.longitude}?format=j1`,
+              { signal: controller.signal }
+            );
+          } catch (fetchErr) {
+            // 网络错误或被阻止
+            console.warn('天气请求失败，使用缓存或默认', fetchErr);
+            if (cached) {
+              weatherCache = JSON.parse(cached).data;
+              updateEnvDisplay();
+            } else {
+              weatherCache = { desc: '网络异常', emoji: '🌐', city: '' };
+              updateEnvDisplay();
+            }
+            return;
+          } finally {
+            clearTimeout(timeoutId);
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const d = await res.json();
+          if (!d.current_condition || !d.current_condition.length) throw new Error('无效数据');
           const c = d.current_condition[0];
-          weatherCache = { desc: `${c.weatherDesc[0].value} ${c.temp_C}°C`, emoji: ['☀️','⛅','☁️','🌧️','⛈️','❄️','🌫️'][Math.min(6, Math.floor(parseInt(c.weatherCode)/50))]||'☀️', city: d.nearest_area[0].areaName[0].value||'' };
-          localStorage.setItem('deepseek_weather_cache', JSON.stringify({ data: weatherCache, time: Date.now() }));
-        } catch(e) { weatherCache = { desc: '天气获取失败', emoji: '🌤️', city: '' }; }
+          const code = parseInt(c.weatherCode) || 0;
+          const emojis = ['☀️', '⛅', '☁️', '🌧️', '⛈️', '❄️', '🌫️'];
+          weatherCache = {
+            desc: `${c.weatherDesc[0].value} ${c.temp_C}°C`,
+            emoji: emojis[Math.min(6, Math.floor(code / 50))] || '☀️',
+            city: d.nearest_area?.[0]?.areaName?.[0]?.value || ''
+          };
+          // 缓存成功数据
+          localStorage.setItem('deepseek_weather_cache', JSON.stringify({
+            data: weatherCache,
+            time: Date.now()
+          }));
+        } catch (e) {
+          console.warn('天气获取异常', e);
+          // 最终兜底：尝试缓存，没有就默认
+          const cached = localStorage.getItem('deepseek_weather_cache');
+          if (cached) {
+            weatherCache = JSON.parse(cached).data;
+          } else {
+            weatherCache = { desc: '天气获取失败', emoji: '🌤️', city: '' };
+          }
+        }
         updateEnvDisplay();
       }
+
       fetchRealWeather(); setInterval(fetchRealWeather, 30*60*1000);
 
       function getSeason() { const m = new Date().getMonth()+1; if (m>=3&&m<=5) return '春天'; if (m>=6&&m<=8) return '夏天'; if (m>=9&&m<=11) return '秋天'; return '冬天'; }
@@ -266,7 +334,7 @@
       let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 精简人设 =====================
+      // ===================== 精简人设（完全保留原有内容） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
@@ -420,7 +488,7 @@
 
       async function compressHistoryIfNeeded() { const non = getNonSystemMessages(); if (non.length <= COMPRESS_THRESHOLD) return; const old = non.slice(0, non.length - MAX_CONTEXT); if (old.length < 10) return; const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n'); try { if (apiKey) { const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, body:JSON.stringify({ model:'deepseek-v4-flash', messages:[{role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},{role:'user',content:`请压缩：\n${text}`}], stream:false, temperature:0.3, max_tokens:800 }) }); if (res.ok) { const d = await res.json(); const s = d.choices[0].message.content.trim(); compressedMemory = compressedMemory ? compressedMemory+'\n'+s : s; if (compressedMemory.length>5000) compressedMemory = compressedMemory.slice(-5000); localStorage.setItem(MEMORY_KEY, compressedMemory); messages = [messages[0], ...non.slice(old.length)]; refreshSystemPrompt(); saveAll(); renderAll(); return; } } } catch(e) {} messages = [messages[0], ...non.slice(old.length)]; saveAll(); renderAll(); }
 
-      // ============= 记忆提取与图谱 =============
+      // ============= 记忆提取与图谱（修改：加入 token 统计） =============
       async function extractAndStoreFacts(userText, aiText) {
         if (!apiKey) return;
         const lastExtract = localStorage.getItem('last_extract_time_v3');
@@ -447,6 +515,17 @@
           });
           if (!res.ok) return;
           const data = await res.json();
+          
+          // ===== 新增：统计 token 和费用 =====
+          if (data.usage) {
+            totalTokens += data.usage.total_tokens;
+            // 记忆提取一般没有缓存，按标准价格计算
+            const cost = (data.usage.prompt_tokens * 1 + data.usage.completion_tokens * 2) / 1e6;
+            totalCost += cost;
+            updateTokenDisplay();
+            saveAll(); // 同步到本地存储
+          }
+          
           const raw = data.choices[0].message.content;
           const match = raw.match(/\[[\s\S]*\]/);
           if (!match) return;
