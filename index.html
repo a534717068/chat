@@ -254,7 +254,7 @@
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
       function bindDraft(inputEl, draftKey) { if (!inputEl) return; const saved = loadDraft(draftKey); if (saved && !inputEl.value) inputEl.value = saved; inputEl.addEventListener('input', () => saveDraft(draftKey, inputEl.value)); }
-      
+
       let weatherCache = { desc: '获取中...', emoji: '🌤️', city: '' };
       async function fetchRealWeather() {
         try {
@@ -286,6 +286,7 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
+      // ===================== 人设（完全保留） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
@@ -349,7 +350,7 @@
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom()); scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
 
-      window._switchVer = function(idx,dir) { const msg=messages[idx]; if (!msg||!msg.history||msg.history.length<2) return; const cur=msg.historyIndex||0, newIdx=cur+dir; if (newIdx<0||newIdx>=msg.history.length) return; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { msg.history[cur]={content:msg.content,reply:messages[idx+1].content,time:msg.time}; } else { msg.history[cur]={content:msg.content,reply:'',time:msg.time}; } const ver=msg.history[newIdx]; msg.content=ver.content; msg.time=ver.time; msg.historyIndex=newIdx; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { messages[idx+1].content=ver.reply||''; messages[idx+1].time=ver.time; } else { messages.splice(idx+1,0,{role:'assistant',content:ver.reply||'',id:nextId++,time:ver.time,parentId:msg.id}); } renderAll(); saveAll(); };
+      window._switchVer = function(idx,dir) { const msg=messages[idx]; if (!msg||!msg.history||msg.history.length<2) return; const cur=msg.historyIndex||0, newIdx=cur+dir; if (newIdx<0||newIdx>=msg.history.length) return; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { msg.history[cur]={content:msg.content,reply:messages[idx+1].content,time:msg.time}; } else { msg.history[cur]={content:msg.content,reply:'',time:msg.time}; } const ver=msg.history[newIdx]; msg.content=ver.content; msg.time=ver.time; msg.historyIndex=newIdx; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { messages[idx+1].content=ver.reply||''; messages[idx+1].time=ver.time; } else { messages.splice(idx+1,0,{role:'assistant',content:ver.reply||'',id:nextId++,time:ver.time,parentId:msg.id}); } renderAll(true); saveAll(); };
 
       window._deleteBranches = function(idx) {
         const msg = messages[idx];
@@ -427,7 +428,7 @@
           chatBox.appendChild(row);
         });
         if (multiSelectMode) { document.querySelectorAll('.multi-select-checkbox').forEach(cb => { cb.addEventListener('change', function() { const idx = parseInt(this.dataset.index); if (this.checked) selectedIndices.add(idx); else selectedIndices.delete(idx); updateMultiSelectCount(); }); }); }
-        // 如果不需要跳过滚动，才滚到底部
+        // 如果不跳过滚动，才滚到底部；切换分支时 skipScroll=true 保持原位
         if (!skipScroll) {
           chatBox.scrollTop = chatBox.scrollHeight;
           scrollBtn.classList.toggle('visible', !nearBottom());
@@ -450,7 +451,7 @@
         cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); exitMultiSelectMode();
       });
 
-      function addMsg(role, content) { const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 }; messages.push(msg); fullHistory.push({ role, content, time: msg.time }); saveFullHistory(); renderAll(true); saveAll(); }
+      function addMsg(role, content) { const msg = { role, content, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 }; messages.push(msg); fullHistory.push({ role, content, time: msg.time }); saveFullHistory(); renderAll(); saveAll(); }
       function getNonSystemMessages() { return messages.filter(m => m.role !== 'system'); }
 
       async function compressHistoryIfNeeded() { const non = getNonSystemMessages(); if (non.length <= COMPRESS_THRESHOLD) return; const old = non.slice(0, non.length - MAX_CONTEXT); if (old.length < 10) return; const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n'); try { if (apiKey) { const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, body:JSON.stringify({ model:'deepseek-v4-flash', messages:[{role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},{role:'user',content:`请压缩：\n${text}`}], stream:false, temperature:0.3, max_tokens:800 }) }); if (res.ok) { const d = await res.json(); const s = d.choices[0].message.content.trim(); compressedMemory = compressedMemory ? compressedMemory+'\n'+s : s; if (compressedMemory.length>5000) compressedMemory = compressedMemory.slice(-5000); localStorage.setItem(MEMORY_KEY, compressedMemory); messages = [messages[0], ...non.slice(old.length)]; refreshSystemPrompt(); saveAll(); renderAll(); return; } } } catch(e) {} messages = [messages[0], ...non.slice(old.length)]; saveAll(); renderAll(); }
