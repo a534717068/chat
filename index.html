@@ -212,7 +212,7 @@
     </div>
     <div class="token-panel" id="tokenPanel" style="display:none;">
         <span>上次：<strong id="lastTokens">0</strong> tokens / <strong id="lastCost">0.0000</strong> 元</span>
-        <span>累计：<strong id="totalTokens" class="editable" title="点击编辑已使用Token数">0</strong> tokens / <strong id="totalCost" class="editable" title="点击编辑总花费">0.0000</strong> 元</span>
+        <span>累计：<strong id="totalTokens" class="editable" title="点击编辑">0</strong> tokens / <strong id="totalCost" class="editable" title="点击编辑">0.0000</strong> 元</span>
     </div>
     <div class="model-indicator">当前模型：<strong>deepseek-v4-flash</strong></div>
     <div class="env-indicator" id="envIndicator">
@@ -221,9 +221,7 @@
     </div>
     <div id="progressDisplay" style="display:none;">
         <span class="progress-text">⏳ 整合进度：<span id="progressNum">0</span>/<span id="progressTotal">0</span></span>
-        <div class="progress-buttons">
-            <button id="pauseResumeBtn">⏸️ 暂停</button>
-        </div>
+        <div class="progress-buttons"><button id="pauseResumeBtn">⏸️ 暂停</button></div>
     </div>
     <div class="chat-container"><div class="chat-box" id="chatBox"></div><button class="scroll-to-bottom" id="scrollToBottomBtn">↓</button></div>
     <div class="input-area">
@@ -245,13 +243,13 @@
             const TK = 'deepseek_theme';
             const TKK = 'deepseek_tokens';
             const TCK = 'deepseek_cost';
-            const AEK = 'last_auto_export_v5';
+            const AEK = 'last_auto_export_v6';
             const SETTING_KEY = 'deepseek_global_setting';
             const MEMORY_KEY = 'deepseek_compressed_memory';
-            const CHAT_DATA_KEY = 'deepseek_chat_storage_v2';
-            const MEMORY_FACTS_KEY = 'memory_facts_storage_v2';
-            const MEMORY_GRAPH_KEY = 'memory_graph_storage_v2';
-            const REPROGRESS_KEY = 'reprocess_progress_v2';
+            const CHAT_DATA_KEY = 'deepseek_chat_storage_v3';
+            const MEMORY_FACTS_KEY = 'memory_facts_storage_v3';
+            const MEMORY_GRAPH_KEY = 'memory_graph_storage_v3';
+            const REPROGRESS_KEY = 'reprocess_progress_v3';
 
             function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
             function loadDraft(key) { return localStorage.getItem(key) || ''; }
@@ -261,10 +259,7 @@
             async function fetchRealWeather() {
                 try {
                     const cached = localStorage.getItem('deepseek_weather_cache');
-                    if (cached) {
-                        const p = JSON.parse(cached);
-                        if (Date.now() - p.time < 30 * 60 * 1000) { weatherCache = p.data; updateEnvDisplay(); return; }
-                    }
+                    if (cached) { const p = JSON.parse(cached); if (Date.now() - p.time < 30 * 60 * 1000) { weatherCache = p.data; updateEnvDisplay(); return; } }
                     const pos = await new Promise((r, e) => navigator.geolocation.getCurrentPosition(r, e, { timeout: 5000 }));
                     const res = await fetch(`https://wttr.in/${pos.coords.latitude},${pos.coords.longitude}?format=j1`);
                     if (!res.ok) throw 0;
@@ -332,6 +327,7 @@
             let selectMode = false;
             let selectedMsgIds = new Set();
 
+            // ==================== 保存/加载 ====================
             function saveAll() {
                 try {
                     const data = {
@@ -580,6 +576,7 @@
                 selectedMsgIds.clear();
                 updateSelectionUI();
                 closeDeleteSubmenu();
+                editingMsgId = null;
                 renderAll();
                 saveAll();
             };
@@ -757,7 +754,9 @@
             };
 
             // ==================== 版本切换 ====================
-            window._switchVer = function(idx, dir) {
+            window._switchVer = function(msgId, dir) {
+                const idx = findIdx(msgId);
+                if (idx === -1) return;
                 const msg = messages[idx];
                 if (!msg || !msg.history || msg.history.length < 2) return;
                 const cur = msg.historyIndex || 0, newIdx = cur + dir;
@@ -838,7 +837,7 @@
 
             deleteSubmenu.onclick = function(e) { e.stopPropagation(); };
 
-            // ==================== 消息操作（使用msgId而非idx） ====================
+            // ==================== 消息操作 ====================
             window._editMsg = function(msgId) {
                 closeDeleteSubmenu();
                 const idx = findIdx(msgId);
@@ -912,7 +911,7 @@
                     if (msg.history && msg.history.length > 1) {
                         const cur = (msg.historyIndex || 0) + 1;
                         const total = msg.history.length;
-                        verHTML = `<div class="version-switcher"><button onclick="_switchVer(${idx},-1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${idx},1)" ${cur===total?'disabled':''}>▶</button><button class="del-ver-btn" onclick="_deleteVersionHistory(${msg.id})">🗑</button></div>`;
+                        verHTML = `<div class="version-switcher"><button onclick="_switchVer(${msg.id},-1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${msg.id},1)" ${cur===total?'disabled':''}>▶</button><button class="del-ver-btn" onclick="_deleteVersionHistory(${msg.id})">🗑</button></div>`;
                     }
 
                     const isChecked = selectedMsgIds.has(msg.id);
@@ -1069,29 +1068,25 @@
             $('pauseReprocessBtn').onclick = () => togglePause();
             $('pauseResumeBtn').onclick = togglePause;
 
-            // ============= 发送消息（关键修复） =============
+            // ============= 发送消息 =============
             async function sendToAPI(text) {
                 if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
 
                 let userMsg;
 
                 if (editingMsgId !== null) {
-                    // 编辑模式：找到要编辑的消息
                     const parentIdx = findIdx(editingMsgId);
                     if (parentIdx === -1) {
-                        // 消息不存在了，按新消息发送
                         editingMsgId = null;
                         return sendToAPI(text);
                     }
 
                     const parent = messages[parentIdx];
 
-                    // 如果编辑的是历史消息（后面还有消息），创建分支
                     if (parentIdx < messages.length - 1) {
                         createBranch(parent.id);
                     }
 
-                    // 保存旧版本到history
                     const oldReply = (parentIdx + 1 < messages.length && messages[parentIdx + 1].role === 'assistant') ? messages[parentIdx + 1].content : '';
                     if (!parent.history) {
                         parent.history = [{ content: parent.content, reply: oldReply, time: parent.time }];
@@ -1102,10 +1097,7 @@
                         }
                     }
 
-                    // 截断：保留到编辑的消息为止
                     messages = messages.slice(0, parentIdx + 1);
-
-                    // 更新消息
                     parent.content = text;
                     parent.time = Date.now();
                     parent.history.push({ content: text, reply: '', time: parent.time });
@@ -1115,7 +1107,6 @@
                     userMsg = parent;
                     editingMsgId = null;
                 } else {
-                    // 正常发送新消息
                     userMsg = { role: 'user', content: text, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0, branchId: activeBranchId };
                     const last = messages[messages.length - 1];
                     if (last && last.role !== 'system') userMsg.parentId = last.id;
@@ -1178,11 +1169,12 @@
                 a.click();
             };
 
-            (function auto() {
+            // 自动导出（延迟执行，确保数据已加载）
+            setTimeout(() => {
                 const today = new Date().toISOString().slice(0, 10);
                 if (localStorage.getItem(AEK) === today) return;
                 const data = { messages: messages.filter(m => m.role !== 'system'), branchMap, activeBranchId, branchCounter };
-                if (data.messages.length) {
+                if (data.messages && data.messages.length) {
                     const b = new Blob([JSON.stringify(data)], { type: 'application/json' });
                     const a = document.createElement('a');
                     a.href = URL.createObjectURL(b);
@@ -1190,7 +1182,7 @@
                     a.click();
                     localStorage.setItem(AEK, today);
                 }
-            })();
+            }, 2000);
 
             // ==================== 导入 ====================
             $('importBtn').onclick = () => { $('importTextarea').value = ''; $('importModal').classList.add('active'); };
@@ -1213,6 +1205,7 @@
                     if (role && c) res.push({ role, content: c });
                     else if (res.length) res[res.length - 1].content += ' ' + l;
                 }
+                for (let i = 1; i < res.length; i++) { if (res[i].role === 'assistant' && res[i - 1].role === 'user') res[i].parentId = res[i - 1].id; }
                 return res;
             }
 
@@ -1235,7 +1228,7 @@
                     history: m.history || null, historyIndex: m.historyIndex || 0,
                     branchId: m.branchId || activeBranchId
                 }));
-                for (let i = 1; i < msgs.length; i++) { if (!msgs[i].parentId && msgs[i - 1].role === 'user') msgs[i].parentId = msgs[i - 1].id; }
+                for (let i = 1; i < msgs.length; i++) { if (msgs[i].role === 'assistant' && !msgs[i].parentId && msgs[i - 1].role === 'user') msgs[i].parentId = msgs[i - 1].id; }
 
                 if (bd) { branchMap = bd.branchMap || {}; activeBranchId = bd.activeBranchId || 'branch_1'; branchCounter = bd.branchCounter || 1; }
 
