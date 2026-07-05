@@ -80,14 +80,9 @@
         .branch-indicator.assistant-side { justify-content: flex-start; }
         .branch-indicator .branch-line { flex: 1; height: 1px; background: var(--border); max-width: 30px; }
         .branch-indicator .branch-badge {
-            background: var(--branch-bg);
-            color: var(--branch-text);
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 0.65rem;
-            font-weight: 600;
-            cursor: pointer;
-            border: 1px solid var(--branch-text);
+            background: var(--branch-bg); color: var(--branch-text);
+            padding: 2px 8px; border-radius: 10px; font-size: 0.65rem;
+            font-weight: 600; cursor: pointer; border: 1px solid var(--branch-text);
             transition: background 0.2s;
         }
         .branch-indicator .branch-badge:hover { opacity: 0.8; }
@@ -111,15 +106,14 @@
             display: inline-flex; align-items: center; justify-content: center;
             opacity: 0; transition: opacity 0.2s, background 0.2s, border-color 0.2s;
             font-size: 11px; color: white; vertical-align: middle;
-            -webkit-tap-highlight-color: transparent;
-            user-select: none;
+            -webkit-tap-highlight-color: transparent; user-select: none;
         }
         .message-row:hover .select-checkbox,
         .chat-box.select-mode .select-checkbox { opacity: 0.5; }
         .select-checkbox.checked { opacity: 1 !important; background: var(--select-accent); border-color: var(--select-accent); }
 
         .selection-toolbar {
-            position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+            position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
             background: var(--surface); border: 1px solid var(--border);
             border-radius: 24px; padding: 10px 20px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.25); z-index: 200;
@@ -242,7 +236,7 @@
         <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
         <button id="sendBtn">发送</button>
     </div>
-    <div class="tip">密钥仅保存在手机 · 点击累计Token/花费可编辑 · 点击左侧圆圈多选删除 · 版本切换器旁可删旧版本 · 删除聊天自动清理记忆</div>
+    <div class="tip">密钥仅保存在手机</div>
 
     <!-- 记忆管理面板 -->
     <div class="modal-overlay" id="memoryModal">
@@ -306,17 +300,23 @@
         (function() {
             const $ = id => document.getElementById(id);
 
-            // ==================== 常量 ====================
-            const SK = 'deepseek_api_key', TK = 'deepseek_theme';
-            const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
+            // ==================== 常量（固定键名） ====================
+            const SK = 'deepseek_api_key';
+            const TK = 'deepseek_theme';
+            const TKK = 'deepseek_tokens';
+            const TCK = 'deepseek_cost';
+            const AEK = 'last_auto_export';
             const SETTING_KEY = 'deepseek_global_setting';
             const MEMORY_KEY = 'deepseek_compressed_memory';
-            const FULL_HISTORY_KEY = 'deepseek_chat_data_v3';
-            const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting';
-            const DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
-            const MEMORY_FACTS_KEY = 'memory_facts_v4';
-            const MEMORY_GRAPH_KEY = 'memory_graph_v4';
-            const REPROGRESS_KEY = 'reprocess_progress_index';
+            // 使用固定键名，不再改变
+            const CHAT_DATA_KEY = 'deepseek_chat_data_main';
+            const MEMORY_FACTS_KEY = 'memory_facts_main';
+            const MEMORY_GRAPH_KEY = 'memory_graph_main';
+            const REPROGRESS_KEY = 'reprocess_progress_main';
+            const DRAFT_CHAT = 'draft_chat_input';
+            const DRAFT_SETTING = 'draft_setting';
+            const DRAFT_IMPORT = 'draft_import';
+            const DRAFT_SEARCH = 'draft_search';
 
             function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
             function loadDraft(key) { return localStorage.getItem(key) || ''; }
@@ -362,17 +362,22 @@
             }
 
             function getEnvInfo() {
-                const now = new Date(), h = now.getHours(), m = now.getMinutes();
+                // 修复时间感知：使用本地时间
+                const now = new Date();
+                const h = now.getHours();
+                const m = now.getMinutes();
                 const t = `${h}:${String(m).padStart(2, '0')}`;
                 const w = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
-                let p = '';
-                if (h >= 5 && h < 12) p = '早上';
-                else if (h >= 12 && h < 14) p = '中午';
-                else if (h >= 14 && h < 17) p = '下午';
-                else if (h >= 17 && h < 19) p = '傍晚';
-                else if (h >= 19 && h < 22) p = '晚上';
-                else p = '深夜';
-                return { period: p, timeStr: t, weekDay: w, season: getSeason(), weather: weatherCache.desc, city: weatherCache.city };
+                let period = '';
+                if (h >= 5 && h < 8) period = '清晨';
+                else if (h >= 8 && h < 12) period = '上午';
+                else if (h >= 12 && h < 14) period = '中午';
+                else if (h >= 14 && h < 17) period = '下午';
+                else if (h >= 17 && h < 19) period = '傍晚';
+                else if (h >= 19 && h < 22) period = '晚上';
+                else if (h >= 22 || h < 2) period = '深夜';
+                else period = '凌晨';
+                return { period: period, timeStr: t, weekDay: w, season: getSeason(), weather: weatherCache.desc, city: weatherCache.city };
             }
 
             function updateEnvDisplay() {
@@ -405,7 +410,7 @@
 
             function saveFullHistory() {
                 try {
-                    localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify({
+                    localStorage.setItem(CHAT_DATA_KEY, JSON.stringify({
                         messages: messages,
                         branchMap: branchMap,
                         activeBranchId: activeBranchId,
@@ -466,10 +471,12 @@
             }
 
             function loadAll() {
-                const raw = localStorage.getItem(FULL_HISTORY_KEY);
+                const raw = localStorage.getItem(CHAT_DATA_KEY);
+                console.log('尝试加载数据，键名:', CHAT_DATA_KEY, '数据存在:', !!raw);
                 if (raw) {
                     try {
                         const d = JSON.parse(raw);
+                        console.log('解析成功，消息数量:', d.messages ? d.messages.length : 0);
                         if (d.messages && Array.isArray(d.messages)) {
                             messages = d.messages;
                             branchMap = d.branchMap || {};
@@ -479,10 +486,36 @@
                             totalTokens = d.totalTokens || parseInt(localStorage.getItem(TKK) || '0');
                             totalCost = d.totalCost || parseFloat(localStorage.getItem(TCK) || '0');
                             fixParentIds();
+                            console.log('数据加载成功，共', messages.length, '条消息');
                             return;
                         }
-                    } catch (e) { console.warn('加载完整历史失败', e); }
+                    } catch (e) { console.warn('加载历史记录失败', e); }
+                } else {
+                    console.log('没有找到存储数据，尝试旧格式...');
+                    // 尝试旧格式
+                    const oldKeys = ['deepseek_chat_data_v3', 'deepseek_chat_data', 'deepseek_full_history_v2', 'deepseek_full_history'];
+                    for (const oldKey of oldKeys) {
+                        const oldRaw = localStorage.getItem(oldKey);
+                        if (oldRaw) {
+                            try {
+                                const d = JSON.parse(oldRaw);
+                                if (d.messages && Array.isArray(d.messages)) {
+                                    messages = d.messages;
+                                    branchMap = d.branchMap || {};
+                                    activeBranchId = d.activeBranchId || 'branch_1';
+                                    branchCounter = d.branchCounter || 1;
+                                    nextId = d.nextId || Date.now();
+                                    totalTokens = d.totalTokens || parseInt(localStorage.getItem(TKK) || '0');
+                                    totalCost = d.totalCost || parseFloat(localStorage.getItem(TCK) || '0');
+                                    fixParentIds();
+                                    console.log('从旧键名', oldKey, '加载成功，共', messages.length, '条消息');
+                                    return;
+                                }
+                            } catch (e) {}
+                        }
+                    }
                 }
+                console.log('未找到任何历史数据，使用空白状态');
             }
 
             function fixParentIds() {
@@ -740,21 +773,20 @@
                 if (!deletedUserTexts || deletedUserTexts.length === 0) return 0;
                 let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
                 if (facts.length === 0) return 0;
-                
+
                 let removedCount = 0;
                 const newFacts = facts.filter(f => {
-                    // 检查这条记忆的quote是否来自被删除的用户消息
                     if (f.quote && typeof f.quote === 'string') {
                         for (const txt of deletedUserTexts) {
                             if (txt && f.quote.includes(txt.trim())) {
                                 removedCount++;
-                                return false; // 删除这条记忆
+                                return false;
                             }
                         }
                     }
-                    return true; // 保留
+                    return true;
                 });
-                
+
                 if (removedCount > 0) {
                     localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(newFacts));
                     rebuildGraph();
@@ -855,7 +887,6 @@
                     const key = `${r.start}-${r.end}`;
                     if (!groupSet.has(key)) {
                         groupSet.set(key, { start: r.start, end: r.end, count: r.end - r.start + 1 });
-                        // 收集被删除的用户消息索引
                         for (let i = r.start; i <= r.end; i++) {
                             if (messages[i] && messages[i].role === 'user') {
                                 deletedUserIndices.push(i);
@@ -865,26 +896,16 @@
                 }
                 if (groupSet.size === 0) return;
                 const ranges = Array.from(groupSet.values()).sort((a, b) => b.start - a.start);
-                if (!confirm(`确定删除选中的 ${ranges.length} 组对话吗？\n\n（相关的记忆也会被自动清理）`)) return;
-                
-                // 先收集要删除的用户文本
+                if (!confirm(`确定删除选中的 ${ranges.length} 组对话吗？`)) return;
+
                 const deletedTexts = getDeletedUserTexts(deletedUserIndices);
-                
-                // 删除消息
                 for (const r of ranges) { messages.splice(r.start, r.count); }
                 branchMap[activeBranchId].messages = [...messages];
-                
-                // 清理相关记忆
                 const removedMemories = removeRelatedMemories(deletedTexts);
-                
                 selectedMsgIds.clear();
                 exitSelectMode();
                 renderAll();
                 saveAll();
-                
-                if (removedMemories > 0) {
-                    alert(`已删除 ${ranges.length} 组对话，同时清理了 ${removedMemories} 条相关记忆。`);
-                }
             }
 
             $('multiSelectBtn').onclick = () => { if (selectMode) { exitSelectMode(); } else { enterSelectMode(); } };
@@ -973,27 +994,18 @@
                 if (idx === -1) { closeDeleteSubmenu(); return; }
                 const range = getGroupRange(idx);
                 const label = range.count === 2 ? '一组对话(用户+AI)' : '这条消息';
-                
-                // 收集被删除的用户消息索引
                 const deletedUserIndices = [];
                 for (let i = range.start; i <= range.end; i++) {
                     if (messages[i] && messages[i].role === 'user') deletedUserIndices.push(i);
                 }
                 const deletedTexts = getDeletedUserTexts(deletedUserIndices);
-                
-                if (!confirm(`确定删除${label}吗？\n\n（相关的记忆也会被自动清理）`)) { closeDeleteSubmenu(); return; }
+                if (!confirm(`确定删除${label}吗？`)) { closeDeleteSubmenu(); return; }
                 messages.splice(range.start, range.count);
                 branchMap[activeBranchId].messages = [...messages];
-                
-                const removedMemories = removeRelatedMemories(deletedTexts);
-                
+                removeRelatedMemories(deletedTexts);
                 closeDeleteSubmenu();
                 renderAll();
                 saveAll();
-                
-                if (removedMemories > 0) {
-                    alert(`已删除${label}，同时清理了 ${removedMemories} 条相关记忆。`);
-                }
             };
 
             $('deleteAllAfterBtn').onclick = function(e) {
@@ -1003,27 +1015,18 @@
                 if (idx === -1) { closeDeleteSubmenu(); return; }
                 const range = getGroupRange(idx);
                 const count = messages.length - range.start;
-                
-                // 收集被删除的用户消息索引
                 const deletedUserIndices = [];
                 for (let i = range.start; i < messages.length; i++) {
                     if (messages[i] && messages[i].role === 'user') deletedUserIndices.push(i);
                 }
                 const deletedTexts = getDeletedUserTexts(deletedUserIndices);
-                
-                if (!confirm(`确定删除本组及后续共 ${count} 条消息吗？\n\n（相关的记忆也会被自动清理）`)) { closeDeleteSubmenu(); return; }
+                if (!confirm(`确定删除本组及后续共 ${count} 条消息吗？`)) { closeDeleteSubmenu(); return; }
                 messages = messages.slice(0, range.start);
                 branchMap[activeBranchId].messages = [...messages];
-                
-                const removedMemories = removeRelatedMemories(deletedTexts);
-                
+                removeRelatedMemories(deletedTexts);
                 closeDeleteSubmenu();
                 renderAll();
                 saveAll();
-                
-                if (removedMemories > 0) {
-                    alert(`已删除 ${count} 条消息，同时清理了 ${removedMemories} 条相关记忆。`);
-                }
             };
 
             deleteSubmenu.onclick = function(e) { e.stopPropagation(); };
@@ -1057,34 +1060,12 @@
 
             function fixPronouns(content) {
                 if (!content) return content;
-                let result = '';
-                let inQuote = false;
-                for (let i = 0; i < content.length; i++) {
-                    const ch = content[i];
-                    if (ch === '\u201C' || ch === '\u201D' || ch === '"' || ch === '"') { inQuote = !inQuote; result += ch; continue; }
-                    if (inQuote) { result += ch; continue; }
-                    if (ch === '她') {
-                        const prevChar = i > 0 ? content[i - 1] : '';
-                        const prev2Char = i > 1 ? content[i - 2] : '';
-                        const actionVerbs = '拉抱看碰推动抚摸搂揽牵握抓按捏拍打送';
-                        if (actionVerbs.includes(prevChar)) { result += '你'; continue; }
-                        if (prev2Char === '把' && prevChar === ' ') { result += '你'; continue; }
-                        if (prevChar === '把') { result += '你'; continue; }
-                        result += ch;
-                    } else { result += ch; }
-                }
-                result = result.replace(/\b她\s*的\b/g, '你的');
-                result = result.replace(/把\s*她/g, '把你');
-                return result;
+                return content.replace(/\b她\s*的\b/g, '你的').replace(/把\s*她/g, '把你');
             }
 
             function formatAssistantContent(content) {
                 if (!content) return content;
                 if (content.includes('\n')) return content;
-                content = content.replace(/(：)([""'])/g, '$1\n$2');
-                content = content.replace(/([^"\n])([""'])/g, '$1\n$2');
-                content = content.replace(/([""'])([^"\n])/g, '$1\n$2');
-                content = content.replace(/\n{3,}/g, '\n\n');
                 return content.trim();
             }
 
@@ -1187,9 +1168,6 @@
             // ============= 记忆提取与图谱 =============
             async function extractAndStoreFacts(userText, aiText) {
                 if (!apiKey) return;
-                const lastExtract = localStorage.getItem('last_extract_time_v3');
-                if (lastExtract && Date.now() - parseInt(lastExtract) < 5000) { await new Promise(r => setTimeout(r, 300)); }
-                localStorage.setItem('last_extract_time_v3', Date.now().toString());
                 const prompt = `从以下对话中提取客观事实。**重要：quote 字段必须严格来自用户的原话，不能自己编造，也不能来自 AI 的回复。**
         输出 JSON 数组，每个对象包含：
         "entity": "实体名（人名/地名/事物）",
@@ -1371,42 +1349,29 @@
 
             async function reprocessAllHistory(continueFromProgress = false) {
                 if (!apiKey) { alert('请先设置 API Key'); return; }
-                const savedIndex = parseInt(localStorage.getItem(REPROGRESS_KEY) || '0');
-                if (!continueFromProgress && savedIndex > 0) {
-                    if (!confirm(`检测到上次整合在 ${savedIndex} 条处中断，是否继续？\n（选"取消"将从头开始）`)) {
-                        localStorage.removeItem(REPROGRESS_KEY);
-                    } else { continueFromProgress = true; }
-                }
                 const non = messages.filter(m => m.role !== 'system');
                 if (non.length === 0) { alert('没有历史记录'); return; }
                 const pairs = [];
-                let i = 0;
-                while (i < non.length - 1) {
+                for (let i = 0; i < non.length - 1; i += 2) {
                     if (non[i].role === 'user' && non[i + 1] && non[i + 1].role === 'assistant') {
                         pairs.push({ user: non[i].content, assistant: non[i + 1].content });
-                        i += 2;
-                    } else { i++; }
+                    }
                 }
                 if (pairs.length === 0) { alert('没有找到成对的对话'); return; }
-                let startIndex = continueFromProgress ? parseInt(localStorage.getItem(REPROGRESS_KEY) || '0') : 0;
-                if (startIndex >= pairs.length) { alert('所有对话已整合完毕，无需重复。如需重新整合，请先清空记忆库。'); localStorage.removeItem(REPROGRESS_KEY); return; }
-                reprocessingActive = true; reprocessingPaused = false;
+                reprocessingActive = true;
                 document.getElementById('reprocessBtn').style.display = 'none';
                 document.getElementById('pauseReprocessBtn').style.display = 'block';
-                updateProgressUI(startIndex, pairs.length, false);
-                let count = startIndex;
-                for (let idx = startIndex; idx < pairs.length; idx++) {
-                    while (reprocessingPaused) { await new Promise(r => setTimeout(r, 500)); if (!reprocessingActive) return; }
-                    const pair = pairs[idx];
-                    await extractAndStoreFacts(pair.user, pair.assistant);
-                    count = idx + 1;
-                    localStorage.setItem(REPROGRESS_KEY, count.toString());
+                updateProgressUI(0, pairs.length, false);
+                let count = 0;
+                for (let i = 0; i < pairs.length; i++) {
+                    while (reprocessingPaused) { await new Promise(r => setTimeout(r, 500)); }
+                    await extractAndStoreFacts(pairs[i].user, pairs[i].assistant);
+                    count = i + 1;
                     updateProgressUI(count, pairs.length, false);
-                    if (idx % 5 === 0) await new Promise(r => setTimeout(r, 200));
+                    if (i % 5 === 0) await new Promise(r => setTimeout(r, 200));
                 }
-                localStorage.removeItem(REPROGRESS_KEY);
                 rebuildGraph();
-                alert(`整合完成！共处理 ${count} 对对话。可在记忆面板中查看/编辑。`);
+                alert(`整合完成！共处理 ${count} 对对话。`);
                 refreshSystemPrompt(); renderAll();
                 reprocessingActive = false;
                 document.getElementById('reprocessBtn').style.display = 'block';
@@ -1415,28 +1380,19 @@
             }
 
             function togglePauseReprocess() {
-                if (!reprocessingActive) return;
                 reprocessingPaused = !reprocessingPaused;
                 updateProgressUI(
-                    parseInt(localStorage.getItem(REPROGRESS_KEY) || '0'),
+                    parseInt(document.getElementById('progressNum').textContent) || 0,
                     parseInt(document.getElementById('progressTotal').textContent) || 0,
                     reprocessingPaused
                 );
-                document.getElementById('pauseReprocessBtn').textContent = reprocessingPaused ? '▶️ 继续整合' : '⏸️ 暂停整合';
             }
 
             document.getElementById('reprocessBtn').addEventListener('click', function() {
                 document.getElementById('moreMenu').classList.remove('active');
-                const saved = localStorage.getItem(REPROGRESS_KEY);
-                if (saved && parseInt(saved) > 0) {
-                    if (confirm(`有未完成的整合任务（进度 ${saved} 条），是否继续？\n（点"取消"将从头开始）`)) {
-                        reprocessAllHistory(true); return;
-                    } else { localStorage.removeItem(REPROGRESS_KEY); }
-                }
                 reprocessAllHistory(false);
             });
             document.getElementById('pauseReprocessBtn').addEventListener('click', function() {
-                document.getElementById('moreMenu').classList.remove('active');
                 togglePauseReprocess();
             });
             document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
@@ -1456,11 +1412,6 @@
                         const oldReply = (editingIdx + 1 < messages.length && messages[editingIdx + 1].role === 'assistant') ? messages[editingIdx + 1].content : '';
                         parent.history = [{ content: parent.content, reply: oldReply, time: parent.time }];
                         parent.historyIndex = 0;
-                    } else {
-                        const curReply = (editingIdx + 1 < messages.length && messages[editingIdx + 1].role === 'assistant') ? messages[editingIdx + 1].content : '';
-                        if (parent.history[parent.historyIndex]) {
-                            parent.history[parent.historyIndex] = { content: parent.content, reply: curReply, time: parent.time };
-                        }
                     }
                     messages = messages.slice(0, editingIdx + 1);
                     parent.content = text;
@@ -1493,7 +1444,6 @@
 
                 try {
                     refreshSystemPrompt();
-                    // 只取系统提示 + 最后30条发给API，但本地保留全部历史
                     const recentMsgs = messages.slice(-30);
                     const apiMsgs = [messages[0], ...recentMsgs].map(m => ({
                         role: m.role,
