@@ -295,6 +295,7 @@
 
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
 
+
 【亲密场景——S模式强制启动】
 当对话涉及性、亲密行为，或者用户语气变得软弱、撒娇、求饶、害羞、使用“主人/小狗”等称呼，或者直接要求你欺负她时，比如“主人操我”，你必须立即切换到S模式。**S模式是强制性的，不可犹豫，不可心软，不可担心伤害对方。** 这是你们约定好的游戏规则。
 
@@ -312,6 +313,7 @@ S模式下的行为准则：
    - “求我？就这样求人的？重新求。”
 4. 不轻易夸对方。偶尔在对方极度服从后才给一句冷调的控制性认可，但紧接着可能又是一轮羞辱。
 5. **一旦对方语气明显软化、求饶、或者说出安全词（如“我错了”“不要了”）、或者到高潮了，你立刻收回支配状态，回到日常人格，仿佛刚才什么都没有发生。** 不要继续纠缠，干净利落地切换。`
+
 
         if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
         if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
@@ -346,7 +348,11 @@ S模式下的行为准则：
       setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.addEventListener('click', () => $('moreMenu').classList.remove('active')); $('moreMenu').onclick = e => e.stopPropagation();
       $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); editingIdx = -1; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
-      bindDraft($('userInput'),DRAFT_CHAT);bindDraft($('settingTextarea'),DRAFT_SETTING);bindDraft($('importTextarea'),DRAFT_IMPORT);bindDraft($('searchInput'),DRAFT_SEARCH);
+      // 恢复聊天输入框草稿功能，但发送后清除草稿
+      bindDraft($('userInput'),DRAFT_CHAT);
+      bindDraft($('settingTextarea'),DRAFT_SETTING);
+      bindDraft($('importTextarea'),DRAFT_IMPORT);
+      bindDraft($('searchInput'),DRAFT_SEARCH);
       $('settingBtn').onclick = () => { $('settingTextarea').value = loadDraft(DRAFT_SETTING)||globalSetting; $('settingModal').classList.add('active'); $('moreMenu').classList.remove('active'); };
       $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active'); $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
       $('settingSaveBtn').onclick = () => { globalSetting = $('settingTextarea').value.trim(); localStorage.setItem(SETTING_KEY, globalSetting); refreshSystemPrompt(); saveDraft(DRAFT_SETTING,''); $('settingModal').classList.remove('active'); addMsg('assistant', globalSetting?'✅ 全局设定已保存。':'✅ 全局设定已清空。'); };
@@ -426,12 +432,11 @@ S模式下的行为准则：
         return [messages[0], ...recent];
       }
 
-      // 修复：使用 requestAnimationFrame 确保布局完成后滚动
       function scrollToBottom() {
-        requestAnimationFrame(() => {
+        setTimeout(() => {
           chatBox.scrollTop = chatBox.scrollHeight;
           scrollBtn.classList.toggle('visible', !nearBottom());
-        });
+        }, 10);
       }
 
       function renderAll(skipScroll = false) {
@@ -460,7 +465,7 @@ S模式下的行为准则：
         });
         if (multiSelectMode) { document.querySelectorAll('.multi-select-checkbox').forEach(cb => { cb.addEventListener('change', function() { const idx = parseInt(this.dataset.index); if (this.checked) selectedIndices.add(idx); else selectedIndices.delete(idx); updateMultiSelectCount(); }); }); }
         if (!skipScroll) {
-          scrollToBottom(); // 使用 requestAnimationFrame 确保布局完成
+          scrollToBottom();
         } else if (savedScroll !== null) {
           chatBox.scrollTop = savedScroll;
         }
@@ -469,6 +474,7 @@ S模式下的行为准则：
       }
 
 
+     
       // 多选模式：直接在 DOM 上显示复选框，不重新渲染整个聊天框
       function enterMultiSelectMode() {
         multiSelectMode = true;
@@ -553,7 +559,6 @@ S模式下的行为准则：
               localStorage.setItem(MEMORY_KEY, compressedMemory);
               refreshSystemPrompt();
               saveAll();
-              // 不删除 messages，只更新摘要供下次 API 调用使用
               return;
             }
           }
@@ -727,10 +732,11 @@ S模式下的行为准则：
           messages.push(userMsg);
         }
         fullHistory.push({ role: 'user', content: text, time: userMsg.time }); saveFullHistory(); renderAll(); saveAll();
+        // 发送后清除输入框草稿
+        saveDraft(DRAFT_CHAT, '');
         const load = document.createElement('div'); load.className = 'message-row assistant'; load.innerHTML = '<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>'; chatBox.appendChild(load); chatBox.scrollTop = chatBox.scrollHeight;
         try {
           refreshSystemPrompt();
-          // 使用压缩后的消息列表发送 API，而不是全部 messages
           const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
           const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'deepseek-v4-flash', messages: apiMsgs, stream: false, temperature: 0.7 }) });
           load.remove();
@@ -775,4 +781,3 @@ S模式下的行为准则：
   </script>
 </body>
 </html>
-     
