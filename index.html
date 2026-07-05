@@ -286,9 +286,11 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
+      // ===================== 人设（强化指代约束） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。**在所有对话和叙述中，只能使用"你""我"称呼彼此。绝对禁止使用第三人称"她"来指代你自己或用户。**
+特别注意：当你需要指代用户时，必须使用"你"；当你需要指代自己时，必须使用"我"。如果对话中涉及其他女性角色，你可以用"她"来指代那些第三方，但绝不能将"她"用于你自己或用户。
 
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
 
@@ -395,12 +397,7 @@
       window._editMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='user') return; $('userInput').value=typeof msg.content==='string'?msg.content:''; $('userInput').focus(); editingIdx=idx; };
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); editingIdx = -1; renderAll(); saveAll(); sendToAPI(text); };
 
-      function fixPronouns(content) {
-        if (!content) return content; let result = ''; let inQuote = false;
-        for (let i = 0; i < content.length; i++) { const ch = content[i]; if (ch === '\u201C' || ch === '\u201D' || ch === '"' || ch === '"') { inQuote = !inQuote; result += ch; continue; } if (inQuote) { result += ch; continue; } if (ch === '她') { const prevChar = i > 0 ? content[i-1] : ''; const prev2Char = i > 1 ? content[i-2] : ''; const actionVerbs = '拉抱看碰推动抚摸搂揽牵握抓按捏拍打送'; if (actionVerbs.includes(prevChar)) { result += '你'; continue; } if (prev2Char === '把' && prevChar === ' ') { result += '你'; continue; } if (prevChar === '把') { result += '你'; continue; } result += ch; } else { result += ch; } }
-        result = result.replace(/\b她\s*的\b/g, '你的'); result = result.replace(/把\s*她/g, '把你'); return result;
-      }
-
+      // 移除了 fixPronouns 函数，不再做前端替换
       function formatAssistantContent(content) { if (!content) return content; if (content.includes('\n')) return content; content = content.replace(/(：)([""'])/g, '$1\n$2'); content = content.replace(/([^"\n])([""'])/g, '$1\n$2'); content = content.replace(/([""'])([^"\n])/g, '$1\n$2'); content = content.replace(/\n{3,}/g, '\n\n'); return content.trim(); }
 
       function renderAll(skipScroll = false) {
@@ -411,7 +408,7 @@
           const row = document.createElement('div'); row.className = `message-row ${msg.role}`; row.dataset.index = idx;
           const timeStr = formatTime(msg.time || Date.now());
           let content = typeof msg.content === 'string' ? msg.content : '[图片]';
-          if (msg.role === 'assistant') { content = fixPronouns(content); content = formatAssistantContent(content); }
+          if (msg.role === 'assistant') { content = formatAssistantContent(content); } // 不再调用 fixPronouns
           if (searchKeyword) { const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); content = content.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>'); }
           let btns = '';
           if (!multiSelectMode) {
@@ -437,7 +434,8 @@
         if (searchKeyword) { const marks = chatBox.querySelectorAll('mark'); searchTotal = marks.length; if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) marks[searchMatchIndex].classList.add('current'); }
         updateMultiSelectCount();
       }
-      // 多选模式：直接在 DOM 上显示复选框，不重新渲染整个聊天框
+
+           // 多选模式：直接在 DOM 上显示复选框，不重新渲染整个聊天框
       function enterMultiSelectMode() {
         multiSelectMode = true;
         selectedIndices.clear();
@@ -707,4 +705,3 @@
   </script>
 </body>
 </html>
-     
