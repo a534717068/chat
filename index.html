@@ -404,6 +404,7 @@
       function formatAssistantContent(content) { if (!content) return content; if (content.includes('\n')) return content; content = content.replace(/(：)([""'])/g, '$1\n$2'); content = content.replace(/([^"\n])([""'])/g, '$1\n$2'); content = content.replace(/([""'])([^"\n])/g, '$1\n$2'); content = content.replace(/\n{3,}/g, '\n\n'); return content.trim(); }
 
       function renderAll(skipScroll = false) {
+        const savedScroll = skipScroll ? chatBox.scrollTop : null;
         chatBox.innerHTML = '';
         messages.forEach((msg, idx) => {
           if (msg.role === 'system') return;
@@ -427,17 +428,18 @@
           chatBox.appendChild(row);
         });
         if (multiSelectMode) { document.querySelectorAll('.multi-select-checkbox').forEach(cb => { cb.addEventListener('change', function() { const idx = parseInt(this.dataset.index); if (this.checked) selectedIndices.add(idx); else selectedIndices.delete(idx); updateMultiSelectCount(); }); }); }
-        // 不跳过滚动时才滚到底部
         if (!skipScroll) {
           chatBox.scrollTop = chatBox.scrollHeight;
           scrollBtn.classList.toggle('visible', !nearBottom());
+        } else if (savedScroll !== null) {
+          chatBox.scrollTop = savedScroll;
         }
         if (searchKeyword) { const marks = chatBox.querySelectorAll('mark'); searchTotal = marks.length; if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) marks[searchMatchIndex].classList.add('current'); }
         updateMultiSelectCount();
       }
-
+      
       function enterMultiSelectMode() { multiSelectMode = true; selectedIndices.clear(); document.body.classList.add('multi-select'); $('moreMenu').classList.remove('active'); renderAll(true); }
-      function exitMultiSelectMode() { multiSelectMode = false; selectedIndices.clear(); document.body.classList.remove('multi-select'); renderAll(true); } // 修复：不滚动
+      function exitMultiSelectMode() { multiSelectMode = false; selectedIndices.clear(); document.body.classList.remove('multi-select'); renderAll(true); }
       function updateMultiSelectCount() { $('multiSelectCount').textContent = selectedIndices.size; }
       $('multiSelectBtn').addEventListener('click', enterMultiSelectMode);
       $('cancelMultiSelectBtn').addEventListener('click', exitMultiSelectMode);
