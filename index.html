@@ -738,7 +738,7 @@ S模式下的行为准则：
         try {
           refreshSystemPrompt();
           const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
-          const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'deepseek-v4-flash', messages: apiMsgs, stream: false, temperature: 0.7 }) });
+          const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'deepseek-v4-flash', messages: apiMsgs, stream: false, temperature: 0.6 }) });
           load.remove();
           if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `请求失败 (${res.status})`); }
           const data = await res.json();
