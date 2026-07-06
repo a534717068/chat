@@ -325,7 +325,7 @@ S模式下的行为准则：
           for (const [entity, relations] of Object.entries(graph)) {
             if (relations.length === 0) continue;
             memoryText += `\n关于"${entity}"的记忆：\n`;
-            relations.slice(0, 2).forEach(r => memoryText += `- ${r.fact}\n`);
+            relations.slice(0, 1).forEach(r => memoryText += `- ${r.fact}\n`);
           }
           if (memoryText) p += `\n\n【记忆】\n${memoryText}`;
         } catch(e) {}
