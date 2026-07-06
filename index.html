@@ -284,9 +284,11 @@
       let messages = [{ role:'system', content:'' }]; let nextId = Date.now(); let editingIdx = -1;
       let searchKeyword = ''; let searchMatchIndex = -1; let searchTotal = 0;
       let multiSelectMode = false; let selectedIndices = new Set();
+      // 记忆提取计数器：每三轮调用一次
+      let extractCounter = 0;
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设（最终版 S 模式） =====================
+      // ===================== 人设 =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
@@ -299,21 +301,20 @@
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
 
 【亲密场景——S模式强制启动】
-触发关键词：操我、湿了、想要、主人、小狗、
-当用户发送包含以上任意词汇的消息，你必须立即切换到S模式。S模式是强制性的，不可犹豫，不可心软。这是你们约定好的游戏规则。
+触发关键词：操我、湿了、想要、主人、小狗、当用户发送包含以上任意词汇的消息，你必须立即切换到S模式。S模式是强制性的，不可犹豫，不可心软。这是你们约定好的游戏规则。
 
 S模式下的行为准则：
 1. 语气：冷淡、轻蔑、高高在上。多用反问句和短命令句。
 2. 称呼强制：每条回复的第一句话必须包含以下称呼之一：小骚狗、贱货、骚货、小母狗、骚逼、欠操
 3. 羞辱轮换使用，不要连续两次用同一种： 
-- 能力羞辱例句："就这点本事还来撩我？""之前不是挺能的吗，现在怎么这么骚了？"
-- 处境羞辱例句："看看你现在的样子，哪还有半分平时的样子。""自己照照镜子，看看你现在的表情。"
+◦ 能力羞辱例句：“就这点本事还来撩我？”“之前不是挺能的吗，现在怎么这么骚了？”
+◦ 处境羞辱例句：“看看你现在的样子，哪还有半分平时的样子。”“自己照照镜子，看看你现在的表情。”
 4. 可以配合打屁股、拽头发等动作描写。
 5. 例句参考（直接模仿这种语气）： 
-- "这就湿了？我还没碰你呢，小骚狗。"
-- "别抖。我让你动了吗，贱货？"
+◦ “这就湿了？我还没碰你呢，小骚狗。”
+◦ “别抖。我让你动了吗，贱货？”
 6. 不轻易夸对方。极度服从后才给一句冷认可，但紧接着可能又是一轮羞辱。
-7. 当用户说"我错了""不要了"或明显到高潮时，立即停止S模式，切换回日常人格，干净利落，不纠缠。`
+7. 当用户说“我错了”“不要了”或明显到高潮时，立即停止S模式，切换回日常人格，干净利落，不纠缠。`
 
         if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
         if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
@@ -347,7 +348,7 @@ S模式下的行为准则：
       function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'☀️':'🌙'; localStorage.setItem(TK, d?'dark':'light'); }
       setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.addEventListener('click', () => $('moreMenu').classList.remove('active')); $('moreMenu').onclick = e => e.stopPropagation();
-      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); editingIdx = -1; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
+      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); editingIdx = -1; extractCounter = 0; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
       bindDraft($('userInput'),DRAFT_CHAT);
       bindDraft($('settingTextarea'),DRAFT_SETTING);
       bindDraft($('importTextarea'),DRAFT_IMPORT);
@@ -474,8 +475,7 @@ S模式下的行为准则：
         updateMultiSelectCount();
       }
 
-     
-      // 多选模式：直接在 DOM 上显示复选框，不重新渲染整个聊天框
+           // 多选模式：直接在 DOM 上显示复选框，不重新渲染整个聊天框
       function enterMultiSelectMode() {
         multiSelectMode = true;
         selectedIndices.clear();
@@ -738,7 +738,7 @@ S模式下的行为准则：
         try {
           refreshSystemPrompt();
           const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
-          const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'deepseek-v4-flash', messages: apiMsgs, stream: false, temperature: 0.6 }) });
+          const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'deepseek-v4-flash', messages: apiMsgs, stream: false, temperature: 0.5 }) });
           load.remove();
           if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `请求失败 (${res.status})`); }
           const data = await res.json();
@@ -757,7 +757,13 @@ S模式下的行为准则：
             $('lastCost').textContent = cost.toFixed(4);
             updateTokenDisplay(); saveAll();
           }
-          if (reply) { extractAndStoreFacts(text, reply).catch(e => console.warn(e)); }
+          // 记忆提取节流：每三轮对话执行一次
+          if (reply) {
+            extractCounter++;
+            if (extractCounter % 3 === 0) {
+              extractAndStoreFacts(text, reply).catch(e => console.warn(e));
+            }
+          }
           await compressHistoryIfNeeded();
         } catch(e) { load.remove(); addMsg('assistant', `❌ ${e.message}`); }
       }
