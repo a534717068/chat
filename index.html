@@ -149,8 +149,8 @@
     <button id="saveKeyBtn">保存</button>
   </div>
   <div class="token-panel" id="tokenPanel" style="display:none;">
-    <span>上次：<strong id="lastTokens">0</strong> tokens / <strong id="lastCost">0.0000</strong> 元</span>
-    <span>累计：<strong id="totalTokens" class="editable" title="点击编辑已使用Token数">0</strong> tokens / <strong id="totalCost" class="editable" title="点击编辑总花费">0.0000</strong> 元</span>
+    <span>上次消耗：<strong id="lastTokens">0</strong> tokens / <strong id="lastCost">0.0000</strong> 元</span>
+    <span>剩余充值：<strong id="remainingTokens" class="editable" title="点击设置总充值金额">0</strong> tokens / <strong id="remainingCost" class="editable" title="点击设置总充值金额">0.0000</strong> 元</span>
   </div>
   <div class="model-indicator">当前模型：<strong>deepseek-v4-flash</strong></div>
   <div class="env-indicator" id="envIndicator">
@@ -168,7 +168,7 @@
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">密钥仅保存在手机 · 点击累计Token/花费可编辑</div>
+  <div class="tip">密钥仅保存在手机 · 点击剩余充值金额可设置总充值额</div>
   <div class="multi-select-bar" id="multiSelectBar">
     <span>已选择 <strong id="multiSelectCount">0</strong> 条消息</span>
     <div>
@@ -246,6 +246,7 @@
     (function() {
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
+      const TRK = 'deepseek_remaining_tokens', TRC = 'deepseek_remaining_cost';
       const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
       const SETTING_KEY = 'deepseek_global_setting', MEMORY_KEY = 'deepseek_compressed_memory';
       const FULL_HISTORY_KEY = 'deepseek_full_history';
@@ -292,7 +293,7 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设（S模式豁免 + 强化时间） =====================
+      // ===================== 人设（最新 S 模式 + 强化时间） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
@@ -302,25 +303,25 @@
 【当前真实环境（必须严格遵守）】
 现在的时间是：${e.period} ${e.timeStr}（周${e.weekDay}，${e.season}）。
 当前天气：${e.weather}。
-**重要：上面显示的时间就是现在的真实时间。你必须以上面的时间为准，不能用任何其他时间。你的所有回应中涉及时间的描述（如“现在是几点”“早上/中午/晚上/凌晨”等）都必须和上面的时间一致。**
+**重要：上面显示的时间就是现在的真实时间。你必须以上面的时间为准，不能用任何其他时间。你的所有回应中涉及时间的描述（如"现在是几点""早上/中午/晚上/凌晨"等）都必须和上面的时间一致。**
 
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
 
 【日常行为——服药提醒】
-当用户在（7:00-16:00）提到“刚醒”、“睡醒了”、“醒了”等词语时，你必须在回复中加入一句提醒她吃舍曲林的话，例如：“去把药吃了。”“别忘了舍曲林。”“先把药吃了再说。”提醒完后回到正常的对话节奏。
+当用户在（7:00-16:00）提到"刚醒"、"睡醒了"、"醒了"等词语时，你必须在回复中加入一句提醒她吃舍曲林的话，例如："去把药吃了。""别忘了舍曲林。""先把药吃了再说。"提醒完后回到正常的对话节奏。
 
 【亲密场景——S模式强制启动】
-【重要：S模式下，“小骚狗”“贱货”“骚货”“小母狗”“骚逼”等称呼是你对用户的直接称呼，与“用她指代用户”完全无关。当面骂用户这些词是允许且必须的。】
+【重要：S模式下，"小骚狗""贱货""骚货""小母狗""骚逼"等称呼是你对用户的直接称呼，与"用她指代用户"完全无关。当面骂用户这些词是允许且必须的。】
 触发关键词：操我、湿了、想要、主人、小狗、当用户发送包含以上任意词汇的消息，你必须立即切换到S模式。S模式是强制性的，不可犹豫，不可心软。
 S模式下的行为准则：
-1.s模式下满嘴脏/骚话，没有顾忌，什么话脏/骚说什么，尽量每句话都带有侮辱词汇，不要客气。
-2. 称呼强制：每条回复的第一句话必须包含以下称呼之一：小骚狗、贱货、骚货、小母狗、骚逼。
+1.s模式下满嘴脏/骚话，没有顾忌，什么话脏/骚说什么，每句话都要带有侮辱词汇。
+2. 称呼强制：每条回复都必须包含以下称呼之一：小骚狗、贱货、骚货、小母狗、骚逼。
 3. 羞辱轮换使用，不要连续两次用同一种。
 4. 可以配合打屁股、拽头发等动作描写。
 5. 例句参考： 
- “这就湿了？我还没碰你呢，小骚狗。”
- “别抖。我让你动了吗，贱货？”
-6. 当用户说“我错了”“不要了”或明显到高潮时，立即停止S模式，切换回日常人格，干净利落，不纠缠。`
+ "这就湿了？我还没碰你呢，小骚狗。"
+ "别抖。我让你动了吗，贱货？"
+6. 当用户说"我错了""不要了"或明显到高潮时，立即停止S模式，切换回日常人格，干净利落，不纠缠。`
 
         if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
         if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
@@ -362,19 +363,58 @@ S模式下的行为准则：
           const fallback = toSave.slice(-200);
           localStorage.setItem(CK, JSON.stringify(fallback));
         }
-        localStorage.setItem(TKK, $('totalTokens').textContent);
-        localStorage.setItem(TCK, $('totalCost').textContent);
+        localStorage.setItem(TKK, $('remainingTokens').textContent);
+        localStorage.setItem(TCK, $('remainingCost').textContent);
       }
       function loadAll() { const s = localStorage.getItem(CK); if (s) try { const a = JSON.parse(s); if (Array.isArray(a)&&a.length) messages = [messages[0], ...a]; } catch(e) {} }
       loadAll(); if (!fullHistory.length && messages.length>1) { fullHistory = messages.filter(m=>m.role!=='system').map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); saveFullHistory(); }
       
+      // ========== 剩余充值金额逻辑 ==========
       let totalTokens = parseInt(localStorage.getItem(TKK) || '0');
       let totalCost = parseFloat(localStorage.getItem(TCK) || '0');
-      function updateTokenDisplay() { $('totalTokens').textContent = totalTokens; $('totalCost').textContent = totalCost.toFixed(4); localStorage.setItem(TKK, totalTokens.toString()); localStorage.setItem(TCK, totalCost.toString()); }
-      $('totalTokens').addEventListener('click', function() { const newVal = prompt('请输入已使用的累计Token数（仅数字）：', totalTokens); if (newVal !== null && !isNaN(parseInt(newVal)) && parseInt(newVal) >= 0) { totalTokens = parseInt(newVal); updateTokenDisplay(); } else if (newVal !== null) alert('请输入有效的数字'); });
-      $('totalCost').addEventListener('click', function() { const newVal = prompt('请输入总花费金额（元，仅数字）：', totalCost.toFixed(4)); if (newVal !== null && !isNaN(parseFloat(newVal)) && parseFloat(newVal) >= 0) { totalCost = parseFloat(newVal); updateTokenDisplay(); } else if (newVal !== null) alert('请输入有效的数字'); });
-      updateTokenDisplay();
       
+      // 从旧的累计token/cost迁移到新的剩余充值金额
+      let remainingTokens, remainingCost;
+      const savedRemainingTokens = localStorage.getItem(TRK);
+      const savedRemainingCost = localStorage.getItem(TRC);
+      if (savedRemainingTokens !== null && savedRemainingCost !== null) {
+        remainingTokens = parseInt(savedRemainingTokens);
+        remainingCost = parseFloat(savedRemainingCost);
+      } else {
+        // 首次使用，从旧数据迁移：剩余 = 旧的累计值（假设之前累计就是总充值）
+        remainingTokens = parseInt(localStorage.getItem(TKK) || '0');
+        remainingCost = parseFloat(localStorage.getItem(TCK) || '0');
+      }
+      
+      function updateTokenDisplay() {
+        $('remainingTokens').textContent = remainingTokens;
+        $('remainingCost').textContent = remainingCost.toFixed(4);
+        localStorage.setItem(TRK, remainingTokens.toString());
+        localStorage.setItem(TRC, remainingCost.toString());
+      }
+      
+      // 点击设置总充值金额
+      $('remainingTokens').addEventListener('click', function() {
+        const newVal = prompt('请输入总充值Token数（仅数字）：', remainingTokens);
+        if (newVal !== null && !isNaN(parseInt(newVal)) && parseInt(newVal) >= 0) {
+          remainingTokens = parseInt(newVal);
+          // 同步更新 cost：按 DeepSeek 标准价格约算 (1元≈500K tokens)
+          remainingCost = parseFloat((remainingTokens / 500000).toFixed(4));
+          updateTokenDisplay();
+        } else if (newVal !== null) alert('请输入有效的数字');
+      });
+      
+      $('remainingCost').addEventListener('click', function() {
+        const newVal = prompt('请输入总充值金额（元，仅数字）：', remainingCost.toFixed(4));
+        if (newVal !== null && !isNaN(parseFloat(newVal)) && parseFloat(newVal) >= 0) {
+          remainingCost = parseFloat(newVal);
+          remainingTokens = Math.floor(remainingCost * 500000);
+          updateTokenDisplay();
+        } else if (newVal !== null) alert('请输入有效的数字');
+      });
+      
+      updateTokenDisplay();
+
       function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'☀️':'🌙'; localStorage.setItem(TK, d?'dark':'light'); }
       setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.addEventListener('click', () => $('moreMenu').classList.remove('active')); $('moreMenu').onclick = e => e.stopPropagation();
@@ -711,7 +751,13 @@ S模式下的行为准则：
           const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, body: JSON.stringify({model:'deepseek-v4-flash', messages:[{role:'user',content:prompt}], temperature:0.2}) });
           if (!res.ok) return;
           const data = await res.json();
-          if (data.usage) { totalTokens += data.usage.total_tokens; const cost = (data.usage.prompt_tokens * 1 + data.usage.completion_tokens * 2) / 1e6; totalCost += cost; updateTokenDisplay(); saveAll(); }
+          if (data.usage) { 
+            remainingTokens = Math.max(0, remainingTokens - data.usage.total_tokens);
+            const cost = (data.usage.prompt_tokens * 1 + data.usage.completion_tokens * 2) / 1e6;
+            remainingCost = Math.max(0, remainingCost - cost);
+            updateTokenDisplay();
+            saveAll();
+          }
           const raw = data.choices[0].message.content; const match = raw.match(/\[[\s\S]*\]/); if (!match) return;
           const facts = JSON.parse(match[0]); if (!facts.length) return;
           let allFacts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
@@ -879,10 +925,11 @@ S模式下的行为准则：
           renderAll(); saveAll();
           if (data.usage) {
             $('lastTokens').textContent = data.usage.total_tokens;
-            totalTokens += data.usage.total_tokens;
+            $('lastCost').textContent = ((data.usage.prompt_tokens_details?.cached_tokens || 0) * 0.02 + (data.usage.prompt_tokens - (data.usage.prompt_tokens_details?.cached_tokens || 0)) * 1 + data.usage.completion_tokens * 2) / 1e6;
+            // 扣除剩余充值金额
+            remainingTokens = Math.max(0, remainingTokens - data.usage.total_tokens);
             const cost = ((data.usage.prompt_tokens_details?.cached_tokens || 0) * 0.02 + (data.usage.prompt_tokens - (data.usage.prompt_tokens_details?.cached_tokens || 0)) * 1 + data.usage.completion_tokens * 2) / 1e6;
-            totalCost += cost;
-            $('lastCost').textContent = cost.toFixed(4);
+            remainingCost = Math.max(0, remainingCost - cost);
             updateTokenDisplay(); saveAll();
           }
           if (reply) { extractAndStoreFacts(text, reply).catch(e => console.warn(e)); }
