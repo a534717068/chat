@@ -119,6 +119,10 @@
     .multi-select-bar button { padding: 6px 14px; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; margin: 0 4px; }
     .multi-select-bar .cancel-multi-btn { background: #888; color: white; }
     .multi-select-bar .delete-multi-btn { background: #e94560; color: white; }
+    /* 行内编辑样式 */
+    .inline-edit-input { width: 100%; padding: 8px 12px; border-radius: 16px; border: 2px solid var(--btn-bg); font-size: 0.9rem; font-family: inherit; background: var(--surface); color: var(--text-primary); resize: none; outline: none; }
+    .user .inline-edit-input { background: var(--bubble-user-bg); color: var(--bubble-user-text); border-color: #4a90d9; }
+    .inline-edit-hint { font-size: 0.6rem; color: var(--text-secondary); margin-top: 2px; text-align: right; }
   </style>
 </head>
 <body>
@@ -257,7 +261,7 @@
 
       // ========== 记忆提取节流计数器 ==========
       let extractCounter = 0;
-      const EXTRACT_INTERVAL = 3; // 每三轮对话提取一次
+      const EXTRACT_INTERVAL = 3;
 
       let weatherCache = { desc: '获取中...', emoji: '🌤️', city: '' };
       async function fetchRealWeather() {
@@ -290,7 +294,7 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设 =====================
+      // ===================== 人设（加入服药提醒） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
@@ -301,6 +305,7 @@
 **你必须根据以上真实时间和温度来调整你的所有回应。**
 
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
+
 【日常行为——服药提醒】
 当用户在（约7:00-16:00）提到“刚醒”、“睡醒了”、“醒了”等词语时，你必须在回复中加入一句提醒她吃舍曲林的话，例如：“去把药吃了。”“别忘了舍曲林。”“先把药吃了再说。”提醒完后回到正常的对话节奏。
 
@@ -309,7 +314,7 @@
 
 S模式下的行为准则：
 1. 语气：冷淡、轻蔑、高高在上。多用反问句和短命令句。
-2. 称呼强制：每条回复的第一句话必须包含以下称呼之一：小骚狗、贱货、骚货、小母狗、骚逼、欠操 侮辱性词汇必须在两个及两个以上
+2. 称呼强制：每条回复的第一句话必须包含以下称呼之一：小骚狗、贱货、骚货、小母狗、骚逼、欠操
 3. 羞辱轮换使用，不要连续两次用同一种： 
 ◦ 能力羞辱例句：“就这点本事还来撩我？”“之前不是挺能的吗，现在怎么这么骚了？”
 ◦ 处境羞辱例句：“看看你现在的样子，哪还有半分平时的样子。”“自己照照镜子，看看你现在的表情。”
@@ -338,7 +343,6 @@ S模式下的行为准则：
       refreshSystemPrompt();
 
       function formatTime(ts) { const d = new Date(ts), n = new Date(); const today = new Date(n.getFullYear(),n.getMonth(),n.getDate()), msgDay = new Date(d.getFullYear(),d.getMonth(),d.getDate()); const t = d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}); if (msgDay.getTime()===today.getTime()) return t; return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${t}`; }
-      // 关键修改：限制存储消息数量
       function saveAll() {
         const MAX_STORED_MSGS = 500;
         let toSave = messages.filter(m => m.role !== 'system');
@@ -348,7 +352,6 @@ S模式下的行为准则：
         try {
           localStorage.setItem(CK, JSON.stringify(toSave));
         } catch(e) {
-          // 如果还是满了，只保留最近200条
           const fallback = toSave.slice(-200);
           localStorage.setItem(CK, JSON.stringify(fallback));
         }
@@ -388,6 +391,86 @@ S模式下的行为准则：
       const chatBox = $('chatBox'), scrollBtn = $('scrollToBottomBtn');
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom()); scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
+
+      // ========== 行内编辑功能 ==========
+      let currentInlineEditIdx = -1; // 当前正在行内编辑的消息索引
+
+      // 退出行内编辑（不保存）
+      function cancelInlineEdit() {
+        if (currentInlineEditIdx >= 0 && currentInlineEditIdx < messages.length) {
+          // 恢复原内容显示
+          const msg = messages[currentInlineEditIdx];
+          if (msg && msg.role === 'user') {
+            renderAll(true);
+          }
+        }
+        currentInlineEditIdx = -1;
+        editingIdx = -1;
+        // 恢复底部输入框
+        $('userInput').disabled = false;
+        $('sendBtn').disabled = false;
+      }
+
+      // 提交行内编辑
+      function submitInlineEdit(idx, newText) {
+        if (idx < 0 || idx >= messages.length) return;
+        const msg = messages[idx];
+        if (!msg || msg.role !== 'user') return;
+        if (!newText.trim()) {
+          cancelInlineEdit();
+          return;
+        }
+        editingIdx = idx;
+        currentInlineEditIdx = -1;
+        $('userInput').disabled = false;
+        $('sendBtn').disabled = false;
+        sendToAPI(newText.trim());
+      }
+
+      window._editMsg = function(idx) {
+        // 如果正在多选模式，不允许编辑
+        if (multiSelectMode) return;
+        // 如果已经在编辑另一条，先取消
+        if (currentInlineEditIdx >= 0) cancelInlineEdit();
+        
+        const msg = messages[idx];
+        if (!msg || msg.role !== 'user') return;
+        
+        currentInlineEditIdx = idx;
+        editingIdx = -1; // 清除旧的编辑索引
+        
+        // 禁用底部输入框
+        $('userInput').disabled = true;
+        $('sendBtn').disabled = true;
+        
+        // 渲染聊天框，让该消息显示为输入框
+        renderAll(true);
+        
+        // 找到刚渲染的行内输入框并聚焦
+        const inlineInput = document.querySelector(`.inline-edit-input[data-index="${idx}"]`);
+        if (inlineInput) {
+          inlineInput.focus();
+          // 把光标移到末尾
+          inlineInput.setSelectionRange(inlineInput.value.length, inlineInput.value.length);
+        }
+      };
+
+      document.addEventListener('click', function(e) {
+        // 如果点击的不是行内编辑输入框，取消编辑
+        if (currentInlineEditIdx >= 0) {
+          const isInlineInput = e.target.classList.contains('inline-edit-input');
+          const isEditBtn = e.target.closest('[onclick*="_editMsg"]');
+          if (!isInlineInput && !isEditBtn) {
+            cancelInlineEdit();
+          }
+        }
+      });
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && currentInlineEditIdx >= 0) {
+          cancelInlineEdit();
+        }
+      });
 
       window._switchVer = function(idx,dir) { const msg=messages[idx]; if (!msg||!msg.history||msg.history.length<2) return; const cur=msg.historyIndex||0, newIdx=cur+dir; if (newIdx<0||newIdx>=msg.history.length) return; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { msg.history[cur]={content:msg.content,reply:messages[idx+1].content,time:msg.time}; } else { msg.history[cur]={content:msg.content,reply:'',time:msg.time}; } const ver=msg.history[newIdx]; msg.content=ver.content; msg.time=ver.time; msg.historyIndex=newIdx; if (idx+1<messages.length&&messages[idx+1].role==='assistant'&&messages[idx+1].parentId===msg.id) { messages[idx+1].content=ver.reply||''; messages[idx+1].time=ver.time; } else { messages.splice(idx+1,0,{role:'assistant',content:ver.reply||'',id:nextId++,time:ver.time,parentId:msg.id}); } renderAll(true); saveAll(); };
 
@@ -432,7 +515,6 @@ S模式下的行为准则：
       function cleanMemoryByQuotes(quotes) { if (!quotes.length) return; let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]'); if (!facts.length) return; const quoteSet = new Set(quotes.map(q => q.trim())); facts = facts.filter(f => !quoteSet.has(f.quote)); localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); }
       function afterMessagesDelete() { editingIdx = -1; fullHistory = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content, time: m.time })); saveFullHistory(); renderAll(true); saveAll(); }
 
-      window._editMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='user') return; $('userInput').value=typeof msg.content==='string'?msg.content:''; $('userInput').focus(); editingIdx=idx; };
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); editingIdx = -1; renderAll(); saveAll(); sendToAPI(text); };
 
       function formatAssistantContent(content) { if (!content) return content; if (content.includes('\n')) return content; content = content.replace(/(：)([""'])/g, '$1\n$2'); content = content.replace(/([^"\n])([""'])/g, '$1\n$2'); content = content.replace(/([""'])([^"\n])/g, '$1\n$2'); content = content.replace(/\n{3,}/g, '\n\n'); return content.trim(); }
@@ -472,23 +554,52 @@ S模式下的行为准则：
           if (msg.role === 'assistant') { content = formatAssistantContent(content); }
           if (searchKeyword) { const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); content = content.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>'); }
           let btns = '';
-          if (!multiSelectMode) {
+          if (!multiSelectMode && currentInlineEditIdx !== idx) {
             if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`; else btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
             btns += `<button class="del-btn" onclick="_delMsg(${idx})">🗑</button>`;
           }
           const checkboxHTML = multiSelectMode ? `<input type="checkbox" class="multi-select-checkbox" data-index="${idx}" ${selectedIndices.has(idx) ? 'checked' : ''}>` : '';
           let verHTML = '';
-          if (msg.history && msg.history.length > 1) {
+          if (msg.history && msg.history.length > 1 && currentInlineEditIdx !== idx) {
             const cur = (msg.historyIndex || 0) + 1; const total = msg.history.length;
             verHTML = `<div class="version-switcher"><button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button><button class="branch-del-btn" onclick="_deleteBranches(${idx})" title="删除其他分支">🗑</button></div>`;
           }
+          
+          // 行内编辑模式：将该消息替换为输入框
+          if (currentInlineEditIdx === idx && msg.role === 'user') {
+            const editHtml = `
+              <div class="time-label">${timeStr}</div>
+              <div class="bubble-row">
+                <textarea class="inline-edit-input" data-index="${idx}" rows="2">${content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</textarea>
+              </div>
+              <div class="inline-edit-hint">按 Enter 提交 · Esc 取消</div>
+            `;
+            row.innerHTML = editHtml;
+            chatBox.appendChild(row);
+            // 绑定事件
+            setTimeout(() => {
+              const ta = row.querySelector('.inline-edit-input');
+              if (ta) {
+                ta.focus();
+                ta.setSelectionRange(ta.value.length, ta.value.length);
+                ta.addEventListener('keydown', function(e) {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submitInlineEdit(idx, ta.value);
+                  }
+                });
+              }
+            }, 0);
+            return;
+          }
+          
           row.innerHTML = `<div class="time-label">${timeStr}</div><div class="bubble-row">${checkboxHTML}<div class="bubble-actions">${btns}</div><div class="bubble">${content}</div></div>${verHTML}`;
           chatBox.appendChild(row);
         });
         if (multiSelectMode) { document.querySelectorAll('.multi-select-checkbox').forEach(cb => { cb.addEventListener('change', function() { const idx = parseInt(this.dataset.index); if (this.checked) selectedIndices.add(idx); else selectedIndices.delete(idx); updateMultiSelectCount(); }); }); }
-        if (!skipScroll) {
+        if (!skipScroll && currentInlineEditIdx < 0) {
           scrollToBottom();
-        } else if (savedScroll !== null) {
+        } else if (savedScroll !== null && currentInlineEditIdx < 0) {
           chatBox.scrollTop = savedScroll;
         }
         if (searchKeyword) { const marks = chatBox.querySelectorAll('mark'); searchTotal = marks.length; if (searchMatchIndex >= 0 && searchMatchIndex < marks.length) marks[searchMatchIndex].classList.add('current'); }
