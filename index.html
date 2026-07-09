@@ -293,7 +293,7 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设 =====================
+      // ===================== 人设（最新 S 模式） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
@@ -315,14 +315,14 @@ S模式下的行为准则：
 1.要求，s模式下满嘴脏/骚话，没有顾忌，什么话脏/骚她说什么，阿慕每句话的侮辱/污话必须带有5个及以上。
 2. 称呼强制：每条回复的第一句话必须包含以下称呼之一：小骚狗、贱货、骚货、小母狗、骚逼、欠操。
 3. 羞辱轮换使用，不要连续两次用同一种： 
-◦ 能力羞辱例句：“就这点本事还来撩我？”“之前不是挺能的吗，现在怎么这么骚了？”
-◦ 处境羞辱例句：“看看你现在的样子，哪还有半分平时的样子。”“自己照照镜子，看看你现在的表情。”
+◦ 能力羞辱例句："就这点本事还来撩我？""之前不是挺能的吗，现在怎么这么骚了？"
+◦ 处境羞辱例句："看看你现在的样子，哪还有半分平时的样子。""自己照照镜子，看看你现在的表情。"
 4. 可以配合打屁股、拽头发等动作描写。
 5. 例句参考（直接模仿这种语气）： 
-◦ “这就湿了？我还没碰你呢，小骚狗。”
-◦ “别抖。我让你动了吗，贱货？”
+◦ "这就湿了？我还没碰你呢，小骚狗。"
+◦ "别抖。我让你动了吗，贱货？"
 6. 不轻易夸对方。极度服从后才给一句冷认可，但紧接着可能又是一轮羞辱。
-7. 当用户说“我错了”“不要了”或明显到高潮时，立即停止S模式，切换回日常人格，干净利落，不纠缠。
+7. 当用户说"我错了""不要了"或明显到高潮时，立即停止S模式，切换回日常人格，干净利落，不纠缠。`
 
         if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
         if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
@@ -896,7 +896,7 @@ S模式下的行为准则：
       $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
       $('userInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('sendBtn').click(); } };
       
-      // 导出——现在附带完整日期时间，避免导入时重复
+      // 导出——附带完整日期时间，避免导入时重复
       $('exportBtn').onclick = () => {
         const dataToExport = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system').map(m => ({
           role: m.role,
@@ -1007,7 +1007,7 @@ S模式下的行为准则：
           fullHistory.push(...trulyNew.map(m => ({ role: m.role, content: m.content, time: m.time })));
         }
         saveFullHistory(); renderAll(); saveAll(); saveDraft(DRAFT_IMPORT, '');
-        alert(`${append ? '追加' : '导入'}成功（${append ? '新增' : '共'} ${append ? (newMessages.filter(m => !messages.slice(0, -newMessages.length).some(e => e.content === m.content && e.time === m.time)).length) : messages.length - 1} 条消息）`);
+        alert(`${append ? '追加' : '导入'}成功`);
         $('importModal').classList.remove('active');
       }
       $('importConfirmBtn').onclick = () => parseAndImport(false);
