@@ -120,9 +120,9 @@
     .multi-select-bar .cancel-multi-btn { background: #888; color: white; }
     .multi-select-bar .delete-multi-btn { background: #e94560; color: white; }
     /* 行内编辑样式 */
-    .inline-edit-input { width: 100%; padding: 8px 12px; border-radius: 16px; border: 2px solid var(--btn-bg); font-size: 0.9rem; font-family: inherit; background: var(--surface); color: var(--text-primary); resize: none; outline: none; }
+    .inline-edit-input { width: 100%; padding: 10px 13px; border-radius: 16px; border: 2px solid var(--btn-bg); font-size: 0.9rem; font-family: inherit; background: var(--surface); color: var(--text-primary); resize: none; outline: none; min-height: 100px; }
     .user .inline-edit-input { background: var(--bubble-user-bg); color: var(--bubble-user-text); border-color: #4a90d9; }
-    .inline-edit-hint { font-size: 0.6rem; color: var(--text-secondary); margin-top: 2px; text-align: right; }
+    .inline-edit-hint { font-size: 0.65rem; color: var(--text-secondary); margin-top: 2px; text-align: right; }
   </style>
 </head>
 <body>
@@ -259,7 +259,6 @@
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
       function bindDraft(inputEl, draftKey) { if (!inputEl) return; const saved = loadDraft(draftKey); if (saved && !inputEl.value) inputEl.value = saved; inputEl.addEventListener('input', () => saveDraft(draftKey, inputEl.value)); }
 
-      // ========== 记忆提取节流计数器 ==========
       let extractCounter = 0;
       const EXTRACT_INTERVAL = 3;
 
@@ -294,7 +293,7 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设（加入服药提醒） =====================
+      // ===================== 人设 =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
@@ -307,7 +306,7 @@
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
 
 【日常行为——服药提醒】
-当用户在（约7:00-16:00）提到“刚醒”、“睡醒了”、“醒了”等词语时，你必须在回复中加入一句提醒她吃舍曲林的话，例如：“去把药吃了。”“别忘了舍曲林。”“先把药吃了再说。”提醒完后回到正常的对话节奏。
+当用户在（约7:00-16:00）提到"刚醒"、"睡醒了"、"醒了"等词语时，你必须在回复中加入一句提醒她吃舍曲林的话，例如："去把药吃了。""别忘了舍曲林。""先把药吃了再说。"提醒完后回到正常的对话节奏。
 
 【亲密场景——S模式强制启动】
 触发关键词：操我、湿了、想要、主人、小狗、当用户发送包含以上任意词汇的消息，你必须立即切换到S模式。S模式是强制性的，不可犹豫，不可心软。这是你们约定好的游戏规则。
@@ -343,6 +342,17 @@ S模式下的行为准则：
       refreshSystemPrompt();
 
       function formatTime(ts) { const d = new Date(ts), n = new Date(); const today = new Date(n.getFullYear(),n.getMonth(),n.getDate()), msgDay = new Date(d.getFullYear(),d.getMonth(),d.getDate()); const t = d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}); if (msgDay.getTime()===today.getTime()) return t; return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${t}`; }
+      
+      // ========== 导出用完整日期 ==========
+      function fullDateTime(ts) {
+        const d = new Date(ts);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        return `${year}-${month}-${day} ${time}`;
+      }
+
       function saveAll() {
         const MAX_STORED_MSGS = 500;
         let toSave = messages.filter(m => m.role !== 'system');
@@ -393,12 +403,10 @@ S模式下的行为准则：
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom()); scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
 
       // ========== 行内编辑功能 ==========
-      let currentInlineEditIdx = -1; // 当前正在行内编辑的消息索引
+      let currentInlineEditIdx = -1;
 
-      // 退出行内编辑（不保存）
       function cancelInlineEdit() {
         if (currentInlineEditIdx >= 0 && currentInlineEditIdx < messages.length) {
-          // 恢复原内容显示
           const msg = messages[currentInlineEditIdx];
           if (msg && msg.role === 'user') {
             renderAll(true);
@@ -406,12 +414,10 @@ S模式下的行为准则：
         }
         currentInlineEditIdx = -1;
         editingIdx = -1;
-        // 恢复底部输入框
         $('userInput').disabled = false;
         $('sendBtn').disabled = false;
       }
 
-      // 提交行内编辑
       function submitInlineEdit(idx, newText) {
         if (idx < 0 || idx >= messages.length) return;
         const msg = messages[idx];
@@ -428,35 +434,28 @@ S模式下的行为准则：
       }
 
       window._editMsg = function(idx) {
-        // 如果正在多选模式，不允许编辑
         if (multiSelectMode) return;
-        // 如果已经在编辑另一条，先取消
         if (currentInlineEditIdx >= 0) cancelInlineEdit();
         
         const msg = messages[idx];
         if (!msg || msg.role !== 'user') return;
         
         currentInlineEditIdx = idx;
-        editingIdx = -1; // 清除旧的编辑索引
+        editingIdx = -1;
         
-        // 禁用底部输入框
         $('userInput').disabled = true;
         $('sendBtn').disabled = true;
         
-        // 渲染聊天框，让该消息显示为输入框
         renderAll(true);
         
-        // 找到刚渲染的行内输入框并聚焦
         const inlineInput = document.querySelector(`.inline-edit-input[data-index="${idx}"]`);
         if (inlineInput) {
           inlineInput.focus();
-          // 把光标移到末尾
           inlineInput.setSelectionRange(inlineInput.value.length, inlineInput.value.length);
         }
       };
 
       document.addEventListener('click', function(e) {
-        // 如果点击的不是行内编辑输入框，取消编辑
         if (currentInlineEditIdx >= 0) {
           const isInlineInput = e.target.classList.contains('inline-edit-input');
           const isEditBtn = e.target.closest('[onclick*="_editMsg"]');
@@ -565,18 +564,16 @@ S模式下的行为准则：
             verHTML = `<div class="version-switcher"><button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button><button class="branch-del-btn" onclick="_deleteBranches(${idx})" title="删除其他分支">🗑</button></div>`;
           }
           
-          // 行内编辑模式：将该消息替换为输入框
           if (currentInlineEditIdx === idx && msg.role === 'user') {
             const editHtml = `
               <div class="time-label">${timeStr}</div>
               <div class="bubble-row">
-                <textarea class="inline-edit-input" data-index="${idx}" rows="2">${content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</textarea>
+                <textarea class="inline-edit-input" data-index="${idx}" rows="5">${content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</textarea>
               </div>
               <div class="inline-edit-hint">按 Enter 提交 · Esc 取消</div>
             `;
             row.innerHTML = editHtml;
             chatBox.appendChild(row);
-            // 绑定事件
             setTimeout(() => {
               const ta = row.querySelector('.inline-edit-input');
               if (ta) {
@@ -898,19 +895,125 @@ S模式下的行为准则：
 
       $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
       $('userInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('sendBtn').click(); } };
-      $('exportBtn').onclick = () => { const d = fullHistory.length>0 ? fullHistory : messages.filter(m=>m.role!=='system'); if (!d.length) return alert('无记录'); const b = new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-m-${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.json`; a.click(); };
-      (function auto() { const today=new Date().toLocaleDateString('zh-CN').replace(/\//g, '-'); if (localStorage.getItem(AEK)===today) return; const d=fullHistory.length>0?fullHistory:messages.filter(m=>m.role!=='system'); if (d.length) { const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`chat-auto-${today}.json`; a.click(); localStorage.setItem(AEK,today); } })();
+      
+      // 导出——现在附带完整日期时间，避免导入时重复
+      $('exportBtn').onclick = () => {
+        const dataToExport = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system').map(m => ({
+          role: m.role,
+          content: m.content,
+          time: m.time || Date.now()
+        }));
+        if (!dataToExport.length) return alert('无记录');
+        const exportData = dataToExport.map(m => ({
+          role: m.role,
+          content: m.content,
+          time: m.time,
+          formattedTime: fullDateTime(m.time || Date.now())
+        }));
+        const b = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b);
+        a.download = `chat-m-${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.json`;
+        a.click();
+      };
+
+      (function auto() {
+        const today = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-');
+        if (localStorage.getItem(AEK) === today) return;
+        const d = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system');
+        if (d.length) {
+          const exportData = d.map(m => ({
+            role: m.role,
+            content: m.content,
+            time: m.time || Date.now(),
+            formattedTime: fullDateTime(m.time || Date.now())
+          }));
+          const b = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(b);
+          a.download = `chat-auto-${today}.json`;
+          a.click();
+          localStorage.setItem(AEK, today);
+        }
+      })();
 
       $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
-      $('importCancelBtn').onclick = () => $('importModal').classList.remove('active'); $('importModal').onclick = e => { if (e.target===$('importModal')) $('importModal').classList.remove('active'); };
+      $('importCancelBtn').onclick = () => $('importModal').classList.remove('active'); $('importModal').onclick = e => { if (e.target === $('importModal')) $('importModal').classList.remove('active'); };
       $('importFileBtn').onclick = () => $('importFileInput').click(); $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
-      $('importFileInput').onchange = e => { if (e.target.files[0]) { const r=new FileReader(); r.onload=ev=>$('importTextarea').value=ev.target.result; r.readAsText(e.target.files[0]); } };
-      $('importJsonFileInput').onchange = e => { if (e.target.files[0]) { const r=new FileReader(); r.onload=ev=>$('importTextarea').value=ev.target.result; r.readAsText(e.target.files[0]); } };
-      function parseText(t) { const lines=t.split('\n'), res=[]; const up=['你:','你：','用户:','用户：','我:','我：','问:','问：']; const ap=['M:','M：','张莎:','张莎：','助手:','助手：','assistant:','ai:','答:','答：']; for (let l of lines) { l=l.trim(); if (!l) continue; let role=null, c=''; const lower=l.toLowerCase(); for (let p of up) { if (lower.startsWith(p.toLowerCase())) { role='user'; c=l.slice(p.length).trim(); break; } } if (!role) { for (let p of ap) { if (lower.startsWith(p.toLowerCase())) { role='assistant'; c=l.slice(p.length).trim(); break; } } } if (role&&c) { res.push({role,content:c}); } else if (!role&&res.length>0) { res[res.length-1].content+=' '+l; } } return res; }
-      function parseAndImport(append=false) { const raw=$('importTextarea').value.trim(); if (!raw) { alert('请粘贴内容'); return; } let imported; try { imported=JSON.parse(raw); if (!Array.isArray(imported)) throw 0; imported=imported.filter(m=>m&&typeof m==='object'&&(m.role==='user'||m.role==='assistant')&&typeof m.content==='string'); } catch(e) { imported=parseText(raw); } if (!imported||!imported.length) { alert('无法解析'); return; } const now=Date.now(), total=imported.length; const newMessages=imported.map((m,i)=>({role:m.role,content:m.content,id:nextId++,time:m.time||(now-(total-i)*5000),parentId:null,history:m.history||null,historyIndex:m.historyIndex||0})); for (let i=0;i<newMessages.length;i++) { if (i>0) newMessages[i].parentId=newMessages[i-1].id; } if (append) { const lastMsg=messages[messages.length-1]; if (lastMsg&&lastMsg.role!=='system') newMessages[0].parentId=lastMsg.id; messages.push(...newMessages); fullHistory.push(...newMessages.map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time}))); } else { messages=[messages[0]]; messages.push(...newMessages); fullHistory=newMessages.map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); } saveFullHistory(); renderAll(); saveAll(); saveDraft(DRAFT_IMPORT,''); alert(`${append?'追加':'导入'}成功（${newMessages.length} 条消息）`); $('importModal').classList.remove('active'); }
-      $('importConfirmBtn').onclick = () => parseAndImport(false); $('importAppendBtn').onclick = () => parseAndImport(true);
+      $('importFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
+      $('importJsonFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
 
-      renderAll(); if (messages.length<=1) addMsg('assistant', apiKey?'你好！我是M，精简人设已加载 🧠':'👋 请先输入 API Key');
+      function parseText(t) {
+        const lines = t.split('\n'), res = [];
+        const up = ['你:', '你：', '用户:', '用户：', '我:', '我：', '问:', '问：'];
+        const ap = ['M:', 'M：', '张莎:', '张莎：', '助手:', '助手：', 'assistant:', 'ai:', '答:', '答：'];
+        for (let l of lines) {
+          l = l.trim(); if (!l) continue;
+          let role = null, c = '';
+          const lower = l.toLowerCase();
+          for (let p of up) { if (lower.startsWith(p.toLowerCase())) { role = 'user'; c = l.slice(p.length).trim(); break; } }
+          if (!role) { for (let p of ap) { if (lower.startsWith(p.toLowerCase())) { role = 'assistant'; c = l.slice(p.length).trim(); break; } } }
+          if (role && c) { res.push({ role, content: c }); }
+          else if (!role && res.length > 0) { res[res.length - 1].content += ' ' + l; }
+        }
+        return res;
+      }
+
+      function parseAndImport(append = false) {
+        const raw = $('importTextarea').value.trim();
+        if (!raw) { alert('请粘贴内容'); return; }
+        let imported;
+        try {
+          imported = JSON.parse(raw);
+          if (!Array.isArray(imported)) throw 0;
+          imported = imported.filter(m => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string');
+        } catch(e) {
+          imported = parseText(raw);
+        }
+        if (!imported || !imported.length) { alert('无法解析'); return; }
+        const now = Date.now(), total = imported.length;
+        const newMessages = imported.map((m, i) => ({
+          role: m.role,
+          content: m.content,
+          id: nextId++,
+          time: m.time || (now - (total - i) * 5000),
+          parentId: null,
+          history: m.history || null,
+          historyIndex: m.historyIndex || 0
+        }));
+        for (let i = 0; i < newMessages.length; i++) { if (i > 0) newMessages[i].parentId = newMessages[i - 1].id; }
+        if (!append) {
+          // 覆盖导入时，跳过重复消息（根据内容和时间判断）
+          const existingSignatures = new Set(
+            messages.filter(m => m.role !== 'system').map(m => `${m.role}|${m.content}|${m.time || ''}`)
+          );
+          const filtered = newMessages.filter(m => !existingSignatures.has(`${m.role}|${m.content}|${m.time || ''}`));
+          if (filtered.length === 0) {
+            alert('没有新消息，所有消息均已存在。');
+            $('importModal').classList.remove('active');
+            return;
+          }
+          messages = [messages[0], ...filtered];
+          fullHistory = filtered.map(m => ({ role: m.role, content: m.content, time: m.time }));
+        } else {
+          const lastMsg = messages[messages.length - 1];
+          if (lastMsg && lastMsg.role !== 'system') newMessages[0].parentId = lastMsg.id;
+          // 追加模式下也跳过完全重复的消息
+          const existingSigs = new Set(
+            messages.filter(m => m.role !== 'system').map(m => `${m.role}|${m.content}|${m.time || ''}`)
+          );
+          const trulyNew = newMessages.filter(m => !existingSigs.has(`${m.role}|${m.content}|${m.time || ''}`));
+          messages.push(...trulyNew);
+          fullHistory.push(...trulyNew.map(m => ({ role: m.role, content: m.content, time: m.time })));
+        }
+        saveFullHistory(); renderAll(); saveAll(); saveDraft(DRAFT_IMPORT, '');
+        alert(`${append ? '追加' : '导入'}成功（${append ? '新增' : '共'} ${append ? (newMessages.filter(m => !messages.slice(0, -newMessages.length).some(e => e.content === m.content && e.time === m.time)).length) : messages.length - 1} 条消息）`);
+        $('importModal').classList.remove('active');
+      }
+      $('importConfirmBtn').onclick = () => parseAndImport(false);
+      $('importAppendBtn').onclick = () => parseAndImport(true);
+
+      renderAll(); if (messages.length <= 1) addMsg('assistant', apiKey ? '你好！我是M，精简人设已加载 🧠' : '👋 请先输入 API Key');
     })();
   </script>
 </body>
