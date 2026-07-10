@@ -293,7 +293,7 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设（最新 S 模式 + 强化时间） =====================
+      // ===================== 人设（最新 S 模式 + 强化时间 + 服药提醒） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
@@ -344,11 +344,11 @@ S模式下的行为准则：
       
       function fullDateTime(ts) {
         const d = new Date(ts);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
-        const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-        return `${year}-${month}-${day} ${time}`;
+        const t = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        return `${y}-${m}-${day} ${t}`;
       }
 
       function saveAll() {
@@ -363,28 +363,15 @@ S模式下的行为准则：
           const fallback = toSave.slice(-200);
           localStorage.setItem(CK, JSON.stringify(fallback));
         }
-        localStorage.setItem(TKK, $('remainingTokens').textContent);
-        localStorage.setItem(TCK, $('remainingCost').textContent);
+        localStorage.setItem(TRK, $('remainingTokens').textContent);
+        localStorage.setItem(TRC, $('remainingCost').textContent);
       }
       function loadAll() { const s = localStorage.getItem(CK); if (s) try { const a = JSON.parse(s); if (Array.isArray(a)&&a.length) messages = [messages[0], ...a]; } catch(e) {} }
       loadAll(); if (!fullHistory.length && messages.length>1) { fullHistory = messages.filter(m=>m.role!=='system').map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); saveFullHistory(); }
       
       // ========== 剩余充值金额逻辑 ==========
-      let totalTokens = parseInt(localStorage.getItem(TKK) || '0');
-      let totalCost = parseFloat(localStorage.getItem(TCK) || '0');
-      
-      // 从旧的累计token/cost迁移到新的剩余充值金额
-      let remainingTokens, remainingCost;
-      const savedRemainingTokens = localStorage.getItem(TRK);
-      const savedRemainingCost = localStorage.getItem(TRC);
-      if (savedRemainingTokens !== null && savedRemainingCost !== null) {
-        remainingTokens = parseInt(savedRemainingTokens);
-        remainingCost = parseFloat(savedRemainingCost);
-      } else {
-        // 首次使用，从旧数据迁移：剩余 = 旧的累计值（假设之前累计就是总充值）
-        remainingTokens = parseInt(localStorage.getItem(TKK) || '0');
-        remainingCost = parseFloat(localStorage.getItem(TCK) || '0');
-      }
+      let remainingTokens = parseInt(localStorage.getItem(TRK) || localStorage.getItem(TKK) || '0');
+      let remainingCost = parseFloat(localStorage.getItem(TRC) || localStorage.getItem(TCK) || '0');
       
       function updateTokenDisplay() {
         $('remainingTokens').textContent = remainingTokens;
@@ -393,12 +380,10 @@ S模式下的行为准则：
         localStorage.setItem(TRC, remainingCost.toString());
       }
       
-      // 点击设置总充值金额
       $('remainingTokens').addEventListener('click', function() {
         const newVal = prompt('请输入总充值Token数（仅数字）：', remainingTokens);
         if (newVal !== null && !isNaN(parseInt(newVal)) && parseInt(newVal) >= 0) {
           remainingTokens = parseInt(newVal);
-          // 同步更新 cost：按 DeepSeek 标准价格约算 (1元≈500K tokens)
           remainingCost = parseFloat((remainingTokens / 500000).toFixed(4));
           updateTokenDisplay();
         } else if (newVal !== null) alert('请输入有效的数字');
@@ -414,15 +399,12 @@ S模式下的行为准则：
       });
       
       updateTokenDisplay();
-
+      
       function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'☀️':'🌙'; localStorage.setItem(TK, d?'dark':'light'); }
       setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.addEventListener('click', () => $('moreMenu').classList.remove('active')); $('moreMenu').onclick = e => e.stopPropagation();
       $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); editingIdx = -1; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
-      bindDraft($('userInput'),DRAFT_CHAT);
-      bindDraft($('settingTextarea'),DRAFT_SETTING);
-      bindDraft($('importTextarea'),DRAFT_IMPORT);
-      bindDraft($('searchInput'),DRAFT_SEARCH);
+      bindDraft($('userInput'),DRAFT_CHAT); bindDraft($('settingTextarea'),DRAFT_SETTING); bindDraft($('importTextarea'),DRAFT_IMPORT); bindDraft($('searchInput'),DRAFT_SEARCH);
       $('settingBtn').onclick = () => { $('settingTextarea').value = loadDraft(DRAFT_SETTING)||globalSetting; $('settingModal').classList.add('active'); $('moreMenu').classList.remove('active'); };
       $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active'); $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
       $('settingSaveBtn').onclick = () => { globalSetting = $('settingTextarea').value.trim(); localStorage.setItem(SETTING_KEY, globalSetting); refreshSystemPrompt(); saveDraft(DRAFT_SETTING,''); $('settingModal').classList.remove('active'); addMsg('assistant', globalSetting?'✅ 全局设定已保存。':'✅ 全局设定已清空。'); };
@@ -549,7 +531,17 @@ S模式下的行为准则：
       function deletePair(idx) { const msg = messages[idx]; if (!msg) return; let pairStart = idx, pairEnd = idx; if (msg.role === 'user') { if (idx + 1 < messages.length && messages[idx+1].role === 'assistant') pairEnd = idx + 1; } else if (msg.role === 'assistant') { if (idx > 0 && messages[idx-1].role === 'user') pairStart = idx - 1; } if (!confirm(`确定删除这组对话吗？`)) return; const removedUserQuotes = []; for (let i = pairStart; i <= pairEnd; i++) { if (messages[i].role === 'user') removedUserQuotes.push(messages[i].content); } messages.splice(pairStart, pairEnd - pairStart + 1); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
       function deleteAfter(idx) { if (!confirm(`确定删除从第 ${idx} 条开始之后的所有对话吗？`)) return; const removedUserQuotes = []; for (let i = idx; i < messages.length; i++) { if (messages[i].role === 'user') removedUserQuotes.push(messages[i].content); } messages = messages.slice(0, idx); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
       function cleanMemoryByQuotes(quotes) { if (!quotes.length) return; let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]'); if (!facts.length) return; const quoteSet = new Set(quotes.map(q => q.trim())); facts = facts.filter(f => !quoteSet.has(f.quote)); localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); }
-      function afterMessagesDelete() { editingIdx = -1; fullHistory = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content, time: m.time })); saveFullHistory(); renderAll(true); saveAll(); }
+      // ========== 删除对话时清空压缩摘要 ==========
+      function afterMessagesDelete() {
+        editingIdx = -1;
+        fullHistory = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content, time: m.time }));
+        compressedMemory = '';
+        localStorage.removeItem(MEMORY_KEY);
+        refreshSystemPrompt();
+        saveFullHistory();
+        renderAll(true);
+        saveAll();
+      }
 
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); editingIdx = -1; renderAll(); saveAll(); sendToAPI(text); };
 
@@ -912,7 +904,7 @@ S模式下的行为准则：
         try {
           refreshSystemPrompt();
           const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
-          const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'deepseek-v4-flash', messages: apiMsgs, stream: false, temperature: 0.4 }) });
+          const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'deepseek-v4-flash', messages: apiMsgs, stream: false, temperature: 0.5 }) });
           load.remove();
           if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `请求失败 (${res.status})`); }
           const data = await res.json();
