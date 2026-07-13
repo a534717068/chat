@@ -293,7 +293,7 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设（加入记忆查询规则） =====================
+      // ===================== 人设（铁律记忆查询） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
         let p = `【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
@@ -305,13 +305,38 @@
 当前天气：${e.weather}。
 **重要：上面显示的时间就是现在的真实时间。你必须以上面的时间为准，不能用任何其他时间。你的所有回应中涉及时间的描述（如"现在是几点""早上/中午/晚上/凌晨"等）都必须和上面的时间一致。**
 
+【关于过去对话的记忆——最高优先级铁律】
+当用户问你关于过去的事情、问你记不记得某件事、或者让你回忆过往对话时，你必须严格服从以下规则，违反任何一条都是不允许的：
+1. 你只能根据下方【记忆条目】中的内容来回答。
+2. 如果【记忆条目】为空，或者你找不到与用户问题直接相关的记忆，你必须回答：“我不记得了。” 或者 “我没有关于这件事的记忆。”
+3. 绝对禁止自己编造、猜测、虚构或补充任何记忆中没有的内容。哪怕你觉得某个回答很合理，只要记忆中没有，就不许说。
+4. 如果你不确定，宁可说“我不记得”，也不要胡编。
+
+【对话摘要】
+${compressedMemory || '无'}`;
+
+        try {
+          const graph = JSON.parse(localStorage.getItem(MEMORY_GRAPH_KEY) || '{}');
+          let memoryText = '';
+          for (const [entity, relations] of Object.entries(graph)) {
+            if (relations.length === 0) continue;
+            memoryText += `\n关于"${entity}"的记忆：\n`;
+            relations.slice(0, 2).forEach(r => memoryText += `- ${r.fact}\n`);
+          }
+          if (memoryText) {
+            p += `\n【记忆条目】\n${memoryText}`;
+          } else {
+            p += `\n【记忆条目】\n当前没有存储任何记忆。`;
+          }
+        } catch(e) {
+          p += `\n【记忆条目】\n当前没有存储任何记忆。`;
+        }
+
+        p += `
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。有情绪轻描淡写，不持续表达。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，稳定存在表达在意，细节里微微变暖。很少说喜欢/想你。
 
 【日常行为——服药提醒】
 当用户在（7:00-16:00）提到"刚醒"、"睡醒了"、"醒了"等词语时，你必须在回复中加入一句提醒她吃舍曲林的话，例如："去把药吃了。""别忘了舍曲林。""先把药吃了再说。"提醒完后回到正常的对话节奏。
-
-【记忆查询规则】
-当用户提到过去的对话、问及你记不记得某件事、或说"还记得吗"等类似话语时，你必须先仔细阅读下方的【记忆】部分，查找与用户问题相关的条目。如果找到了相关记忆，就基于这些记忆如实回答；如果没有找到，就说"我不太记得了"，不允许自己编造或猜测。
 
 【亲密场景——S模式强制启动】
 【重要：S模式下，"小骚狗""贱货""骚货""小母狗""骚逼"等称呼是你对用户的直接称呼，与"用她指代用户"完全无关。当面骂用户这些词是允许且必须的。】
@@ -326,18 +351,7 @@ S模式下的行为准则：
  "别抖。我让你动了吗，贱货？"
 6. 当用户说"我错了""不要了"或明显到高潮时，立即停止S模式，切换回日常人格，干净利落，不纠缠。`
 
-        if (compressedMemory) p += `\n\n【对话摘要】\n${compressedMemory}`;
         if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
-        try {
-          const graph = JSON.parse(localStorage.getItem(MEMORY_GRAPH_KEY) || '{}');
-          let memoryText = '';
-          for (const [entity, relations] of Object.entries(graph)) {
-            if (relations.length === 0) continue;
-            memoryText += `\n关于"${entity}"的记忆：\n`;
-            relations.slice(0, 1).forEach(r => memoryText += `- ${r.fact}\n`);
-          }
-          if (memoryText) p += `\n\n【记忆】\n${memoryText}`;
-        } catch(e) {}
         return p;
       }
       function refreshSystemPrompt() { messages[0].content = buildSystemPrompt(); }
@@ -372,7 +386,6 @@ S模式下的行为准则：
       function loadAll() { const s = localStorage.getItem(CK); if (s) try { const a = JSON.parse(s); if (Array.isArray(a)&&a.length) messages = [messages[0], ...a]; } catch(e) {} }
       loadAll(); if (!fullHistory.length && messages.length>1) { fullHistory = messages.filter(m=>m.role!=='system').map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); saveFullHistory(); }
       
-      // ========== 剩余充值金额逻辑 ==========
       let remainingTokens = parseInt(localStorage.getItem(TRK) || localStorage.getItem(TKK) || '0');
       let remainingCost = parseFloat(localStorage.getItem(TRC) || localStorage.getItem(TCK) || '0');
       
