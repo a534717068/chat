@@ -946,7 +946,7 @@ S模式下的行为准则：
       $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
       $('userInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('sendBtn').click(); } };
       
-      // 导出——附带完整日期时间，避免导入时重复
+      // 导出——附带完整日期时间、设定和记忆数据
       $('exportBtn').onclick = () => {
         const dataToExport = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system').map(m => ({
           role: m.role,
@@ -954,12 +954,16 @@ S模式下的行为准则：
           time: m.time || Date.now()
         }));
         if (!dataToExport.length) return alert('无记录');
-        const exportData = dataToExport.map(m => ({
-          role: m.role,
-          content: m.content,
-          time: m.time,
-          formattedTime: fullDateTime(m.time || Date.now())
-        }));
+        const exportData = {
+          messages: dataToExport.map(m => ({
+            role: m.role,
+            content: m.content,
+            time: m.time,
+            formattedTime: fullDateTime(m.time || Date.now())
+          })),
+          globalSetting: globalSetting || '',
+          memoryFacts: JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]')
+        };
         const b = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(b);
@@ -972,12 +976,16 @@ S模式下的行为准则：
         if (localStorage.getItem(AEK) === today) return;
         const d = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system');
         if (d.length) {
-          const exportData = d.map(m => ({
-            role: m.role,
-            content: m.content,
-            time: m.time || Date.now(),
-            formattedTime: fullDateTime(m.time || Date.now())
-          }));
+          const exportData = {
+            messages: d.map(m => ({
+              role: m.role,
+              content: m.content,
+              time: m.time || Date.now(),
+              formattedTime: fullDateTime(m.time || Date.now())
+            })),
+            globalSetting: globalSetting || '',
+            memoryFacts: JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]')
+          };
           const b = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
           const a = document.createElement('a');
           a.href = URL.createObjectURL(b);
@@ -1015,6 +1023,23 @@ S模式下的行为准则：
         let imported;
         try {
           imported = JSON.parse(raw);
+          if (!imported || typeof imported !== 'object') throw 0;
+          // 新格式：包含 messages、globalSetting、memoryFacts
+          if (imported.messages && Array.isArray(imported.messages)) {
+            // 恢复设定
+            if (imported.globalSetting && typeof imported.globalSetting === 'string') {
+              globalSetting = imported.globalSetting;
+              localStorage.setItem(SETTING_KEY, globalSetting);
+              $('settingTextarea').value = globalSetting;
+              refreshSystemPrompt();
+            }
+            // 恢复记忆
+            if (imported.memoryFacts && Array.isArray(imported.memoryFacts)) {
+              localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(imported.memoryFacts));
+              rebuildGraph();
+            }
+            imported = imported.messages;
+          }
           if (!Array.isArray(imported)) throw 0;
           imported = imported.filter(m => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string');
         } catch(e) {
