@@ -566,13 +566,13 @@ S模式下的行为准则：
 
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); editingIdx = -1; renderAll(); saveAll(); sendToAPI(text); };
 
-      // 最终修复：只在冒号+左引号前换行，完全不动右引号和句号
+      // 最终修复：冒号留在上一行，左引号换到下一行开头
       function formatAssistantContent(content) {
         if (!content) return content;
         // 如果 AI 已经分了段，直接返回
         if (content.match(/\n.*\n/)) return content.trim();
-        // 只在中文冒号+中文左引号之前换行，让对话另起一段
-        let result = content.replace(/([^：\n])(：\u201C)/g, '$1\n$2');
+        // 在冒号+左引号之间换行：冒号留在上一行末尾，左引号放到下一行开头
+        let result = content.replace(/([：])(\u201C)/g, '$1\n$2');
         return result.trim();
       }
 
