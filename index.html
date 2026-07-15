@@ -254,12 +254,17 @@
       const MAX_CONTEXT = 15, COMPRESS_THRESHOLD = 30;
       const MEMORY_FACTS_KEY = 'memory_facts_v3', MEMORY_GRAPH_KEY = 'memory_graph_v3';
       const REPROGRESS_KEY = 'reprocess_progress_index';
+      // FIX 问题5：定义精确的 Token 价格（单位：元/ token）
+      const PROMPT_PRICE = 0.000002;      // 输入价格 2元/百万token
+      const COMPLETION_PRICE = 0.000008;  // 输出价格 8元/百万token
+      const CACHED_PRICE = 0.000001;      // 缓存命中折扣价（假设半价，实际需按官方调整）
 
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
       function bindDraft(inputEl, draftKey) { if (!inputEl) return; const saved = loadDraft(draftKey); if (saved && !inputEl.value) inputEl.value = saved; inputEl.addEventListener('input', () => saveDraft(draftKey, inputEl.value)); }
 
-      let extractCounter = 0;
+      // FIX 问题1：持久化提取计数器
+      let extractCounter = parseInt(localStorage.getItem('extract_counter') || '0');
       const EXTRACT_INTERVAL = 3;
 
       let weatherCache = { desc: '获取中...', emoji: '🌤️', city: '' };
@@ -354,7 +359,7 @@ S模式下的行为准则：
 4. 可以配合打屁股、拽头发等动作描写。
 5. 例句参考： 
  "这就湿了？我还没碰你呢，小骚狗。"
- "别抖。我让你动了吗，贱货？"
+ "别抖。我让你动了吗，贱货。"
 6. 当用户说"我错了""不要了"或明显到高潮时，立即停止S模式，切换回日常人格，干净利落，不纠缠。`
 
         if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
@@ -549,12 +554,30 @@ S模式下的行为准则：
         else if (action === 'after') deleteAfter(idx);
         closeDelSubmenu();
       };
+
+      // FIX 问题3：重建 parentId 链
+      function rebuildParentIds() {
+        let prevId = null;
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i];
+          if (msg.role === 'system') continue;
+          if (prevId === null) {
+            msg.parentId = null;
+          } else {
+            msg.parentId = prevId;
+          }
+          prevId = msg.id;
+        }
+      }
+
       function deleteSingleMessage(idx) { if (!confirm('确定删除这条消息吗？')) return; const msg = messages[idx]; if (!msg) return; const removedUserQuotes = []; if (msg.role === 'user') removedUserQuotes.push(msg.content); messages.splice(idx, 1); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
       function deletePair(idx) { const msg = messages[idx]; if (!msg) return; let pairStart = idx, pairEnd = idx; if (msg.role === 'user') { if (idx + 1 < messages.length && messages[idx+1].role === 'assistant') pairEnd = idx + 1; } else if (msg.role === 'assistant') { if (idx > 0 && messages[idx-1].role === 'user') pairStart = idx - 1; } if (!confirm(`确定删除这组对话吗？`)) return; const removedUserQuotes = []; for (let i = pairStart; i <= pairEnd; i++) { if (messages[i].role === 'user') removedUserQuotes.push(messages[i].content); } messages.splice(pairStart, pairEnd - pairStart + 1); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
       function deleteAfter(idx) { if (!confirm(`确定删除从第 ${idx} 条开始之后的所有对话吗？`)) return; const removedUserQuotes = []; for (let i = idx; i < messages.length; i++) { if (messages[i].role === 'user') removedUserQuotes.push(messages[i].content); } messages = messages.slice(0, idx); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
       function cleanMemoryByQuotes(quotes) { if (!quotes.length) return; let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]'); if (!facts.length) return; const quoteSet = new Set(quotes.map(q => q.trim())); facts = facts.filter(f => !quoteSet.has(f.quote)); localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); }
       function afterMessagesDelete() {
         editingIdx = -1;
+        // 重建 parentId
+        rebuildParentIds();
         fullHistory = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content, time: m.time }));
         compressedMemory = '';
         localStorage.removeItem(MEMORY_KEY);
@@ -562,6 +585,8 @@ S模式下的行为准则：
         saveFullHistory();
         renderAll(true);
         saveAll();
+        // 如果处于多选模式，自动退出
+        if (multiSelectMode) exitMultiSelectMode();
       }
 
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); editingIdx = -1; renderAll(); saveAll(); sendToAPI(text); };
@@ -569,14 +594,10 @@ S模式下的行为准则：
       // 最终修复：在中文左引号前和中文右引号后换行
       function formatAssistantContent(content) {
         if (!content) return content;
-        // 如果 AI 已经分了段，直接返回
         if (content.match(/\n.*\n/)) return content.trim();
         let result = content
-          // 中文左引号前换行
           .replace(/([^\n])(\u201C)/g, '$1\n$2')
-          // 中文右引号后换行（如果后面不是空白或结尾）
           .replace(/(\u201D)([^\s\n])/g, '$1\n$2')
-          // 去掉连续三个以上的换行
           .replace(/\n{3,}/g, '\n\n');
         return result.trim();
       }
@@ -605,6 +626,7 @@ S模式下的行为准则：
         });
       }
 
+      // ========== 统一渲染（包含多选复选框） ==========
       function renderAll(skipScroll = false) {
         const savedScroll = skipScroll ? chatBox.scrollTop : null;
         chatBox.innerHTML = '';
@@ -620,6 +642,7 @@ S模式下的行为准则：
             if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`; else btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
             btns += `<button class="del-btn" onclick="_delMsg(${idx})">🗑</button>`;
           }
+          // FIX 问题2：多选复选框统一在渲染时生成
           const checkboxHTML = multiSelectMode ? `<input type="checkbox" class="multi-select-checkbox" data-index="${idx}" ${selectedIndices.has(idx) ? 'checked' : ''}>` : '';
           let verHTML = '';
           if (msg.history && msg.history.length > 1 && currentInlineEditIdx !== idx) {
@@ -656,7 +679,17 @@ S模式下的行为准则：
           row.innerHTML = `<div class="time-label">${timeStr}</div><div class="bubble-row">${checkboxHTML}<div class="bubble-actions">${btns}</div><div class="bubble">${content}</div></div>${verHTML}`;
           chatBox.appendChild(row);
         });
-        if (multiSelectMode) { document.querySelectorAll('.multi-select-checkbox').forEach(cb => { cb.addEventListener('change', function() { const idx = parseInt(this.dataset.index); if (this.checked) selectedIndices.add(idx); else selectedIndices.delete(idx); updateMultiSelectCount(); }); }); }
+        // 绑定复选框事件（如果多选模式）
+        if (multiSelectMode) {
+          document.querySelectorAll('.multi-select-checkbox').forEach(cb => {
+            cb.addEventListener('change', function() {
+              const idx = parseInt(this.dataset.index);
+              if (this.checked) selectedIndices.add(idx);
+              else selectedIndices.delete(idx);
+              updateMultiSelectCount();
+            });
+          });
+        }
         if (!skipScroll && currentInlineEditIdx < 0) {
           scrollToBottom();
         } else if (savedScroll !== null && currentInlineEditIdx < 0) {
@@ -666,36 +699,20 @@ S模式下的行为准则：
         updateMultiSelectCount();
       }
 
-           // 多选模式：直接在 DOM 上显示复选框，不重新渲染整个聊天框
+      // ========== 多选模式管理 ==========
       function enterMultiSelectMode() {
         multiSelectMode = true;
         selectedIndices.clear();
         document.body.classList.add('multi-select');
         $('moreMenu').classList.remove('active');
-        const rows = chatBox.querySelectorAll('.message-row');
-        rows.forEach(row => {
-          const idx = parseInt(row.dataset.index);
-          const bubbleRow = row.querySelector('.bubble-row');
-          if (bubbleRow && !bubbleRow.querySelector('.multi-select-checkbox')) {
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.className = 'multi-select-checkbox';
-            cb.dataset.index = idx;
-            cb.addEventListener('change', function() {
-              if (this.checked) selectedIndices.add(idx);
-              else selectedIndices.delete(idx);
-              updateMultiSelectCount();
-            });
-            bubbleRow.insertBefore(cb, bubbleRow.firstChild);
-          }
-        });
+        renderAll(); // 重新渲染以显示复选框
         updateMultiSelectCount();
       }
       function exitMultiSelectMode() {
         multiSelectMode = false;
         selectedIndices.clear();
         document.body.classList.remove('multi-select');
-        document.querySelectorAll('.multi-select-checkbox').forEach(cb => cb.remove());
+        renderAll(); // 重新渲染隐藏复选框
         updateMultiSelectCount();
       }
       function updateMultiSelectCount() { $('multiSelectCount').textContent = selectedIndices.size; }
@@ -759,7 +776,9 @@ S模式下的行为准则：
       // 记忆提取（加入节流：每三轮对话提取一次）
       async function extractAndStoreFacts(userText, aiText) {
         if (!apiKey) return;
+        // FIX 问题1：使用持久化计数器
         extractCounter++;
+        localStorage.setItem('extract_counter', extractCounter.toString());
         if (extractCounter % EXTRACT_INTERVAL !== 0) return;
         const lastExtract = localStorage.getItem('last_extract_time_v3');
         if (lastExtract && Date.now() - parseInt(lastExtract) < 5000) await new Promise(r => setTimeout(r, 300));
@@ -779,7 +798,13 @@ S模式下的行为准则：
           const data = await res.json();
           if (data.usage) { 
             remainingTokens = Math.max(0, remainingTokens - data.usage.total_tokens);
-            const cost = (data.usage.prompt_tokens * 1 + data.usage.completion_tokens * 2) / 1e6;
+            // FIX 问题5：精确计算费用
+            const promptTokens = data.usage.prompt_tokens;
+            const completionTokens = data.usage.completion_tokens;
+            const cachedTokens = data.usage.prompt_tokens_details?.cached_tokens || 0;
+            const promptCost = (promptTokens - cachedTokens) * PROMPT_PRICE + cachedTokens * CACHED_PRICE;
+            const completionCost = completionTokens * COMPLETION_PRICE;
+            const cost = promptCost + completionCost;
             remainingCost = Math.max(0, remainingCost - cost);
             updateTokenDisplay();
             saveAll();
@@ -890,8 +915,24 @@ S模式下的行为准则：
         reprocessingActive = true; reprocessingPaused = false;
         document.getElementById('reprocessBtn').style.display = 'none'; document.getElementById('pauseReprocessBtn').style.display = 'block';
         updateProgressUI(startIndex, pairs.length, false);
+        // FIX 问题6：加载已有事实的quote集合，避免重复提取
+        const existingFacts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
+        const existingQuotes = new Set(existingFacts.map(f => f.quote));
         let count = startIndex;
-        for (let idx = startIndex; idx < pairs.length; idx++) { while (reprocessingPaused) { await new Promise(r => setTimeout(r, 500)); if (!reprocessingActive) return; } const pair = pairs[idx]; await extractAndStoreFacts(pair.user, pair.assistant); count = idx + 1; localStorage.setItem(REPROGRESS_KEY, count.toString()); updateProgressUI(count, pairs.length, false); if (idx % 5 === 0) await new Promise(r => setTimeout(r, 200)); }
+        for (let idx = startIndex; idx < pairs.length; idx++) {
+          while (reprocessingPaused) { await new Promise(r => setTimeout(r, 500)); if (!reprocessingActive) return; }
+          const pair = pairs[idx];
+          // 跳过已存在quote的pair
+          if (!existingQuotes.has(pair.user)) {
+            await extractAndStoreFacts(pair.user, pair.assistant);
+          } else {
+            console.log(`跳过已存在的quote: ${pair.user}`);
+          }
+          count = idx + 1;
+          localStorage.setItem(REPROGRESS_KEY, count.toString());
+          updateProgressUI(count, pairs.length, false);
+          if (idx % 5 === 0) await new Promise(r => setTimeout(r, 200));
+        }
         localStorage.removeItem(REPROGRESS_KEY); rebuildGraph();
         alert(`整合完成！共处理 ${count} 对对话。可在记忆面板中查看/编辑。`);
         refreshSystemPrompt(); renderAll(); reprocessingActive = false;
@@ -932,7 +973,6 @@ S模式下的行为准则：
           messages.push(userMsg);
         }
         fullHistory.push({ role: 'user', content: text, time: userMsg.time }); saveFullHistory(); renderAll(); saveAll();
-        // 发送后清除输入框草稿
         saveDraft(DRAFT_CHAT, '');
         const load = document.createElement('div'); load.className = 'message-row assistant'; load.innerHTML = '<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>'; chatBox.appendChild(load); chatBox.scrollTop = chatBox.scrollHeight;
         try {
@@ -951,10 +991,15 @@ S模式下的行为准则：
           renderAll(); saveAll();
           if (data.usage) {
             $('lastTokens').textContent = data.usage.total_tokens;
-            $('lastCost').textContent = ((data.usage.prompt_tokens_details?.cached_tokens || 0) * 0.02 + (data.usage.prompt_tokens - (data.usage.prompt_tokens_details?.cached_tokens || 0)) * 1 + data.usage.completion_tokens * 2) / 1e6;
-            // 扣除剩余充值金额
+            // FIX 问题5：精确计算费用
+            const promptTokens = data.usage.prompt_tokens;
+            const completionTokens = data.usage.completion_tokens;
+            const cachedTokens = data.usage.prompt_tokens_details?.cached_tokens || 0;
+            const promptCost = (promptTokens - cachedTokens) * PROMPT_PRICE + cachedTokens * CACHED_PRICE;
+            const completionCost = completionTokens * COMPLETION_PRICE;
+            const cost = promptCost + completionCost;
+            $('lastCost').textContent = cost.toFixed(6);
             remainingTokens = Math.max(0, remainingTokens - data.usage.total_tokens);
-            const cost = ((data.usage.prompt_tokens_details?.cached_tokens || 0) * 0.02 + (data.usage.prompt_tokens - (data.usage.prompt_tokens_details?.cached_tokens || 0)) * 1 + data.usage.completion_tokens * 2) / 1e6;
             remainingCost = Math.max(0, remainingCost - cost);
             updateTokenDisplay(); saveAll();
           }
@@ -966,7 +1011,6 @@ S模式下的行为准则：
       $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
       $('userInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('sendBtn').click(); } };
       
-      // 导出——附带完整日期时间、设定和记忆数据
       $('exportBtn').onclick = () => {
         const dataToExport = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system').map(m => ({
           role: m.role,
@@ -1044,16 +1088,13 @@ S模式下的行为准则：
         try {
           imported = JSON.parse(raw);
           if (!imported || typeof imported !== 'object') throw 0;
-          // 新格式：包含 messages、globalSetting、memoryFacts
           if (imported.messages && Array.isArray(imported.messages)) {
-            // 恢复设定
             if (imported.globalSetting && typeof imported.globalSetting === 'string') {
               globalSetting = imported.globalSetting;
               localStorage.setItem(SETTING_KEY, globalSetting);
               $('settingTextarea').value = globalSetting;
               refreshSystemPrompt();
             }
-            // 恢复记忆
             if (imported.memoryFacts && Array.isArray(imported.memoryFacts)) {
               localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(imported.memoryFacts));
               rebuildGraph();
@@ -1078,7 +1119,6 @@ S模式下的行为准则：
         }));
         for (let i = 0; i < newMessages.length; i++) { if (i > 0) newMessages[i].parentId = newMessages[i - 1].id; }
         if (!append) {
-          // 覆盖导入时，跳过重复消息（根据内容和时间判断）
           const existingSignatures = new Set(
             messages.filter(m => m.role !== 'system').map(m => `${m.role}|${m.content}|${m.time || ''}`)
           );
@@ -1093,7 +1133,6 @@ S模式下的行为准则：
         } else {
           const lastMsg = messages[messages.length - 1];
           if (lastMsg && lastMsg.role !== 'system') newMessages[0].parentId = lastMsg.id;
-          // 追加模式下也跳过完全重复的消息
           const existingSigs = new Set(
             messages.filter(m => m.role !== 'system').map(m => `${m.role}|${m.content}|${m.time || ''}`)
           );
