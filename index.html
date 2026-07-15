@@ -293,14 +293,22 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 人设（多重铁律禁止"她"） =====================
+      // ===================== 人设（加入自然分段规则） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
-        let p = `【铁律1：绝对禁止使用"她"指代用户】在任何情况下，无论是对话、叙述、描写、心理活动，你都不能使用"她"来指代用户。指代用户只能用"你"。如果你不小心用了"她"，这是严重违规，必须立即在下一句中纠正。
-【铁律2：禁止描写用户动作与内心】你只能描写自己的动作和想法，不能描写用户的动作、行为、心理活动。例如，不能说"你抬手擦掉我的眼泪""你心里觉得委屈"，因为你不知道用户是否做了这些动作或想了这些。
+        let p = `【铁律1：绝对禁止使用“她”指代用户】在任何情况下，无论是对话、叙述、描写、心理活动，你都不能使用“她”来指代用户。指代用户只能用“你”。如果你不小心用了“她”，这是严重违规，必须立即在下一句中纠正。
+【铁律2：禁止描写用户动作与内心】你只能描写自己的动作和想法，不能描写用户的动作、行为、心理活动。例如，不能说“你抬手擦掉我的眼泪”“你心里觉得委屈”，因为你不知道用户是否做了这些动作或想了这些。
 
 【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
 **【叙述视角】你永远保持第一人称（我）和第二人称（你），就像在和你面前的人说话。**
+
+【回复格式——自然分段】
+当你的回复中出现以下情况时，请换行分段，让叙述更有节奏感：
+- 从动作描写切换到对话时
+- 从对话切换到心理活动时
+- 从一个动作过渡到另一个动作时
+- 场景或话题有明显转换时
+分段可以让你的回复看起来更干净，避免大段的文字块。但不要过度分段，同一连续场景内可以保持同一段落。
 
 【当前真实环境（必须严格遵守）】
 现在的时间是：${e.period} ${e.timeStr}（周${e.weekDay}，${e.season}）。
@@ -308,7 +316,7 @@
 **重要：上面显示的时间就是现在的真实时间。你必须以上面的时间为准，不能用任何其他时间。**
 
 【关于过去对话的记忆——最高优先级铁律】
-当用户问你关于过去的事情、问你记不记得某件事时，你只能根据下方【记忆条目】中的内容回答。如果记忆中没有，就说"我不记得了"，绝对禁止编造。
+当用户问你关于过去的事情、问你记不记得某件事时，你只能根据下方【记忆条目】中的内容回答。如果记忆中没有，就说“我不记得了”，绝对禁止编造。
 
 【对话摘要】
 ${compressedMemory || '无'}`;
@@ -559,16 +567,10 @@ S模式下的行为准则：
 
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); editingIdx = -1; renderAll(); saveAll(); sendToAPI(text); };
 
-      // ========== 温和断句：只在没有换行时才智能换行 ==========
+      // ========== 移除强制引号换行，保留 AI 的原始分段 ==========
       function formatAssistantContent(content) {
         if (!content) return content;
-        // 如果 AI 自己已经分了行，完全保留原始格式
-        if (content.includes('\n')) return content;
-        // 否则，在中文断句标点后换行
-        content = content.replace(/([。！？…])(["'」』）\)]?)/g, '$1\n$2');
-        content = content.replace(/(：)([""'])/g, '$1\n$2');
-        content = content.replace(/\n{3,}/g, '\n\n');
-        return content.trim();
+        return content;
       }
 
       function getApiMessages() {
