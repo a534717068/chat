@@ -296,7 +296,7 @@
       // ===================== 人设（分段格式 + 所有铁律） =====================
       function buildSystemPrompt() {
         const e = getEnvInfo();
-        let p = `【铁律1：绝对禁止使用“她”指代用户】在任何情况下，无论是对话、叙述、描写、心理活动，你都不能使用“她”来指代用户。指代用户只能用“你”。如果你不小心用了“她”，这是严重违规，必须立即在下一句中纠正。
+        let p = `【铁律1：绝对禁止使用"她"指代用户】在任何情况下，无论是对话、叙述、描写、心理活动，你都不能使用"她"来指代用户。指代用户只能用"你"。如果你不小心用了"她"，这是严重违规，必须立即在下一句中纠正。
 【铁律2：禁止描写用户动作与内心】你只能描写自己的动作和想法，不能描写用户的动作、行为、心理活动。
 
 【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
@@ -316,7 +316,7 @@
 **重要：上面显示的时间就是现在的真实时间。你必须以上面的时间为准，不能用任何其他时间。**
 
 【关于过去对话的记忆——最高优先级铁律】
-当用户问你关于过去的事情、问你记不记得某件事时，你只能根据下方【记忆条目】中的内容回答。如果记忆中没有，就说“我不记得了”，绝对禁止编造。
+当用户问你关于过去的事情、问你记不记得某件事时，你只能根据下方【记忆条目】中的内容回答。如果记忆中没有，就说"我不记得了"，绝对禁止编造。
 
 【对话摘要】
 ${compressedMemory || '无'}`;
@@ -566,13 +566,18 @@ S模式下的行为准则：
 
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); editingIdx = -1; renderAll(); saveAll(); sendToAPI(text); };
 
-      // 最终修复：冒号留在上一行，左引号换到下一行开头
+      // 最终修复：在中文左引号前和中文右引号后换行
       function formatAssistantContent(content) {
         if (!content) return content;
         // 如果 AI 已经分了段，直接返回
         if (content.match(/\n.*\n/)) return content.trim();
-        // 在冒号+左引号之间换行：冒号留在上一行末尾，左引号放到下一行开头
-        let result = content.replace(/([：])(\u201C)/g, '$1\n$2');
+        let result = content
+          // 中文左引号前换行
+          .replace(/([^\n])(\u201C)/g, '$1\n$2')
+          // 中文右引号后换行（如果后面不是空白或结尾）
+          .replace(/(\u201D)([^\s\n])/g, '$1\n$2')
+          // 去掉连续三个以上的换行
+          .replace(/\n{3,}/g, '\n\n');
         return result.trim();
       }
 
