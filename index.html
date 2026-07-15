@@ -566,20 +566,14 @@ S模式下的行为准则：
 
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); editingIdx = -1; renderAll(); saveAll(); sendToAPI(text); };
 
-      // 改进的 formatAssistantContent：智能分段，不拆分引号本身
+      // 最终修复：只在句末标点后换行，完全不动引号
       function formatAssistantContent(content) {
         if (!content) return content;
-        // 如果 AI 已经自己分了段（包含两个以上换行），信任它的分段，不做处理
+        // 如果 AI 已经分了段，直接返回
         if (content.match(/\n.*\n/)) return content.trim();
-        // 否则按中文冒号+引号、右引号+后续文字等位置智能分段
+        // 在句号、问号、感叹号之后加换行（如果后面不是空白或结尾）
         let result = content
-          // 中文冒号+中文左引号 → 在这之前换行
-          .replace(/(.)(：\u201C)/g, '$1\n$2')
-          // 中文右引号+非引号字符 → 在右引号之后换行
-          .replace(/(\u201D)([^\u201D\u201C\n])/g, '$1\n$2')
-          // 句号、问号、感叹号之后如果紧跟着非空白，适当换行
           .replace(/([。！？])([^\s\n])/g, '$1\n$2')
-          // 去掉连续三个以上的换行
           .replace(/\n{3,}/g, '\n\n');
         return result.trim();
       }
