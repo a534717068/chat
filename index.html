@@ -559,18 +559,15 @@ S模式下的行为准则：
 
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); editingIdx = -1; renderAll(); saveAll(); sendToAPI(text); };
 
-      // ========== 智能断句：让回复读起来更舒服 ==========
+      // ========== 温和断句：只在没有换行时才智能换行 ==========
       function formatAssistantContent(content) {
         if (!content) return content;
-        // 如果已经有多行，保持原样
+        // 如果 AI 自己已经分了行，完全保留原始格式
         if (content.includes('\n')) return content;
-        // 在中文句号、问号、感叹号、省略号、分号后换行
-        content = content.replace(/([。！？…；])(["'"]?)/g, '$1\n$2');
-        // 在中文冒号后跟引号时换行
+        // 否则，在中文断句标点后换行
+        content = content.replace(/([。！？…])(["'」』）\)]?)/g, '$1\n$2');
         content = content.replace(/(：)([""'])/g, '$1\n$2');
-        // 把连续多个空行压缩成一个
         content = content.replace(/\n{3,}/g, '\n\n');
-        // 去除首尾空白
         return content.trim();
       }
 
