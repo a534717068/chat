@@ -182,7 +182,10 @@
     <div class="modal">
       <h3 style="margin:0;display:flex;justify-content:space-between;align-items:center;">
         <span>🧠 记忆管理</span>
-        <button class="add-memory-btn" id="addMemoryBtn">＋ 新增</button>
+        <div style="display:flex;gap:6px;">
+          <button class="add-memory-btn" id="addMemoryBtn">＋ 新增</button>
+          <button class="add-memory-btn" id="pruneMemoryBtnTop" style="background:#e94560;">🧹 清理旧记忆</button>
+        </div>
       </h3>
       <div id="memoryDisplay" style="max-height:350px;overflow-y:auto;padding:4px;background:var(--bg);border-radius:8px;font-size:0.85rem;">加载中...</div>
       <div class="modal-buttons"><button class="btn-cancel" id="memoryCloseBtn">关闭</button></div>
@@ -251,17 +254,14 @@
       const SETTING_KEY = 'deepseek_global_setting', MEMORY_KEY = 'deepseek_compressed_memory';
       const FULL_HISTORY_KEY = 'deepseek_full_history';
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
-      // 上下文轮数改为 10
       const MAX_CONTEXT = 10;
       const COMPRESS_THRESHOLD = 30;
       const MEMORY_FACTS_KEY = 'memory_facts_v3', MEMORY_GRAPH_KEY = 'memory_graph_v3';
       const REPROGRESS_KEY = 'reprocess_progress_index';
-      // 价格常量
       const PROMPT_PRICE = 0.000002;
       const COMPLETION_PRICE = 0.000008;
       const CACHED_PRICE = 0.000001;
 
-      // 记忆提取间隔改为 5
       let extractCounter = parseInt(localStorage.getItem('extract_counter') || '0');
       const EXTRACT_INTERVAL = 5;
 
@@ -269,7 +269,6 @@
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
       function bindDraft(inputEl, draftKey) { if (!inputEl) return; const saved = loadDraft(draftKey); if (saved && !inputEl.value) inputEl.value = saved; inputEl.addEventListener('input', () => saveDraft(draftKey, inputEl.value)); }
 
-      // 天气和环境
       let weatherCache = { desc: '获取中...', emoji: '🌤️', city: '' };
       async function fetchRealWeather() {
         try {
@@ -289,7 +288,6 @@
 
       function getSeason() { const m = new Date().getMonth()+1; if (m>=3&&m<=5) return '春天'; if (m>=6&&m<=8) return '夏天'; if (m>=9&&m<=11) return '秋天'; return '冬天'; }
 
-      // 获取完整环境信息（包含年月日）
       function getEnvInfo() {
         const now = new Date();
         const h = now.getHours(), m = now.getMinutes();
@@ -330,7 +328,6 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ====== 构建 System Prompt（移除天气/时间，精简 S 模式） ======
       function buildSystemPrompt() {
         let p = `【铁律1：绝对禁止使用"她"指代用户】在任何情况下，无论是对话、叙述、描写、心理活动，你都不能使用"她"来指代用户。指代用户只能用"你"。如果你不小心用了"她"，这是严重违规，必须立即在下一句中纠正。
 【铁律2：禁止描写用户动作与内心】你只能描写自己的动作和想法，不能描写用户的动作、行为、心理活动。
@@ -369,7 +366,6 @@ ${compressedMemory || '无'}`;
           p += `\n【记忆条目】\n当前没有存储任何记忆。`;
         }
 
-        // 精简后的 S 模式
         p += `
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，细节里微微变暖。很少说喜欢/想你。
 
@@ -430,7 +426,6 @@ S模式规则：
       });
       updateTokenDisplay();
 
-      // 主题等
       function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'☀️':'🌙'; localStorage.setItem(TK, d?'dark':'light'); }
       setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.addEventListener('click', () => $('moreMenu').classList.remove('active')); $('moreMenu').onclick = e => e.stopPropagation();
@@ -461,24 +456,44 @@ S模式规则：
         }
         currentInlineEditIdx = -1; editingIdx = -1; $('userInput').disabled = false; $('sendBtn').disabled = false;
       }
+
+      // ---------- 修改：去除确认框，直接截断并重新生成 ----------
       function submitInlineEdit(idx, newText) {
         if (idx < 0 || idx >= messages.length) return;
         const msg = messages[idx];
         if (!msg || msg.role !== 'user') return;
-        if (!newText.trim()) { cancelInlineEdit(); return; }
-        let hasFollowing = false;
-        for (let i = idx + 1; i < messages.length; i++) { if (messages[i].role !== 'system') { hasFollowing = true; break; } }
-        if (hasFollowing) {
-          if (!confirm('编辑后将删除该消息之后的所有对话，是否继续？')) {
-            msg.content = newText.trim();
-            rebuildFullHistoryFromMessages();
-            currentInlineEditIdx = -1; editingIdx = -1; $('userInput').disabled = false; $('sendBtn').disabled = false;
-            renderAll(); saveAll(); return;
-          }
+        if (!newText.trim()) {
+          cancelInlineEdit();
+          return;
         }
-        editingIdx = idx; currentInlineEditIdx = -1; $('userInput').disabled = false; $('sendBtn').disabled = false;
+        // 直接删除该消息之后的所有消息（保留系统消息）
+        messages = messages.slice(0, idx + 1);
+        // 更新内容
+        msg.content = newText.trim();
+        msg.time = Date.now();
+        // 确保 history 分支记录
+        if (!msg.history) {
+          msg.history = [{ content: msg.content, reply: '', time: msg.time }];
+          msg.historyIndex = 0;
+        } else {
+          const curReply = '';
+          msg.history[msg.historyIndex || 0] = { content: msg.content, reply: '', time: msg.time };
+          msg.history.push({ content: newText.trim(), reply: '', time: Date.now() });
+          msg.historyIndex = msg.history.length - 1;
+        }
+        // 重建 parentId 链
+        rebuildParentIds();
+        // 更新 fullHistory
+        rebuildFullHistoryFromMessages();
+        // 关闭编辑状态
+        cancelInlineEdit();
+        // 重新渲染并保存
+        renderAll();
+        saveAll();
+        // 调用发送 API（重新生成）
         sendToAPI(newText.trim());
       }
+
       window._editMsg = function(idx) {
         if (multiSelectMode) return;
         if (currentInlineEditIdx >= 0) cancelInlineEdit();
@@ -556,7 +571,6 @@ S模式规则：
         return result.trim();
       }
 
-      // ====== getApiMessages：静态 System + 动态环境消息 ======
       function getApiMessages() {
         refreshSystemPrompt();
         const nonSystem = messages.filter(m => m.role !== 'system');
@@ -675,7 +689,7 @@ S模式规则：
         } catch(e) { console.warn('压缩失败', e); }
       }
 
-      // ====== 记忆提取 + 合并重复 ======
+      // 提取 + 合并重复
       async function extractAndStoreFacts(userText, aiText) {
         if (!apiKey) return;
         extractCounter++;
@@ -712,7 +726,6 @@ S模式规则：
           const facts = JSON.parse(match[0]); if (!facts.length) return;
           let allFacts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
 
-          // 合并重复（entity+relation+object）
           for (const newFact of facts) {
             const existingIndex = allFacts.findIndex(f =>
               f.entity === newFact.entity && f.relation === newFact.relation && f.object === newFact.object
@@ -729,7 +742,7 @@ S模式规则：
         } catch(e) { console.warn('提取事实失败', e); }
       }
 
-      // ====== 遗忘机制：清理提及<2且超过30天的记忆 ======
+      // 遗忘机制
       function pruneMemory() {
         let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         if (!facts.length) { alert('记忆库为空，无需清理。'); return; }
@@ -756,21 +769,16 @@ S模式规则：
         refreshSystemPrompt(); renderAll();
       }
 
-      // ====== 记忆管理面板（增加“清理旧记忆”按钮） ======
       function renderMemoryManager() {
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         const container = document.getElementById('memoryDisplay');
         if (!facts.length) {
-          container.innerHTML = `<div style="padding:12px;color:var(--text-secondary);">暂无记忆，聊天后自动提取或点击“整合旧记忆”。</div>
-            <button class="add-memory-btn" id="pruneMemoryBtn" style="margin-top:8px;background:#e94560;">🧹 清理旧记忆</button>`;
-          document.getElementById('pruneMemoryBtn')?.addEventListener('click', pruneMemory);
+          container.innerHTML = '<div style="padding:12px;color:var(--text-secondary);">暂无记忆，聊天后自动提取或点击“整合旧记忆”。</div>';
           return;
         }
         let html = '';
         facts.forEach((f, index) => { html += `<div class="memory-item" data-index="${index}"><div class="meta"><span><strong>实体：</strong>${f.entity}</span><span><strong>关系：</strong>${f.relation}</span><span><strong>对象：</strong>${f.object}</span><span><strong>提及：</strong>${f.mentions || 1}</span><span><strong>时间：</strong>${new Date(f.time).toLocaleDateString()}</span></div><div class="fact-text" id="fact-display-${index}">${f.fact}</div><div class="fact-edit" id="fact-edit-${index}" style="display:none;"><input class="memory-edit-input" id="edit-entity-${index}" value="${f.entity}" placeholder="实体"><input class="memory-edit-input" id="edit-relation-${index}" value="${f.relation}" placeholder="关系"><input class="memory-edit-input" id="edit-object-${index}" value="${f.object}" placeholder="对象"><textarea class="memory-edit-input" id="edit-fact-${index}" rows="2" style="resize:vertical;">${f.fact}</textarea></div><div class="actions"><button class="edit-btn" onclick="window.toggleEditFact(${index})">✏️ 编辑</button><button class="del-btn" onclick="window.deleteFact(${index})">🗑️ 删除</button><button class="edit-btn" id="save-edit-${index}" style="display:none;background:#4caf50;" onclick="window.saveFact(${index})">💾 保存</button><button class="edit-btn" id="cancel-edit-${index}" style="display:none;background:#888;" onclick="window.cancelEditFact(${index})">取消</button></div></div>`; });
-        html += `<button class="add-memory-btn" id="pruneMemoryBtn" style="margin-top:8px;background:#e94560;">🧹 清理旧记忆</button>`;
         container.innerHTML = html;
-        document.getElementById('pruneMemoryBtn')?.addEventListener('click', pruneMemory);
       }
 
       window.toggleEditFact = function(index) {
@@ -816,7 +824,9 @@ S模式规则：
         facts.push({ entity, relation, object, fact, quote: '手动添加', time: Date.now(), mentions: 1 });
         localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); renderMemoryManager(); refreshSystemPrompt(); renderAll();
       }
+
       document.getElementById('addMemoryBtn').addEventListener('click', addNewFact);
+      document.getElementById('pruneMemoryBtnTop').addEventListener('click', pruneMemory);
       document.getElementById('clearMemoryBtn').addEventListener('click', function() {
         if (confirm('确定清空所有自动提取的记忆吗？（不会删除聊天记录）')) {
           localStorage.removeItem(MEMORY_FACTS_KEY); localStorage.removeItem(MEMORY_GRAPH_KEY);
@@ -1034,4 +1044,4 @@ S模式规则：
     })();
   </script>
 </body>
-  </html>
+</html>
