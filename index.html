@@ -457,7 +457,6 @@ S模式规则：
         currentInlineEditIdx = -1; editingIdx = -1; $('userInput').disabled = false; $('sendBtn').disabled = false;
       }
 
-      // ---------- 修改：去除确认框，直接截断并重新生成 ----------
       function submitInlineEdit(idx, newText) {
         if (idx < 0 || idx >= messages.length) return;
         const msg = messages[idx];
@@ -466,12 +465,9 @@ S模式规则：
           cancelInlineEdit();
           return;
         }
-        // 直接删除该消息之后的所有消息（保留系统消息）
         messages = messages.slice(0, idx + 1);
-        // 更新内容
         msg.content = newText.trim();
         msg.time = Date.now();
-        // 确保 history 分支记录
         if (!msg.history) {
           msg.history = [{ content: msg.content, reply: '', time: msg.time }];
           msg.historyIndex = 0;
@@ -481,16 +477,11 @@ S模式规则：
           msg.history.push({ content: newText.trim(), reply: '', time: Date.now() });
           msg.historyIndex = msg.history.length - 1;
         }
-        // 重建 parentId 链
         rebuildParentIds();
-        // 更新 fullHistory
         rebuildFullHistoryFromMessages();
-        // 关闭编辑状态
         cancelInlineEdit();
-        // 重新渲染并保存
         renderAll();
         saveAll();
-        // 调用发送 API（重新生成）
         sendToAPI(newText.trim());
       }
 
@@ -562,7 +553,23 @@ S模式规则：
         renderAll(true); saveAll();
         if (multiSelectMode) exitMultiSelectMode();
       }
-      window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); editingIdx = -1; renderAll(); saveAll(); sendToAPI(text); };
+
+      // ========== 重新生成：只重新生成 AI 回复，不重复用户消息 ==========
+      window._regenMsg = function(idx) {
+        const msg = messages[idx];
+        if (!msg || msg.role !== 'assistant') return;
+        // 找到前一个用户消息的索引
+        let ui = -1;
+        for (let i = idx - 1; i >= 0; i--) {
+          if (messages[i].role === 'user') { ui = i; break; }
+        }
+        if (ui === -1) return;
+        // 设置编辑索引为用户消息，触发编辑模式，重用原用户消息
+        editingIdx = ui;
+        const text = typeof messages[ui].content === 'string' ? messages[ui].content : '';
+        // 调用 sendToAPI，它会利用编辑模式重新生成，不会重复添加用户消息
+        sendToAPI(text);
+      };
 
       function formatAssistantContent(content) {
         if (!content) return content;
