@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>M · 智能助手（精简版）</title>
+  <title>M · 智能助手</title>
   <link rel="manifest" href="manifest.json">
   <script>
     if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); }); }
@@ -255,15 +255,12 @@
       const SETTING_KEY = 'deepseek_global_setting', MEMORY_KEY = 'deepseek_compressed_memory';
       const FULL_HISTORY_KEY = 'deepseek_full_history';
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
-      // 修改上下文轮数 10
       const MAX_CONTEXT = 10;
       const COMPRESS_THRESHOLD = 30;
       const MEMORY_FACTS_KEY = 'memory_facts_v3', MEMORY_GRAPH_KEY = 'memory_graph_v3';
       const REPROGRESS_KEY = 'reprocess_progress_index';
-      // 提取间隔改为 5
       const EXTRACT_INTERVAL = 5;
 
-      // Token 价格（静态）
       const PROMPT_PRICE = 0.000002;
       const COMPLETION_PRICE = 0.000008;
       const CACHED_PRICE = 0.000001;
@@ -272,7 +269,6 @@
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
       function bindDraft(inputEl, draftKey) { if (!inputEl) return; const saved = loadDraft(draftKey); if (saved && !inputEl.value) inputEl.value = saved; inputEl.addEventListener('input', () => saveDraft(draftKey, inputEl.value)); }
 
-      // 持久化提取计数器
       let extractCounter = parseInt(localStorage.getItem('extract_counter') || '0');
 
       let weatherCache = { desc: '获取中...', emoji: '🌤️', city: '' };
@@ -280,15 +276,15 @@
         try {
           const cached = localStorage.getItem('deepseek_weather_cache');
           if (cached) { const p = JSON.parse(cached); if (Date.now() - p.time < 30*60*1000) { weatherCache = p.data; updateEnvDisplay(); return; } }
-          let pos; try { pos = await new Promise((r, e) => navigator.geolocation.getCurrentPosition(r, e, { timeout: 5000 })); } catch (geoErr) { console.warn('无法获取位置', geoErr); if (cached) { weatherCache = JSON.parse(cached).data; updateEnvDisplay(); } else { weatherCache = { desc: '位置未授权', emoji: '📍', city: '' }; updateEnvDisplay(); } return; }
+          let pos; try { pos = await new Promise((r, e) => navigator.geolocation.getCurrentPosition(r, e, { timeout: 5000 })); } catch (geoErr) { console.warn('无法获取位置', geoErr); if (cached) { weatherCache = JSON.parse(cached).data; updateEnvDisplay(); } else { weatherCache = { desc: '（天气信息未获取到，请以实际为准）', emoji: '🌤️', city: '' }; updateEnvDisplay(); } return; }
           const controller = new AbortController(); const timeoutId = setTimeout(() => controller.abort(), 8000);
-          let res; try { res = await fetch(`https://wttr.in/${pos.coords.latitude},${pos.coords.longitude}?format=j1`, { signal: controller.signal }); } catch (fetchErr) { console.warn('天气请求失败', fetchErr); if (cached) { weatherCache = JSON.parse(cached).data; updateEnvDisplay(); } else { weatherCache = { desc: '网络异常', emoji: '🌐', city: '' }; updateEnvDisplay(); } return; } finally { clearTimeout(timeoutId); }
+          let res; try { res = await fetch(`https://wttr.in/${pos.coords.latitude},${pos.coords.longitude}?format=j1`, { signal: controller.signal }); } catch (fetchErr) { console.warn('天气请求失败', fetchErr); if (cached) { weatherCache = JSON.parse(cached).data; updateEnvDisplay(); } else { weatherCache = { desc: '（天气信息未获取到，请以实际为准）', emoji: '🌤️', city: '' }; updateEnvDisplay(); } return; } finally { clearTimeout(timeoutId); }
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const d = await res.json(); if (!d.current_condition || !d.current_condition.length) throw new Error('无效数据');
           const c = d.current_condition[0]; const code = parseInt(c.weatherCode) || 0; const emojis = ['☀️','⛅','☁️','🌧️','⛈️','❄️','🌫️'];
           weatherCache = { desc: `${c.weatherDesc[0].value} ${c.temp_C}°C`, emoji: emojis[Math.min(6, Math.floor(code/50))]||'☀️', city: d.nearest_area?.[0]?.areaName?.[0]?.value || '' };
           localStorage.setItem('deepseek_weather_cache', JSON.stringify({ data: weatherCache, time: Date.now() }));
-        } catch(e) { console.warn('天气异常', e); const cached = localStorage.getItem('deepseek_weather_cache'); if (cached) weatherCache = JSON.parse(cached).data; else weatherCache = { desc: '天气获取失败', emoji: '🌤️', city: '' }; } updateEnvDisplay();
+        } catch(e) { console.warn('天气异常', e); const cached = localStorage.getItem('deepseek_weather_cache'); if (cached) weatherCache = JSON.parse(cached).data; else weatherCache = { desc: '（天气信息未获取到，请以实际为准）', emoji: '🌤️', city: '' }; } updateEnvDisplay();
       }
       fetchRealWeather(); setInterval(fetchRealWeather, 30*60*1000);
 
@@ -310,10 +306,11 @@
         else if (h>=19 && h<22) period = '晚上';
         else period = '深夜';
         const season = (() => { const mo = now.getMonth()+1; if (mo>=3&&mo<=5) return '春天'; if (mo>=6&&mo<=8) return '夏天'; if (mo>=9&&mo<=11) return '秋天'; return '冬天'; })();
-        return `现在是 ${year}年${month}月${day}日，${period} ${timeStr}，星期${wd}，${season}。天气：${weatherCache.desc}${weatherCache.city?'，地点：'+weatherCache.city:''}。`;
+        const weatherDesc = weatherCache.desc || '天气信息暂缺（请以实际为准）';
+        const cityInfo = weatherCache.city ? `，地点：${weatherCache.city}` : '';
+        return `【重要：当前真实时间与环境】现在是 ${year}年${month}月${day}日，${period} ${timeStr}，星期${wd}，${season}。天气：${weatherDesc}${cityInfo}。请严格以此为准，不要依据旧信息。`;
       }
 
-      // 更新顶部环境指示（不变）
       function updateEnvDisplay() {
         const now = new Date();
         const year = now.getFullYear();
@@ -346,11 +343,10 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ===================== 静态 System Prompt（不含动态环境） =====================
+      // ========== 静态 System Prompt（不含动态环境，强化禁令） ==========
       function buildSystemPrompt() {
-        let p = `【铁律1：绝对禁止使用"她"指代用户】在任何情况下，无论是对话、叙述、描写、心理活动，你都不能使用"她"来指代用户。指代用户只能用"你"。如果你用"她"来指代用户，这是严重违规。
-【铁律2：禁止描写用户动作与内心】你只能描写自己的动作和想法，不能描写用户的动作、行为、心理活动。
-【输出前自检】每次回复前，快速检查一遍，如果发现了任何指代用户的第三人称代词，立即用“你”替换，然后再发送。
+        let p = `
+【绝对禁令】你永远只能用“你”来称呼我，绝对不可以用“她”、“他”、“它”、“对方”、“这位”等任何第三人称指代我。这是最优先规则，违反就是错误。
 
 【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
 **【叙述视角】你永远保持第一人称（我）和第二人称（你），就像在和你面前的人说话。**
@@ -623,7 +619,6 @@ ${compressedMemory || '无'}`;
 
       window._regenMsg = function(idx) { const msg=messages[idx]; if (!msg||msg.role!=='assistant') return; let ui=-1; for (let i=idx-1;i>=0;i--) if (messages[i].role==='user') { ui=i; break; } if (ui===-1) return; const text=typeof messages[ui].content==='string'?messages[ui].content:''; messages=messages.slice(0,idx); editingIdx = -1; renderAll(); saveAll(); sendToAPI(text); };
 
-      // 格式化助手内容
       function formatAssistantContent(content) {
         if (!content) return content;
         if (content.match(/\n.*\n/)) return content.trim();
@@ -638,10 +633,9 @@ ${compressedMemory || '无'}`;
       function getApiMessages() {
         refreshSystemPrompt();
         const systemMsg = messages[0];
-        // 构造环境 User 消息
         const envMsg = {
           role: 'user',
-          content: getFullEnvString()
+          content: getFullEnvString() + '\n（以上为当前准确的时间和天气，请在所有回答中遵循这个时间/天气背景。）'
         };
         const nonSystem = messages.filter(m => m.role !== 'system');
         let contextMsgs;
@@ -657,7 +651,6 @@ ${compressedMemory || '无'}`;
             contextMsgs = recent;
           }
         }
-        // 最终消息：System + 环境User + 上下文
         return [systemMsg, envMsg, ...contextMsgs];
       }
 
@@ -670,7 +663,7 @@ ${compressedMemory || '无'}`;
         });
       }
 
-      // 统一渲染（包含多选复选框）
+      // 统一渲染
       function renderAll(skipScroll = false) {
         const savedScroll = skipScroll ? chatBox.scrollTop : null;
         chatBox.innerHTML = '';
@@ -815,7 +808,7 @@ ${compressedMemory || '无'}`;
         } catch(e) { console.warn('压缩失败', e); }
       }
 
-      // 记忆提取（间隔 5 轮）
+      // 记忆提取
       async function extractAndStoreFacts(userText, aiText) {
         if (!apiKey) return;
         extractCounter++;
@@ -879,7 +872,6 @@ ${compressedMemory || '无'}`;
             const existing = map.get(key);
             existing.mentions = (existing.mentions || 1) + (f.mentions || 1);
             existing.time = Math.max(existing.time, f.time);
-            // 保留第一个 fact 文字（可改为保留较长的）
             if (f.fact.length > existing.fact.length) existing.fact = f.fact;
           } else {
             map.set(key, { ...f });
@@ -897,7 +889,6 @@ ${compressedMemory || '无'}`;
       function forgetFacts() {
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         if (!facts.length) { alert('没有记忆可遗忘'); return; }
-        // 弹出选项
         const choice = prompt(
           '请选择遗忘方式（输入数字）：\n1. 按提及次数（少于 N 次）\n2. 按时间（超过 N 天未更新）\n3. 两者都执行（交集）',
           '3'
