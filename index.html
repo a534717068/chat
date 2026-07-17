@@ -308,7 +308,7 @@
         const season = (() => { const mo = now.getMonth()+1; if (mo>=3&&mo<=5) return '春天'; if (mo>=6&&mo<=8) return '夏天'; if (mo>=9&&mo<=11) return '秋天'; return '冬天'; })();
         const weatherDesc = weatherCache.desc || '天气信息暂缺（请以实际为准）';
         const cityInfo = weatherCache.city ? `，地点：${weatherCache.city}` : '';
-        return `【重要：当前真实时间与环境】现在是 ${year}年${month}月${day}日，${period} ${timeStr}，星期${wd}，${season}。天气：${weatherDesc}${cityInfo}。请严格以此为准，不要依据旧信息。`;
+        return `【当前真实时间与环境】现在是 ${year}年${month}月${day}日，${period} ${timeStr}，星期${wd}，${season}。天气：${weatherDesc}${cityInfo}。`;
       }
 
       function updateEnvDisplay() {
@@ -629,29 +629,49 @@ ${compressedMemory || '无'}`;
         return result.trim();
       }
 
-      // ========== 构建 API 消息（插入动态环境 User 消息） ==========
+      // ========== 核心：构建 API 消息（环境消息放在历史与最新问题之间，保证缓存） ==========
       function getApiMessages() {
         refreshSystemPrompt();
         const systemMsg = messages[0];
+        const nonSystem = messages.filter(m => m.role !== 'system');
+        
+        let history = [];
+        let latestUser = null;
+        
+        // 把最新的一条用户消息单独拿出来
+        if (nonSystem.length > 0 && nonSystem[nonSystem.length - 1].role === 'user') {
+          latestUser = nonSystem[nonSystem.length - 1];
+          history = nonSystem.slice(0, -1);
+        } else {
+          history = nonSystem;
+        }
+
+        // 截取上下文（保留最近 MAX_CONTEXT 轮）
+        let contextHistory = history;
+        if (contextHistory.length > MAX_CONTEXT) {
+          const recent = contextHistory.slice(-MAX_CONTEXT);
+          const older = contextHistory.slice(0, -MAX_CONTEXT);
+          if (older.length > 0 && compressedMemory) {
+            const summaryMsg = { role: 'system', content: `【之前的对话摘要】\n${compressedMemory}` };
+            contextHistory = [summaryMsg, ...recent];
+          } else {
+            contextHistory = recent;
+          }
+        }
+
+        // 构造环境消息
         const envMsg = {
           role: 'user',
           content: getFullEnvString() + '\n（以上为当前准确的时间和天气，请在所有回答中遵循这个时间/天气背景。）'
         };
-        const nonSystem = messages.filter(m => m.role !== 'system');
-        let contextMsgs;
-        if (nonSystem.length <= MAX_CONTEXT) {
-          contextMsgs = nonSystem;
-        } else {
-          const recent = nonSystem.slice(-MAX_CONTEXT);
-          const older = nonSystem.slice(0, -MAX_CONTEXT);
-          if (older.length > 0 && compressedMemory) {
-            const summaryMsg = { role: 'system', content: `【之前的对话摘要】\n${compressedMemory}` };
-            contextMsgs = [summaryMsg, ...recent];
-          } else {
-            contextMsgs = recent;
-          }
+
+        // 最终顺序：System → 历史 → 环境消息 → 最新用户问题
+        const result = [systemMsg, ...contextHistory];
+        result.push(envMsg);
+        if (latestUser) {
+          result.push(latestUser);
         }
-        return [systemMsg, envMsg, ...contextMsgs];
+        return result;
       }
 
       function scrollToBottom() {
