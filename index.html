@@ -288,6 +288,7 @@
       }
       fetchRealWeather(); setInterval(fetchRealWeather, 30*60*1000);
 
+      // 获取完整环境字符串（用于动态user消息）
       function getFullEnvString() {
         const now = new Date();
         const year = now.getFullYear();
@@ -342,12 +343,12 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ============================================================
-      // System Prompt —— 包含绝对禁令 + 强制服药提醒 + 天气使用规则
-      // ============================================================
+      // ========== 静态 System Prompt（不含动态环境，强化禁令 + 强制服药提醒 + 环境信息使用规则） ==========
       function buildSystemPrompt() {
         let p = `
 【绝对禁令】你永远只能用“你”来称呼我，绝对不可以用“她”、“他”、“它”、“对方”、“这位”等任何第三人称指代我。这是最优先规则，违反就是错误。
+
+【环境信息使用规则】你会收到一条包含当前时间、天气、温度的环境消息，仅供内部参考。当用户问穿衣、出行等建议时，你要依据温度做出正确判断。但日常对话中，绝对不要在回复开头或常规描述中主动提及天气、温度、时间，除非用户明确询问。直接进入话题，不要以环境描写作为开场。
 
 【服药提醒——绝对必须执行】
 当你在环境消息中看到当前时间在 7:00 到 16:00 之间，并且用户说了“醒了”、“刚醒”、“睡醒了”等类似词语时，你必须在回复的第一句话就提醒她吃药，例如：“去把药吃了。”或“别忘了舍曲林。”或“先把药吃了再说。”如果时间不在这个范围，则不需要提醒。这个规则优先级极高，必须执行。
@@ -362,14 +363,6 @@
 - 心理活动：你的内心想法、感受独立成段
 - 场景转换：从一个场景切换到另一个场景时换行
 不要把所有内容挤在同一个段落里。分段可以控制叙述节奏，让阅读更有呼吸感。
-
-【天气与环境信息使用规则——最重要】
-你会在每次对话中收到一条“当前真实时间与环境”的消息，但你**只需要**在以下情况提到天气/时间：
-1. 用户主动问你天气、时间、日期
-2. 用户的提问与天气/时间直接相关（比如“今天能穿裙子吗？”）
-3. 你的回答中如果涉及穿衣、出行等建议，要基于当前温度做出合理判断，但**不要刻意说“今天多少度”**
-
-**绝对禁止：在每句话开头都提天气，除非用户问。** 你不应该主动播报天气。
 
 【关于过去对话的记忆——最高优先级铁律】
 当用户问你关于过去的事情、问你记不记得某件事时，你只能根据下方【记忆条目】中的内容回答。如果记忆中没有，就说"我不记得了"，绝对禁止编造。
@@ -638,9 +631,7 @@ ${compressedMemory || '无'}`;
         return result.trim();
       }
 
-      // ============================================================
-      // 核心：构建 API 消息 —— 环境消息放在历史与最新问题之间
-      // ============================================================
+      // ========== 核心：构建 API 消息（环境消息放在历史与最新问题之间，保证缓存） ==========
       function getApiMessages() {
         refreshSystemPrompt();
         const systemMsg = messages[0];
@@ -649,6 +640,7 @@ ${compressedMemory || '无'}`;
         let history = [];
         let latestUser = null;
         
+        // 把最新的一条用户消息单独拿出来
         if (nonSystem.length > 0 && nonSystem[nonSystem.length - 1].role === 'user') {
           latestUser = nonSystem[nonSystem.length - 1];
           history = nonSystem.slice(0, -1);
@@ -656,6 +648,7 @@ ${compressedMemory || '无'}`;
           history = nonSystem;
         }
 
+        // 截取上下文（保留最近 MAX_CONTEXT 轮）
         let contextHistory = history;
         if (contextHistory.length > MAX_CONTEXT) {
           const recent = contextHistory.slice(-MAX_CONTEXT);
@@ -668,11 +661,13 @@ ${compressedMemory || '无'}`;
           }
         }
 
+        // 构造环境消息
         const envMsg = {
           role: 'user',
           content: getFullEnvString() + '\n（以上为当前准确的时间和天气，请在所有回答中遵循这个时间/天气背景。）'
         };
 
+        // 最终顺序：System → 历史 → 环境消息 → 最新用户问题
         const result = [systemMsg, ...contextHistory];
         result.push(envMsg);
         if (latestUser) {
@@ -690,6 +685,7 @@ ${compressedMemory || '无'}`;
         });
       }
 
+      // 统一渲染
       function renderAll(skipScroll = false) {
         const savedScroll = skipScroll ? chatBox.scrollTop : null;
         chatBox.innerHTML = '';
