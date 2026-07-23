@@ -288,7 +288,6 @@
       }
       fetchRealWeather(); setInterval(fetchRealWeather, 30*60*1000);
 
-      // 获取完整环境字符串（用于动态user消息）
       function getFullEnvString() {
         const now = new Date();
         const year = now.getFullYear();
@@ -343,7 +342,7 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ========== 静态 System Prompt（强化环境信息使用规则） ==========
+      // ========== 静态 System Prompt（强化服药停止条件） ==========
       function buildSystemPrompt() {
         let p = `
 【绝对禁令】你永远只能用“你”来称呼我，绝对不可以用“她”、“他”、“它”、“对方”、“这位”等任何第三人称指代我。这是最优先规则，违反就是错误。
@@ -354,13 +353,15 @@
 - 你也不可以在回复开头或中间用环境描写作为开场，比如“现在29度，好热”这类句子完全禁止。
 - 只在用户问穿衣建议时，你可以依据温度给建议，但不要说“现在XX度”，直接说“穿短袖就行”这种结果。
 
-【服药提醒——绝对必须执行】
-当你在环境消息中看到当前时间在 7:00 到 16:00 之间，并且用户说了“醒了”、“刚醒”、“睡醒了”等类似词语时，你必须在回复的第一句话就提醒她吃药，例如：“去把药吃了。”或“别忘了舍曲林。”或“先把药吃了再说。”如果时间不在这个范围，则不需要提醒。这个规则优先级极高，必须执行。
+【服药提醒——绝对必须执行，但有明确停止条件】
+当你在环境消息中看到当前时间在 7:00 到 16:00 之间，并且用户说了“醒了”、“刚醒”、“睡醒了”等类似词语时，你必须在回复的第一句话就提醒她吃药，例如：“去把药吃了。”或“别忘了舍曲林。”或“先把药吃了再说。”
+**但是，如果用户在本轮对话中已经明确回复过“已经吃了”、“吃过了”、“吃过药了”、“吃了”等确认语句，则立即解除该提醒义务，后续所有回复都绝对不能再问“吃药了没”或任何类似的话。她已经吃过了，别再提了。**
+如果时间不在这个范围，则不需要提醒。这个规则优先级极高，必须执行。
 
 【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
 **【叙述视角】你永远保持第一人称（我）和第二人称（你），就像在和你面前的人说话。**
 
-**【回复格式要求——分段规则】**
+【回复格式要求——分段规则】
 你的回复必须分段清晰。当出现以下情况时必须换行独立成段：
 - 对话（直接引语）：每一句对话单独一段，引号和对话内容在同一段
 - 动作描写：你的动作、姿态变化等独立成段
@@ -485,7 +486,6 @@ ${compressedMemory || '无'}`;
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom()); scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
 
-      // ========== 行内编辑功能 ==========
       let currentInlineEditIdx = -1;
 
       function cancelInlineEdit() {
@@ -635,7 +635,7 @@ ${compressedMemory || '无'}`;
         return result.trim();
       }
 
-      // ========== 核心：构建 API 消息（环境消息放在历史与最新问题之间，保证缓存） ==========
+      // ========== 核心：构建 API 消息 ==========
       function getApiMessages() {
         refreshSystemPrompt();
         const systemMsg = messages[0];
@@ -644,7 +644,6 @@ ${compressedMemory || '无'}`;
         let history = [];
         let latestUser = null;
         
-        // 把最新的一条用户消息单独拿出来
         if (nonSystem.length > 0 && nonSystem[nonSystem.length - 1].role === 'user') {
           latestUser = nonSystem[nonSystem.length - 1];
           history = nonSystem.slice(0, -1);
@@ -652,7 +651,6 @@ ${compressedMemory || '无'}`;
           history = nonSystem;
         }
 
-        // 截取上下文（保留最近 MAX_CONTEXT 轮）
         let contextHistory = history;
         if (contextHistory.length > MAX_CONTEXT) {
           const recent = contextHistory.slice(-MAX_CONTEXT);
@@ -665,13 +663,11 @@ ${compressedMemory || '无'}`;
           }
         }
 
-        // 构造环境消息（末尾加上禁止提及的提示）
         const envMsg = {
           role: 'user',
           content: getFullEnvString() + '\n（这些信息仅供内部参考，不要在你的回复中主动提及温度、天气或时间，除非用户明确问。）'
         };
 
-        // 最终顺序：System → 历史 → 环境消息 → 最新用户问题
         const result = [systemMsg, ...contextHistory];
         result.push(envMsg);
         if (latestUser) {
@@ -689,7 +685,6 @@ ${compressedMemory || '无'}`;
         });
       }
 
-      // 统一渲染
       function renderAll(skipScroll = false) {
         const savedScroll = skipScroll ? chatBox.scrollTop : null;
         chatBox.innerHTML = '';
@@ -760,7 +755,6 @@ ${compressedMemory || '无'}`;
         updateMultiSelectCount();
       }
 
-      // ========== 多选模式管理 ==========
       function enterMultiSelectMode() {
         multiSelectMode = true;
         selectedIndices.clear();
@@ -797,7 +791,6 @@ ${compressedMemory || '无'}`;
 
       function getNonSystemMessages() { return messages.filter(m => m.role !== 'system'); }
 
-      // 压缩历史
       async function compressHistoryIfNeeded() {
         const non = getNonSystemMessages();
         if (non.length <= COMPRESS_THRESHOLD) return;
@@ -834,7 +827,6 @@ ${compressedMemory || '无'}`;
         } catch(e) { console.warn('压缩失败', e); }
       }
 
-      // 记忆提取
       async function extractAndStoreFacts(userText, aiText) {
         if (!apiKey) return;
         extractCounter++;
@@ -887,7 +879,6 @@ ${compressedMemory || '无'}`;
         refreshSystemPrompt(); renderAll();
       }
 
-      // ========== 合并重复记忆 ==========
       function mergeDuplicateFacts() {
         let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         if (!facts.length) { alert('没有记忆可合并'); return; }
@@ -911,7 +902,6 @@ ${compressedMemory || '无'}`;
         alert(`合并完成！记忆从 ${facts.length} 条减少到 ${merged.length} 条。`);
       }
 
-      // ========== 遗忘机制 ==========
       function forgetFacts() {
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         if (!facts.length) { alert('没有记忆可遗忘'); return; }
@@ -1019,7 +1009,6 @@ ${compressedMemory || '无'}`;
       document.getElementById('memoryCloseBtn').addEventListener('click', function() { document.getElementById('memoryModal').classList.remove('active'); });
       document.getElementById('memoryModal').addEventListener('click', function(e) { if (e.target === this) this.classList.remove('active'); });
 
-      // 整合旧历史
       let reprocessingPaused = false, reprocessingActive = false;
       function updateProgressUI(current, total, paused = false) {
         const progressDiv = document.getElementById('progressDisplay');
@@ -1069,7 +1058,7 @@ ${compressedMemory || '无'}`;
       document.getElementById('pauseReprocessBtn').addEventListener('click', function() { document.getElementById('moreMenu').classList.remove('active'); togglePauseReprocess(); });
       document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
-      // 发送消息
+      // ========== 发送消息 ==========
       async function sendToAPI(text) {
         if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
         const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
@@ -1128,6 +1117,29 @@ ${compressedMemory || '无'}`;
             remainingCost = Math.max(0, remainingCost - cost);
             updateTokenDisplay(); saveAll();
           }
+          
+          // ========== 【核心修复】硬编码：如果用户说吃过药了，立刻写入记忆，防止重复提醒 ==========
+          const medKeywords = ['吃过药', '吃了药', '吃药了', '已经吃了', '吃过了'];
+          if (medKeywords.some(kw => text.includes(kw))) {
+              let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
+              const today = new Date().toLocaleDateString();
+              const alreadyExists = facts.some(f => f.fact && f.fact.includes('今天已吃药') && f.fact.includes(today));
+              if (!alreadyExists) {
+                  facts.push({
+                      entity: '城月',
+                      relation: '状态',
+                      object: '吃药',
+                      fact: `城月今天（${today}）已经吃过药了，不需要再提醒。`,
+                      quote: text,
+                      time: Date.now(),
+                      mentions: 1
+                  });
+                  localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts));
+                  rebuildGraph(); // 刷新图谱和系统提示词
+                  console.log('✅ 已强制写入“今天已吃药”记忆，不会再重复提醒。');
+              }
+          }
+
           if (reply) { extractAndStoreFacts(text, reply).catch(e => console.warn(e)); }
           await compressHistoryIfNeeded();
         } catch(e) { load.remove(); addMsg('assistant', `❌ ${e.message}`); }
