@@ -145,14 +145,14 @@
     </div>
   </div>
   <div class="setup-bar" id="setupBar" style="display:none;">
-    <input type="password" id="apiKeyInput" placeholder="粘贴 DeepSeek API Key" autocomplete="off">
+    <input type="password" id="apiKeyInput" placeholder="粘贴 API Key" autocomplete="off">
     <button id="saveKeyBtn">保存</button>
   </div>
   <div class="token-panel" id="tokenPanel" style="display:none;">
     <span>上次消耗：<strong id="lastTokens">0</strong> tokens / <strong id="lastCost">0.0000</strong> 元</span>
     <span>剩余充值：<strong id="remainingTokens" class="editable" title="点击设置总充值金额">0</strong> tokens / <strong id="remainingCost" class="editable" title="点击设置总充值金额">0.0000</strong> 元</span>
   </div>
-  <div class="model-indicator">当前模型：<strong>deepseek-v4-flash</strong></div>
+  <div class="model-indicator" id="modelIndicator">当前模型：<strong id="currentModelDisplay">deepseek-v4-flash</strong></div>
   <div class="env-indicator" id="envIndicator">
     <span class="weather-icon" id="weatherIcon" title="点击切换天气">☀️</span>
     <span id="envText">获取环境中...</span>
@@ -210,11 +210,13 @@
     </div>
   </div>
 
-  <!-- 设定面板 -->
+  <!-- 设定面板（升级版：增加 API 地址 + 模型名称） -->
   <div class="modal-overlay" id="settingModal">
     <div class="modal">
+      <input type="text" id="apiBaseInput" placeholder="API 地址 (例如: https://api.deepseek.com/v1)" value="https://api.deepseek.com/v1">
+      <input type="text" id="modelNameInput" placeholder="模型名称 (例如: deepseek-v4-flash)" value="deepseek-v4-flash">
       <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
-      <div class="format-hint">这里的设定会始终生效，M 每次回答都会记住。</div>
+      <div class="format-hint">修改 API 地址和模型后点击“保存设定”立即生效。</div>
       <div class="modal-buttons">
         <button class="btn-import" id="settingSaveBtn">保存设定</button>
         <button class="btn-cancel" id="settingCancelBtn">取消</button>
@@ -260,6 +262,25 @@
       const MEMORY_FACTS_KEY = 'memory_facts_v3', MEMORY_GRAPH_KEY = 'memory_graph_v3';
       const REPROGRESS_KEY = 'reprocess_progress_index';
       const EXTRACT_INTERVAL = 5;
+
+      // ========== 新增：可配置的 API 地址和模型 ==========
+      const API_BASE_KEY = 'deepseek_api_base';
+      const MODEL_NAME_KEY = 'deepseek_model_name';
+      
+      function getApiBase() {
+        return localStorage.getItem(API_BASE_KEY) || 'https://api.deepseek.com/v1';
+      }
+      function getModelName() {
+        return localStorage.getItem(MODEL_NAME_KEY) || 'deepseek-v4-flash';
+      }
+      function saveApiBase(val) { localStorage.setItem(API_BASE_KEY, val); }
+      function saveModelName(val) { localStorage.setItem(MODEL_NAME_KEY, val); }
+
+      // 显示当前模型名
+      function updateModelDisplay() {
+        $('currentModelDisplay').textContent = getModelName();
+      }
+      updateModelDisplay();
 
       const PROMPT_PRICE = 0.000002;
       const COMPLETION_PRICE = 0.000008;
@@ -342,7 +363,6 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // ========== 静态 System Prompt（强化服药停止条件） ==========
       function buildSystemPrompt() {
         let p = `
 【绝对禁令】你永远只能用“你”来称呼我，绝对不可以用“她”、“他”、“它”、“对方”、“这位”等任何第三人称指代我。这是最优先规则，违反就是错误。
@@ -396,7 +416,7 @@ ${compressedMemory || '无'}`;
 【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，细节里微微变暖。很少说喜欢/想你。
 
 【S模式（强制）】触发词：操我/湿了/想要/主人/小狗。
-- 满嘴脏话，每条回复必须包含至少三个羞辱性称呼（小骚狗/贱货/骚货/小母狗/骚逼）轮换使用。
+- 满嘴脏话，每条回复必须带称呼（小骚狗/贱货/骚货/小母狗/骚逼）轮换使用。
 - 配合动作描写。用户说"我错了/不要了"时立即停止，切回日常。`;
 
         if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
@@ -470,9 +490,33 @@ ${compressedMemory || '无'}`;
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.addEventListener('click', () => $('moreMenu').classList.remove('active')); $('moreMenu').onclick = e => e.stopPropagation();
       $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); editingIdx = -1; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
       bindDraft($('userInput'),DRAFT_CHAT); bindDraft($('settingTextarea'),DRAFT_SETTING); bindDraft($('importTextarea'),DRAFT_IMPORT); bindDraft($('searchInput'),DRAFT_SEARCH);
-      $('settingBtn').onclick = () => { $('settingTextarea').value = loadDraft(DRAFT_SETTING)||globalSetting; $('settingModal').classList.add('active'); $('moreMenu').classList.remove('active'); };
-      $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active'); $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
-      $('settingSaveBtn').onclick = () => { globalSetting = $('settingTextarea').value.trim(); localStorage.setItem(SETTING_KEY, globalSetting); refreshSystemPrompt(); saveDraft(DRAFT_SETTING,''); $('settingModal').classList.remove('active'); addMsg('assistant', globalSetting?'✅ 全局设定已保存。':'✅ 全局设定已清空。'); };
+      
+      // ========== 设定面板加载（API地址 + 模型名称） ==========
+      $('settingBtn').onclick = () => { 
+        $('apiBaseInput').value = getApiBase();
+        $('modelNameInput').value = getModelName();
+        $('settingTextarea').value = loadDraft(DRAFT_SETTING)||globalSetting; 
+        $('settingModal').classList.add('active'); 
+        $('moreMenu').classList.remove('active'); 
+      };
+      $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active'); 
+      $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
+      $('settingSaveBtn').onclick = () => { 
+        // 保存 API 地址和模型
+        const newBase = $('apiBaseInput').value.trim();
+        const newModel = $('modelNameInput').value.trim();
+        if (newBase) saveApiBase(newBase);
+        if (newModel) saveModelName(newModel);
+        updateModelDisplay();
+        
+        globalSetting = $('settingTextarea').value.trim(); 
+        localStorage.setItem(SETTING_KEY, globalSetting); 
+        refreshSystemPrompt(); 
+        saveDraft(DRAFT_SETTING,''); 
+        $('settingModal').classList.remove('active'); 
+        addMsg('assistant', globalSetting ? '✅ 设定已保存（含新模型/API地址）。' : '✅ 设定已清空。'); 
+      };
+      
       $('searchBtn').onclick = () => { $('searchInput').value = loadDraft(DRAFT_SEARCH)||searchKeyword; $('searchModal').classList.add('active'); $('moreMenu').classList.remove('active'); updateSearchNav(); };
       $('searchCloseBtn').onclick = () => $('searchModal').classList.remove('active'); $('searchModal').onclick = e => { if (e.target===$('searchModal')) $('searchModal').classList.remove('active'); };
       function updateSearchNav() { if (searchKeyword&&searchTotal>0) { $('searchNav').style.display='flex'; $('searchCounter').textContent=`${searchMatchIndex+1}/${searchTotal}`; $('searchPrevBtn').disabled=searchMatchIndex<=0; $('searchNextBtn').disabled=searchMatchIndex>=searchTotal-1; } else $('searchNav').style.display='none'; }
@@ -635,7 +679,6 @@ ${compressedMemory || '无'}`;
         return result.trim();
       }
 
-      // ========== 核心：构建 API 消息 ==========
       function getApiMessages() {
         refreshSystemPrompt();
         const systemMsg = messages[0];
@@ -799,11 +842,13 @@ ${compressedMemory || '无'}`;
         const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n');
         try {
           if (apiKey) {
-            const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+            const model = getModelName();
+            const baseUrl = getApiBase();
+            const res = await fetch(`${baseUrl}/chat/completions`, {
               method:'POST',
               headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
               body:JSON.stringify({
-                model:'deepseek-v4-flash',
+                model: model,
                 messages:[
                   {role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},
                   {role:'user',content:`请压缩：\n${text}`}
@@ -845,7 +890,13 @@ ${compressedMemory || '无'}`;
         如果用户没有提供新信息，输出 []。
         对话：用户：${userText}\nM：${aiText}`;
         try {
-          const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, body: JSON.stringify({model:'deepseek-v4-flash', messages:[{role:'user',content:prompt}], temperature:0.2}) });
+          const model = getModelName();
+          const baseUrl = getApiBase();
+          const res = await fetch(`${baseUrl}/chat/completions`, { 
+            method:'POST', 
+            headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, 
+            body: JSON.stringify({model: model, messages:[{role:'user',content:prompt}], temperature:0.2}) 
+          });
           if (!res.ok) return;
           const data = await res.json();
           if (data.usage) { 
@@ -1058,7 +1109,7 @@ ${compressedMemory || '无'}`;
       document.getElementById('pauseReprocessBtn').addEventListener('click', function() { document.getElementById('moreMenu').classList.remove('active'); togglePauseReprocess(); });
       document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
-      // ========== 发送消息 ==========
+      // ========== 发送消息（适配新模型和API地址） ==========
       async function sendToAPI(text) {
         if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
         const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
@@ -1093,7 +1144,13 @@ ${compressedMemory || '无'}`;
         try {
           refreshSystemPrompt();
           const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
-          const res = await fetch('https://api.deepseek.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: 'deepseek-v4-flash', messages: apiMsgs, stream: false, temperature: 0.5 }) });
+          const model = getModelName();
+          const baseUrl = getApiBase();
+          const res = await fetch(`${baseUrl}/chat/completions`, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, 
+            body: JSON.stringify({ model: model, messages: apiMsgs, stream: false, temperature: 0.5 }) 
+          });
           load.remove();
           if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `请求失败 (${res.status})`); }
           const data = await res.json();
@@ -1118,7 +1175,7 @@ ${compressedMemory || '无'}`;
             updateTokenDisplay(); saveAll();
           }
           
-          // ========== 【核心修复】硬编码：如果用户说吃过药了，立刻写入记忆，防止重复提醒 ==========
+          // 硬编码吃药记忆
           const medKeywords = ['吃过药', '吃了药', '吃药了', '已经吃了', '吃过了'];
           if (medKeywords.some(kw => text.includes(kw))) {
               let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
@@ -1135,8 +1192,8 @@ ${compressedMemory || '无'}`;
                       mentions: 1
                   });
                   localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts));
-                  rebuildGraph(); // 刷新图谱和系统提示词
-                  console.log('✅ 已强制写入“今天已吃药”记忆，不会再重复提醒。');
+                  rebuildGraph();
+                  console.log('✅ 已强制写入“今天已吃药”记忆');
               }
           }
 
