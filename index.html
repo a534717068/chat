@@ -76,7 +76,7 @@
     .modal-overlay.active { display: flex; }
     .modal { background: var(--modal-bg); border-radius: 14px; padding: 16px; width: 100%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; gap: 10px; }
     .modal textarea { width: 100%; flex: 1; min-height: 120px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; font-family: inherit; resize: vertical; background: var(--surface); color: var(--text-primary); }
-    .modal input[type="text"] { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; background: var(--surface); color: var(--text-primary); }
+    .modal input[type="text"], .modal input[type="password"] { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; background: var(--surface); color: var(--text-primary); }
     .modal-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
     .modal-buttons button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; color: white; }
     .btn-import { background: #0f3460; } .btn-file { background: #533483; } .btn-cancel { background: #888; }
@@ -144,8 +144,9 @@
       <button id="clearMemoryBtn" style="color:#e94560;">🧹 清空记忆库</button>
     </div>
   </div>
+  <!-- 顶部快捷 Key 输入（默认隐藏，只在没有 Key 时显示） -->
   <div class="setup-bar" id="setupBar" style="display:none;">
-    <input type="password" id="apiKeyInput" placeholder="粘贴 API Key" autocomplete="off">
+    <input type="password" id="apiKeyInput" placeholder="粘贴 API Key (sk-...)" autocomplete="off">
     <button id="saveKeyBtn">保存</button>
   </div>
   <div class="token-panel" id="tokenPanel" style="display:none;">
@@ -210,13 +211,14 @@
     </div>
   </div>
 
-  <!-- 设定面板（升级版：增加 API 地址 + 模型名称） -->
+  <!-- ========== 设定面板（包含 API Key + 地址 + 模型 + 设定） ========== -->
   <div class="modal-overlay" id="settingModal">
     <div class="modal">
+      <input type="text" id="apiKeyInputSetting" placeholder="API Key (sk-...)" value="">
       <input type="text" id="apiBaseInput" placeholder="API 地址 (例如: https://api.deepseek.com/v1)" value="https://api.deepseek.com/v1">
       <input type="text" id="modelNameInput" placeholder="模型名称 (例如: deepseek-v4-flash)" value="deepseek-v4-flash">
       <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
-      <div class="format-hint">修改 API 地址和模型后点击“保存设定”立即生效。</div>
+      <div class="format-hint">修改后点击“保存设定”立即生效。</div>
       <div class="modal-buttons">
         <button class="btn-import" id="settingSaveBtn">保存设定</button>
         <button class="btn-cancel" id="settingCancelBtn">取消</button>
@@ -263,7 +265,7 @@
       const REPROGRESS_KEY = 'reprocess_progress_index';
       const EXTRACT_INTERVAL = 5;
 
-      // ========== 新增：可配置的 API 地址和模型 ==========
+      // 可配置的 API 地址和模型
       const API_BASE_KEY = 'deepseek_api_base';
       const MODEL_NAME_KEY = 'deepseek_model_name';
       
@@ -276,7 +278,6 @@
       function saveApiBase(val) { localStorage.setItem(API_BASE_KEY, val); }
       function saveModelName(val) { localStorage.setItem(MODEL_NAME_KEY, val); }
 
-      // 显示当前模型名
       function updateModelDisplay() {
         $('currentModelDisplay').textContent = getModelName();
       }
@@ -491,8 +492,9 @@ ${compressedMemory || '无'}`;
       $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); editingIdx = -1; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
       bindDraft($('userInput'),DRAFT_CHAT); bindDraft($('settingTextarea'),DRAFT_SETTING); bindDraft($('importTextarea'),DRAFT_IMPORT); bindDraft($('searchInput'),DRAFT_SEARCH);
       
-      // ========== 设定面板加载（API地址 + 模型名称） ==========
+      // ========== 设定面板：加载所有配置（包括 Key） ==========
       $('settingBtn').onclick = () => { 
+        $('apiKeyInputSetting').value = localStorage.getItem(SK) || '';
         $('apiBaseInput').value = getApiBase();
         $('modelNameInput').value = getModelName();
         $('settingTextarea').value = loadDraft(DRAFT_SETTING)||globalSetting; 
@@ -501,20 +503,40 @@ ${compressedMemory || '无'}`;
       };
       $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active'); 
       $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
+      
       $('settingSaveBtn').onclick = () => { 
-        // 保存 API 地址和模型
+        // 1. 保存 API Key
+        const newKey = $('apiKeyInputSetting').value.trim();
+        if (newKey) { 
+          localStorage.setItem(SK, newKey); 
+          apiKey = newKey; 
+          // 如果顶部快捷栏存在，也同步一下
+          if ($('apiKeyInput')) $('apiKeyInput').value = newKey;
+          // 隐藏顶部快捷栏（因为已经有Key了）
+          $('setupBar').style.display = 'none';
+          $('tokenPanel').style.display = 'flex';
+        } else {
+          // 如果用户清空了 Key，也要同步清除
+          localStorage.removeItem(SK);
+          apiKey = '';
+          $('setupBar').style.display = 'flex';
+          $('tokenPanel').style.display = 'none';
+        }
+        
+        // 2. 保存 API 地址和模型
         const newBase = $('apiBaseInput').value.trim();
         const newModel = $('modelNameInput').value.trim();
         if (newBase) saveApiBase(newBase);
         if (newModel) saveModelName(newModel);
         updateModelDisplay();
         
+        // 3. 保存全局设定
         globalSetting = $('settingTextarea').value.trim(); 
         localStorage.setItem(SETTING_KEY, globalSetting); 
         refreshSystemPrompt(); 
         saveDraft(DRAFT_SETTING,''); 
         $('settingModal').classList.remove('active'); 
-        addMsg('assistant', globalSetting ? '✅ 设定已保存（含新模型/API地址）。' : '✅ 设定已清空。'); 
+        addMsg('assistant', '✅ 所有设定已保存（含 API Key、地址、模型）。'); 
       };
       
       $('searchBtn').onclick = () => { $('searchInput').value = loadDraft(DRAFT_SEARCH)||searchKeyword; $('searchModal').classList.add('active'); $('moreMenu').classList.remove('active'); updateSearchNav(); };
@@ -524,8 +546,27 @@ ${compressedMemory || '无'}`;
       $('searchFindBtn').onclick = () => { searchKeyword=$('searchInput').value.trim(); $('searchModal').classList.remove('active'); searchMatchIndex=0; renderAll(); const marks=chatBox.querySelectorAll('mark'); searchTotal=marks.length; if (marks.length) jumpToMatch(0); else searchTotal=0; updateSearchNav(); };
       $('searchPrevBtn').onclick = () => { if (searchMatchIndex>0) jumpToMatch(searchMatchIndex-1); }; $('searchNextBtn').onclick = () => { if (searchMatchIndex<searchTotal-1) jumpToMatch(searchMatchIndex+1); };
       $('searchClearBtn').onclick = () => { searchKeyword=''; searchMatchIndex=-1; searchTotal=0; saveDraft(DRAFT_SEARCH,''); $('searchInput').value=''; $('searchModal').classList.remove('active'); renderAll(); };
-      if (apiKey) { $('setupBar').style.display='none'; $('tokenPanel').style.display='flex'; }
-      $('saveKeyBtn').onclick = () => { const k=$('apiKeyInput').value.trim(); if (!k) return; localStorage.setItem(SK,k); apiKey=k; $('setupBar').style.display='none'; $('tokenPanel').style.display='flex'; addMsg('assistant','密钥已保存 ✅'); };
+      
+      // 顶部快捷 Key 保存（与设定面板联动）
+      if (apiKey) { 
+        $('setupBar').style.display = 'none'; 
+        $('tokenPanel').style.display = 'flex'; 
+      } else {
+        $('setupBar').style.display = 'flex';
+        $('tokenPanel').style.display = 'none';
+      }
+      $('saveKeyBtn').onclick = () => { 
+        const k = $('apiKeyInput').value.trim(); 
+        if (!k) return; 
+        localStorage.setItem(SK,k); 
+        apiKey=k; 
+        $('setupBar').style.display='none'; 
+        $('tokenPanel').style.display='flex'; 
+        // 同步到设定面板的输入框
+        if ($('apiKeyInputSetting')) $('apiKeyInputSetting').value = k;
+        addMsg('assistant','密钥已保存 ✅'); 
+      };
+      
       const chatBox = $('chatBox'), scrollBtn = $('scrollToBottomBtn');
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
       chatBox.onscroll = () => scrollBtn.classList.toggle('visible', !nearBottom()); scrollBtn.onclick = () => chatBox.scrollTo({top:chatBox.scrollHeight,behavior:'smooth'});
@@ -1109,7 +1150,7 @@ ${compressedMemory || '无'}`;
       document.getElementById('pauseReprocessBtn').addEventListener('click', function() { document.getElementById('moreMenu').classList.remove('active'); togglePauseReprocess(); });
       document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
-      // ========== 发送消息（适配新模型和API地址） ==========
+      // ========== 发送消息 ==========
       async function sendToAPI(text) {
         if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
         const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
