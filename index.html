@@ -144,7 +144,6 @@
       <button id="clearMemoryBtn" style="color:#e94560;">🧹 清空记忆库</button>
     </div>
   </div>
-  <!-- 顶部快捷 Key 输入（默认隐藏，只在没有 Key 时显示） -->
   <div class="setup-bar" id="setupBar" style="display:none;">
     <input type="password" id="apiKeyInput" placeholder="粘贴 API Key (sk-...)" autocomplete="off">
     <button id="saveKeyBtn">保存</button>
@@ -211,7 +210,7 @@
     </div>
   </div>
 
-  <!-- ========== 设定面板（包含 API Key + 地址 + 模型 + 设定） ========== -->
+  <!-- 设定面板 -->
   <div class="modal-overlay" id="settingModal">
     <div class="modal">
       <input type="text" id="apiKeyInputSetting" placeholder="API Key (sk-...)" value="">
@@ -265,7 +264,6 @@
       const REPROGRESS_KEY = 'reprocess_progress_index';
       const EXTRACT_INTERVAL = 5;
 
-      // 可配置的 API 地址和模型
       const API_BASE_KEY = 'deepseek_api_base';
       const MODEL_NAME_KEY = 'deepseek_model_name';
       
@@ -492,7 +490,6 @@ ${compressedMemory || '无'}`;
       $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); editingIdx = -1; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
       bindDraft($('userInput'),DRAFT_CHAT); bindDraft($('settingTextarea'),DRAFT_SETTING); bindDraft($('importTextarea'),DRAFT_IMPORT); bindDraft($('searchInput'),DRAFT_SEARCH);
       
-      // ========== 设定面板：加载所有配置（包括 Key） ==========
       $('settingBtn').onclick = () => { 
         $('apiKeyInputSetting').value = localStorage.getItem(SK) || '';
         $('apiBaseInput').value = getApiBase();
@@ -505,32 +502,26 @@ ${compressedMemory || '无'}`;
       $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
       
       $('settingSaveBtn').onclick = () => { 
-        // 1. 保存 API Key
         const newKey = $('apiKeyInputSetting').value.trim();
         if (newKey) { 
           localStorage.setItem(SK, newKey); 
           apiKey = newKey; 
-          // 如果顶部快捷栏存在，也同步一下
           if ($('apiKeyInput')) $('apiKeyInput').value = newKey;
-          // 隐藏顶部快捷栏（因为已经有Key了）
           $('setupBar').style.display = 'none';
           $('tokenPanel').style.display = 'flex';
         } else {
-          // 如果用户清空了 Key，也要同步清除
           localStorage.removeItem(SK);
           apiKey = '';
           $('setupBar').style.display = 'flex';
           $('tokenPanel').style.display = 'none';
         }
         
-        // 2. 保存 API 地址和模型
         const newBase = $('apiBaseInput').value.trim();
         const newModel = $('modelNameInput').value.trim();
         if (newBase) saveApiBase(newBase);
         if (newModel) saveModelName(newModel);
         updateModelDisplay();
         
-        // 3. 保存全局设定
         globalSetting = $('settingTextarea').value.trim(); 
         localStorage.setItem(SETTING_KEY, globalSetting); 
         refreshSystemPrompt(); 
@@ -547,7 +538,6 @@ ${compressedMemory || '无'}`;
       $('searchPrevBtn').onclick = () => { if (searchMatchIndex>0) jumpToMatch(searchMatchIndex-1); }; $('searchNextBtn').onclick = () => { if (searchMatchIndex<searchTotal-1) jumpToMatch(searchMatchIndex+1); };
       $('searchClearBtn').onclick = () => { searchKeyword=''; searchMatchIndex=-1; searchTotal=0; saveDraft(DRAFT_SEARCH,''); $('searchInput').value=''; $('searchModal').classList.remove('active'); renderAll(); };
       
-      // 顶部快捷 Key 保存（与设定面板联动）
       if (apiKey) { 
         $('setupBar').style.display = 'none'; 
         $('tokenPanel').style.display = 'flex'; 
@@ -562,7 +552,6 @@ ${compressedMemory || '无'}`;
         apiKey=k; 
         $('setupBar').style.display='none'; 
         $('tokenPanel').style.display='flex'; 
-        // 同步到设定面板的输入框
         if ($('apiKeyInputSetting')) $('apiKeyInputSetting').value = k;
         addMsg('assistant','密钥已保存 ✅'); 
       };
@@ -1150,7 +1139,7 @@ ${compressedMemory || '无'}`;
       document.getElementById('pauseReprocessBtn').addEventListener('click', function() { document.getElementById('moreMenu').classList.remove('active'); togglePauseReprocess(); });
       document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
-      // ========== 发送消息 ==========
+      // ========== 发送消息（增强错误显示） ==========
       async function sendToAPI(text) {
         if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
         const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
@@ -1193,7 +1182,23 @@ ${compressedMemory || '无'}`;
             body: JSON.stringify({ model: model, messages: apiMsgs, stream: false, temperature: 0.5 }) 
           });
           load.remove();
-          if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `请求失败 (${res.status})`); }
+          
+          // ====== 这里是关键：如果请求不成功，把具体的 HTTP 状态码和服务器返回的文本显示在聊天里 ======
+          if (!res.ok) {
+            let errorDetail = `请求失败 (HTTP ${res.status})`;
+            try {
+              const errJson = await res.json();
+              if (errJson.error?.message) errorDetail = errJson.error.message;
+              else if (errJson.message) errorDetail = errJson.message;
+            } catch(e) {
+              try {
+                const textBody = await res.text();
+                if (textBody) errorDetail = textBody.substring(0, 200);
+              } catch(e2) {}
+            }
+            throw new Error(`❌ ${errorDetail} (状态码: ${res.status})`);
+          }
+          
           const data = await res.json();
           const reply = data.choices[0].message.content;
           const aiMsg = { role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id };
@@ -1240,7 +1245,11 @@ ${compressedMemory || '无'}`;
 
           if (reply) { extractAndStoreFacts(text, reply).catch(e => console.warn(e)); }
           await compressHistoryIfNeeded();
-        } catch(e) { load.remove(); addMsg('assistant', `❌ ${e.message}`); }
+        } catch(e) { 
+          load.remove(); 
+          // 把错误详情直接显示给用户
+          addMsg('assistant', `❌ ${e.message}`); 
+        }
       }
 
       $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
