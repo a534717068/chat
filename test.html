@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>代理测试</title>
+</head>
+<body>
+    <h2>点击测试 Netlify 代理 + OpenCode</h2>
+    <button onclick="test()">发送测试请求</button>
+    <pre id="log">等待测试...</pre>
+    <script>
+        async function test() {
+            const log = document.getElementById('log');
+            const url = 'https://clinquant-crisp-02a202.netlify.app/.netlify/functions/opencode-proxy';
+            const key = 'sk-1Slc2xOpFhIDvu383bx7vFynEyqxfWuYuKWWfFDnWB05rTm4LcDZMxiZ6gyFAs1o'; // 替换成你的 OpenCode Key
+            const body = {
+                model: 'opencode-go/deepseek-v4-flash',
+                messages: [{ role: 'user', content: '你好' }]
+            };
+            log.textContent = '发送中...';
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${key}`
+                    },
+                    body: JSON.stringify(body)
+                });
+                const text = await res.text();
+                log.textContent = `状态码: ${res.status}\n响应: ${text}`;
+            } catch (e) {
+                log.textContent = `❌ 错误: ${e.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
