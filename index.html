@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>M · 智能助手</title>
   <style>
-    /* 样式完全保留，省略掉以节省篇幅，但为了完整性，我会包含全部样式 */
     :root {
       --bg: #f5f5f5; --surface: #ffffff; --text-primary: #1a1a2e; --text-secondary: #999;
       --border: #e0e0e0; --bubble-user-bg: #1a1a2e; --bubble-user-text: #ffffff;
@@ -214,7 +213,7 @@
       <input type="text" id="apiBaseInput" placeholder="API 地址 (完整代理地址)" value="https://clinquant-crisp-02a202.netlify.app/.netlify/functions/opencode-proxy">
       <input type="text" id="modelNameInput" placeholder="模型名称" value="opencode-go/deepseek-v4-flash">
       <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
-      <div class="format-hint">API 地址已经预填为你的 Netlify 代理，请勿修改（除非更换代理）。</div>
+      <div class="format-hint">API 地址已预填，请勿修改，除非你更换了代理域名。</div>
       <div class="modal-buttons">
         <button class="btn-import" id="settingSaveBtn">保存设定</button>
         <button class="btn-cancel" id="settingCancelBtn">取消</button>
@@ -261,12 +260,10 @@
       const REPROGRESS_KEY = 'reprocess_progress_index';
       const EXTRACT_INTERVAL = 5;
 
-      // 使用自定义的 API 基础地址（已预填为你的 Netlify 代理）
       const API_BASE_KEY = 'deepseek_api_base';
       const MODEL_NAME_KEY = 'deepseek_model_name';
       
       function getApiBase() {
-        // 默认直接使用你的 Netlify 代理地址，用户可在设定中修改
         return localStorage.getItem(API_BASE_KEY) || 'https://clinquant-crisp-02a202.netlify.app/.netlify/functions/opencode-proxy';
       }
       function getModelName() {
@@ -872,7 +869,7 @@ ${compressedMemory || '无'}`;
         try {
           if (apiKey) {
             const model = getModelName();
-            const baseUrl = getApiBase(); // 这里直接使用代理地址，不再拼接
+            const baseUrl = getApiBase();
             const res = await fetch(baseUrl, {
               method:'POST',
               headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
@@ -1138,7 +1135,7 @@ ${compressedMemory || '无'}`;
       document.getElementById('pauseReprocessBtn').addEventListener('click', function() { document.getElementById('moreMenu').classList.remove('active'); togglePauseReprocess(); });
       document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
-      // ========== 核心：发送消息（直接使用代理地址，不再拼接） ==========
+      // ========== 核心发送函数（带调试日志） ==========
       async function sendToAPI(text) {
         if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
         const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
@@ -1174,7 +1171,12 @@ ${compressedMemory || '无'}`;
           refreshSystemPrompt();
           const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
           const model = getModelName();
-          const baseUrl = getApiBase(); // 直接使用完整的代理地址，不再拼接任何东西
+          const baseUrl = getApiBase(); // 完整的代理地址
+          
+          // ====== 调试输出：在控制台打印实际请求的 URL ======
+          console.log('🚀 实际请求地址:', baseUrl);
+          console.log('📦 请求体:', { model, messages: apiMsgs });
+
           const res = await fetch(baseUrl, { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, 
@@ -1194,7 +1196,7 @@ ${compressedMemory || '无'}`;
                 if (textBody) errorDetail = textBody.substring(0, 200);
               } catch(e2) {}
             }
-            throw new Error(`❌ ${errorDetail} (状态码: ${res.status})`);
+            throw new Error(`❌ 请求地址: ${baseUrl} 失败，错误: ${errorDetail} (状态码: ${res.status})`);
           }
           
           const data = await res.json();
@@ -1244,6 +1246,7 @@ ${compressedMemory || '无'}`;
           await compressHistoryIfNeeded();
         } catch(e) { 
           load.remove(); 
+          // 显示包含请求地址的错误信息
           addMsg('assistant', `❌ ${e.message}`); 
         }
       }
