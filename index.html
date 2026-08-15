@@ -119,6 +119,18 @@
     .user .inline-edit-input { background: var(--bubble-user-bg); color: var(--bubble-user-text); border-color: #4a90d9; }
     .inline-edit-hint { font-size: 0.65rem; color: var(--text-secondary); margin-top: 2px; text-align: right; }
   </style>
+
+<style id="cleanup-ui">
+/* UI cleanup: these legacy API/account status indicators are no longer needed
+   because the API key lives in the Cloudflare Worker Secret. */
+.api-status, .apiStatus, .api-key-status, .apikey-status,
+#apiKeyStatus, #apiStatus,
+.remaining-balance, .remainingBalance,
+.current-model, .currentModel {
+  display: none !important;
+}
+</style>
+
 </head>
 <body>
   <div class="header">
@@ -147,7 +159,7 @@
     <span>上次消耗：<strong id="lastTokens">0</strong> tokens / <strong id="lastCost">0.0000</strong> 元</span>
     <span>剩余充值：<strong id="remainingTokens" class="editable" title="点击设置总充值金额">0</strong> tokens / <strong id="remainingCost" class="editable" title="点击设置总充值金额">0.0000</strong> 元</span>
   </div>
-  <div class="model-indicator" id="modelIndicator">当前模型：<strong id="currentModelDisplay">opencode-go/deepseek-v4-flash</strong></div>
+  <div class="model-indicator" id="modelIndicator">当前模型：<strong id="currentModelDisplay">deepseek-v4-flash</strong></div>
   <div class="env-indicator" id="envIndicator">
     <span class="weather-icon" id="weatherIcon" title="点击切换天气">☀️</span>
     <span id="envText">获取环境中...</span>
@@ -163,7 +175,7 @@
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">☁️</div>
+  <div class="tip">☁️ API Key 保存在 Cloudflare Worker · 点击剩余充值金额可设置本地统计的总充值额</div>
   <div class="multi-select-bar" id="multiSelectBar">
     <span>已选择 <strong id="multiSelectCount">0</strong> 条消息</span>
     <div>
@@ -293,6 +305,25 @@
 
       let extractCounter = parseInt(localStorage.getItem('extract_counter') || '0');
 
+      function migrateMemorySchema() {
+        try {
+          const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
+          if (!Array.isArray(facts) || !facts.length) return;
+          let changed = false;
+          const validTypes = new Set(['preference','relationship','identity','plan','constraint','event','habit','other']);
+          for (const f of facts) {
+            if (!validTypes.has(f.type)) { f.type = 'other'; changed = true; }
+            if (!Number.isFinite(Number(f.importance))) { f.importance = 3; changed = true; }
+            if (!Number.isFinite(Number(f.confidence))) { f.confidence = 0.8; changed = true; }
+            if (!Number.isFinite(Number(f.mentions)) || Number(f.mentions) < 1) { f.mentions = 1; changed = true; }
+            if (!Number.isFinite(Number(f.lastSeen))) { f.lastSeen = Number(f.time) || Date.now(); changed = true; }
+          }
+          if (changed) localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts));
+        } catch(e) { console.warn('记忆库迁移失败', e); }
+      }
+      migrateMemorySchema();
+
+
       let weatherCache = { desc: '获取中...', emoji: '🌤️', city: '' };
       async function fetchRealWeather() {
         try {
@@ -398,20 +429,48 @@
 ${compressedMemory || '无'}`;
 
         try {
-          const graph = JSON.parse(localStorage.getItem(MEMORY_GRAPH_KEY) || '{}');
+          const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
+          const now = Date.now();
+          const ranked = facts
+            .filter(f => f && f.fact)
+            .map(f => {
+              const importance = Math.max(1, Math.min(5, Number(f.importance) || 3));
+              const mentions = Math.max(1, Number(f.mentions) || 1);
+              const ageDays = Math.max(0, (now - (Number(f.time) || now)) / 86400000);
+              const recency = Math.max(0, 2 - ageDays / 60);
+              const score = importance * 2 + Math.min(mentions, 5) + recency;
+              return { ...f, score };
+            })
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 80);
+
           let memoryText = '';
-          for (const [entity, relations] of Object.entries(graph)) {
-            if (relations.length === 0) continue;
-            memoryText += `\n关于"${entity}"的记忆：\n`;
-            relations.slice(0, 2).forEach(r => memoryText += `- ${r.fact}\n`);
+          const typeNames = {
+            preference: '偏好',
+            relationship: '关系',
+            identity: '长期信息',
+            plan: '计划',
+            constraint: '约束',
+            event: '重要经历',
+            habit: '习惯',
+            other: '其他'
+          };
+
+          for (const f of ranked) {
+            const type = typeNames[f.type] || '其他';
+            const entity = f.entity || '用户';
+            memoryText += `- [${type}] ${f.fact}`;
+            if (f.importance >= 5) memoryText += '（重要）';
+            memoryText += '\n';
           }
+
           if (memoryText) {
-            p += `\n【记忆条目】\n${memoryText}`;
+            p += `\n【长期记忆条目】\n以下内容是经过筛选的长期记忆。只能把它们当作已知事实，不要根据它们自行推测没有写明的内容：\n${memoryText}`;
           } else {
-            p += `\n【记忆条目】\n当前没有存储任何记忆。`;
+            p += `\n【长期记忆条目】\n当前没有存储任何记忆。`;
           }
         } catch(e) {
-          p += `\n【记忆条目】\n当前没有存储任何记忆。`;
+          p += `\n【长期记忆条目】\n当前没有存储任何记忆。`;
         }
 
         p += `
@@ -873,80 +932,224 @@ ${compressedMemory || '无'}`;
         } catch(e) { console.warn('压缩失败', e); }
       }
 
-      async function extractAndStoreFacts(userText, aiText) {
-        extractCounter++;
-        localStorage.setItem('extract_counter', extractCounter.toString());
-        if (extractCounter % EXTRACT_INTERVAL !== 0) return;
-        const lastExtract = localStorage.getItem('last_extract_time_v3');
-        if (lastExtract && Date.now() - parseInt(lastExtract) < 5000) await new Promise(r => setTimeout(r, 300));
-        localStorage.setItem('last_extract_time_v3', Date.now().toString());
-        const prompt = `从以下对话中提取客观事实。**重要：quote 字段必须严格来自用户的原话，不能自己编造，也不能来自 AI 的回复。**
-        输出 JSON 数组，每个对象包含：
-        "entity": "实体名（人名/地名/事物）",
-        "relation": "关系（如：去了、喜欢、买了）",
-        "object": "对象（如：咖啡馆、电影）",
-        "fact": "完整事实句子（第三人称）",
-        "quote": "用户原话（必须从用户输入中摘录）"
-        如果用户没有提供新信息，输出 []。
-        对话：用户：${userText}\nM：${aiText}`;
+      async function extractAndStoreFacts(userText, aiText, force = false) {
+        // 普通聊天：每 5 轮提取一次；历史整合：force=true 时每一对都提取。
+        if (!force) {
+          extractCounter++;
+          localStorage.setItem('extract_counter', extractCounter.toString());
+          if (extractCounter % EXTRACT_INTERVAL !== 0) return;
+        }
+
+        const prompt = `你是一个“长期记忆筛选器”。请从下面这一轮用户与助手的对话中，只提取真正值得长期保存的信息。
+
+【什么值得记住】
+1. 用户稳定的偏好、习惯、称呼、表达方式、长期兴趣。
+2. 用户明确说过的身份/背景/长期情况。
+3. 重要的人际关系及稳定关系事实。
+4. 长期计划、持续进行的项目、明确的长期目标。
+5. 会影响以后回答方式的固定约束或要求。
+6. 对未来再次提及时仍然有价值的重要经历。
+
+【不要记住】
+1. 一次性的闲聊、当天吃什么、临时心情、普通寒暄。
+2. 仅在这一轮出现、没有长期价值的动作或事件。
+3. 助手自己说出的内容；quote 必须来自用户原话。
+4. 猜测、推理、心理分析、可能性、模型自己补全的信息。
+5. 与已有事实只是措辞不同、但本质相同的重复信息。
+6. 任何没有明确证据的事实。
+
+【重要】
+- 宁可少记，也不要乱记。
+- 一轮最多输出 5 条。
+- importance 只能是 1-5：5=非常重要且长期稳定，4=明显有长期价值，3=有一定长期价值，1-2=通常不应保存。
+- 只输出 importance >= 3 的条目。
+- confidence 只能是 0-1，表示用户原话对该事实的支持程度。
+- type 必须从 preference / relationship / identity / plan / constraint / event / habit / other 中选择。
+- fact 必须用第三人称、简洁、客观的完整句子。
+- quote 必须逐字摘录用户原话中的一小段，不能改写。
+- 如果没有值得长期保存的信息，输出 []。
+- 只输出 JSON 数组，不要 Markdown，不要解释。
+
+格式：
+[
+  {
+    "entity": "实体名",
+    "relation": "关系",
+    "object": "对象",
+    "type": "preference",
+    "importance": 4,
+    "confidence": 0.95,
+    "fact": "完整客观事实句子",
+    "quote": "用户原话中的原句或短语"
+  }
+]
+
+对话：
+用户：${userText}
+M：${aiText}`;
+
         try {
-          const model = getModelName();
           const baseUrl = getApiBase();
-          const res = await fetch(baseUrl, { 
-            method:'POST', 
-            headers:{'Content-Type':'application/json'}, 
-            body: JSON.stringify({model: model, messages:[{role:'user',content:prompt}], stream:false, temperature:0.2}) 
+          const res = await fetch(baseUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: getModelName(),
+              messages: [{ role: 'user', content: prompt }],
+              stream: false,
+              temperature: 0.1
+            })
           });
-          if (!res.ok) return;
-          const data = await res.json();
-          if (data.usage) { 
-            remainingTokens = Math.max(0, remainingTokens - data.usage.total_tokens);
-            const promptTokens = data.usage.prompt_tokens;
-            const completionTokens = data.usage.completion_tokens;
-            const cachedTokens = data.usage.prompt_tokens_details?.cached_tokens || 0;
-            const promptCost = (promptTokens - cachedTokens) * PROMPT_PRICE + cachedTokens * CACHED_PRICE;
-            const completionCost = completionTokens * COMPLETION_PRICE;
-            const cost = promptCost + completionCost;
-            remainingCost = Math.max(0, remainingCost - cost);
-            updateTokenDisplay();
-            saveAll();
+
+          if (!res.ok) {
+            console.warn('记忆提取请求失败:', res.status);
+            return;
           }
-          const raw = data.choices[0].message.content; const match = raw.match(/\[[\s\S]*\]/); if (!match) return;
-          const facts = JSON.parse(match[0]); if (!facts.length) return;
+
+          const data = await res.json();
+          const raw = data?.choices?.[0]?.message?.content || '';
+          const match = raw.match(/\[[\s\S]*\]/);
+          if (!match) return;
+
+          let extracted;
+          try { extracted = JSON.parse(match[0]); } catch(e) { return; }
+          if (!Array.isArray(extracted) || !extracted.length) return;
+
           let allFacts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
-          const newFacts = facts.filter(f => !allFacts.some(a => a.quote === f.quote));
-          if (!newFacts.length) return;
-          allFacts = [...allFacts, ...newFacts.map(f => ({...f, time: Date.now(), mentions: 1}))];
+          const now = Date.now();
+
+          const normalize = v => String(v || '')
+            .trim()
+            .toLowerCase()
+            .replace(/[，。！？、；：""''（）()【】\[\]\s]/g, '');
+
+          const valid = extracted
+            .filter(f =>
+              f &&
+              f.fact &&
+              f.quote &&
+              String(f.quote).trim() &&
+              Number(f.importance || 0) >= 3 &&
+              Number(f.confidence ?? 0) >= 0.7
+            )
+            .slice(0, 5)
+            .map(f => ({
+              entity: String(f.entity || '用户').trim(),
+              relation: String(f.relation || '').trim(),
+              object: String(f.object || '').trim(),
+              type: ['preference','relationship','identity','plan','constraint','event','habit','other'].includes(f.type) ? f.type : 'other',
+              importance: Math.max(3, Math.min(5, Number(f.importance) || 3)),
+              confidence: Math.max(0, Math.min(1, Number(f.confidence) || 0.7)),
+              fact: String(f.fact).trim(),
+              quote: String(f.quote).trim(),
+              time: now,
+              lastSeen: now,
+              mentions: 1
+            }));
+
+          for (const f of valid) {
+            // 先按原话去重；同一用户原话重复出现时只更新引用时间。
+            let existing = allFacts.find(a => normalize(a.quote) === normalize(f.quote));
+            // 再按“实体+关系+对象+类型”合并，避免同一事实因为换了一句说法而不断膨胀。
+            if (!existing) {
+              existing = allFacts.find(a =>
+                normalize(a.entity) === normalize(f.entity) &&
+                normalize(a.relation) === normalize(f.relation) &&
+                normalize(a.object) === normalize(f.object) &&
+                (a.type || 'other') === f.type
+              );
+            }
+
+            if (existing) {
+              existing.mentions = (Number(existing.mentions) || 1) + 1;
+              existing.lastSeen = now;
+              existing.time = Math.max(Number(existing.time) || 0, now);
+              existing.importance = Math.max(Number(existing.importance) || 3, f.importance);
+              existing.confidence = Math.max(Number(existing.confidence) || 0.7, f.confidence);
+              if (f.fact.length > String(existing.fact || '').length) existing.fact = f.fact;
+              if (f.quote && f.quote !== '手动添加') existing.quote = f.quote;
+              if (!existing.type) existing.type = f.type;
+            } else {
+              allFacts.push(f);
+            }
+          }
+
+          // 安全上限：保留最有价值的 300 条，避免长期聊天后 prompt 无限膨胀。
+          allFacts.sort((a, b) => {
+            const score = f => (Number(f.importance) || 3) * 2 +
+              Math.min(Number(f.mentions) || 1, 5) +
+              Math.max(0, 2 - (Date.now() - (Number(f.lastSeen || f.time) || Date.now())) / 86400000 / 60);
+            return score(b) - score(a);
+          });
+          if (allFacts.length > 300) allFacts = allFacts.slice(0, 300);
+
           localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(allFacts));
           rebuildGraph();
-        } catch(e) { console.warn('提取事实失败', e); }
+        } catch(e) {
+          console.warn('提取事实失败', e);
+        }
       }
 
       function rebuildGraph() {
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         const graph = {};
-        facts.forEach(f => { if (!graph[f.entity]) graph[f.entity] = []; if (!graph[f.entity].some(r => r.fact === f.fact)) graph[f.entity].push({ relation: f.relation, object: f.object, fact: f.fact }); });
+        facts.forEach(f => {
+          const entity = f.entity || '用户';
+          if (!graph[entity]) graph[entity] = [];
+          if (!graph[entity].some(r => r.fact === f.fact)) {
+            graph[entity].push({
+              relation: f.relation || '',
+              object: f.object || '',
+              fact: f.fact || '',
+              type: f.type || 'other',
+              importance: Number(f.importance) || 3,
+              mentions: Number(f.mentions) || 1,
+              lastSeen: f.lastSeen || f.time || Date.now()
+            });
+          }
+        });
         localStorage.setItem(MEMORY_GRAPH_KEY, JSON.stringify(graph));
-        refreshSystemPrompt(); renderAll();
+        refreshSystemPrompt();
+        renderAll();
       }
 
       function mergeDuplicateFacts() {
         let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         if (!facts.length) { alert('没有记忆可合并'); return; }
+
+        const normalize = v => String(v || '')
+          .trim()
+          .toLowerCase()
+          .replace(/[，。！？、；：""''（）()【】\[\]\s]/g, '');
+
         const map = new Map();
         for (const f of facts) {
-          const key = `${f.entity}|${f.relation}|${f.object}`;
+          const key = [
+            normalize(f.entity),
+            normalize(f.relation),
+            normalize(f.object),
+            f.type || 'other'
+          ].join('|');
+
           if (map.has(key)) {
             const existing = map.get(key);
-            existing.mentions = (existing.mentions || 1) + (f.mentions || 1);
-            existing.time = Math.max(existing.time, f.time);
-            if (f.fact.length > existing.fact.length) existing.fact = f.fact;
+            existing.mentions = (Number(existing.mentions) || 1) + (Number(f.mentions) || 1);
+            existing.time = Math.max(Number(existing.time) || 0, Number(f.time) || 0);
+            existing.lastSeen = Math.max(Number(existing.lastSeen) || 0, Number(f.lastSeen || f.time) || 0);
+            existing.importance = Math.max(Number(existing.importance) || 3, Number(f.importance) || 3);
+            existing.confidence = Math.max(Number(existing.confidence) || 0.7, Number(f.confidence) || 0.7);
+            if (String(f.fact || '').length > String(existing.fact || '').length) existing.fact = f.fact;
           } else {
             map.set(key, { ...f });
           }
         }
+
         const merged = Array.from(map.values());
-        if (merged.length === facts.length) { alert('没有重复记忆需要合并'); return; }
+        if (merged.length === facts.length) {
+          alert('没有重复记忆需要合并');
+          return;
+        }
+
         localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(merged));
         rebuildGraph();
         renderMemoryManager();
@@ -981,7 +1184,7 @@ ${compressedMemory || '无'}`;
         const filtered = facts.filter(f => {
           let keep = true;
           if (byMentions && (f.mentions || 1) < thresholdMentions) keep = false;
-          if (byDays && (now - f.time) > thresholdDays * 24 * 3600 * 1000) keep = false;
+          if (byDays && (now - (f.lastSeen || f.time || now)) > thresholdDays * 24 * 3600 * 1000) keep = false;
           return keep;
         });
 
@@ -998,7 +1201,7 @@ ${compressedMemory || '无'}`;
         const container = document.getElementById('memoryDisplay');
         if (!facts.length) { container.innerHTML = '<div style="padding:12px;color:var(--text-secondary);">暂无记忆，聊天后自动提取或点击“开始整合”。</div>'; return; }
         let html = '';
-        facts.forEach((f, index) => { html += `<div class="memory-item" data-index="${index}"><div class="meta"><span><strong>实体：</strong>${f.entity}</span><span><strong>关系：</strong>${f.relation}</span><span><strong>对象：</strong>${f.object}</span><span><strong>提及：</strong>${f.mentions || 1}</span><span><strong>时间：</strong>${new Date(f.time).toLocaleDateString()}</span></div><div class="fact-text" id="fact-display-${index}">${f.fact}</div><div class="fact-edit" id="fact-edit-${index}" style="display:none;"><input class="memory-edit-input" id="edit-entity-${index}" value="${f.entity}" placeholder="实体"><input class="memory-edit-input" id="edit-relation-${index}" value="${f.relation}" placeholder="关系"><input class="memory-edit-input" id="edit-object-${index}" value="${f.object}" placeholder="对象"><textarea class="memory-edit-input" id="edit-fact-${index}" rows="2" style="resize:vertical;">${f.fact}</textarea></div><div class="actions"><button class="edit-btn" onclick="window.toggleEditFact(${index})">✏️ 编辑</button><button class="del-btn" onclick="window.deleteFact(${index})">🗑️ 删除</button><button class="edit-btn" id="save-edit-${index}" style="display:none;background:#4caf50;" onclick="window.saveFact(${index})">💾 保存</button><button class="edit-btn" id="cancel-edit-${index}" style="display:none;background:#888;" onclick="window.cancelEditFact(${index})">取消</button></div></div>`; });
+        facts.forEach((f, index) => { html += `<div class="memory-item" data-index="${index}"><div class="meta"><span><strong>实体：</strong>${f.entity}</span><span><strong>关系：</strong>${f.relation}</span><span><strong>对象：</strong>${f.object}</span><span><strong>类型：</strong>${({preference:"偏好",relationship:"关系",identity:"长期信息",plan:"计划",constraint:"约束",event:"重要经历",habit:"习惯",other:"其他"})[f.type] || "其他"}</span><span><strong>重要度：</strong>${f.importance || 3}/5</span><span><strong>提及：</strong>${f.mentions || 1}</span><span><strong>更新时间：</strong>${new Date(f.lastSeen || f.time || Date.now()).toLocaleDateString()}</span></div><div class="fact-text" id="fact-display-${index}">${f.fact}</div><div class="fact-edit" id="fact-edit-${index}" style="display:none;"><input class="memory-edit-input" id="edit-entity-${index}" value="${f.entity}" placeholder="实体"><input class="memory-edit-input" id="edit-relation-${index}" value="${f.relation}" placeholder="关系"><input class="memory-edit-input" id="edit-object-${index}" value="${f.object}" placeholder="对象"><textarea class="memory-edit-input" id="edit-fact-${index}" rows="2" style="resize:vertical;">${f.fact}</textarea></div><div class="actions"><button class="edit-btn" onclick="window.toggleEditFact(${index})">✏️ 编辑</button><button class="del-btn" onclick="window.deleteFact(${index})">🗑️ 删除</button><button class="edit-btn" id="save-edit-${index}" style="display:none;background:#4caf50;" onclick="window.saveFact(${index})">💾 保存</button><button class="edit-btn" id="cancel-edit-${index}" style="display:none;background:#888;" onclick="window.cancelEditFact(${index})">取消</button></div></div>`; });
         container.innerHTML = html;
       }
 
@@ -1042,7 +1245,7 @@ ${compressedMemory || '无'}`;
         const object = prompt('请输入对象') || '';
         const fact = prompt('请输入完整事实句子（第三人称）'); if (!fact) return;
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
-        facts.push({ entity, relation, object, fact, quote: '手动添加', time: Date.now(), mentions: 1 });
+        facts.push({ entity, relation, object, fact, quote: '手动添加', type: 'other', importance: 4, confidence: 1, time: Date.now(), lastSeen: Date.now(), mentions: 1 });
         localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); renderMemoryManager(); refreshSystemPrompt(); renderAll();
       }
       document.getElementById('addMemoryBtn').addEventListener('click', addNewFact);
@@ -1088,7 +1291,7 @@ ${compressedMemory || '无'}`;
           while (reprocessingPaused) { await new Promise(r => setTimeout(r, 500)); if (!reprocessingActive) return; }
           const pair = pairs[idx];
           if (!existingQuotes.has(pair.user)) {
-            await extractAndStoreFacts(pair.user, pair.assistant);
+            await extractAndStoreFacts(pair.user, pair.assistant, true);
           } else {
             console.log(`跳过已存在的quote: ${pair.user}`);
           }
