@@ -4,10 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>M · 智能助手</title>
-  <link rel="manifest" href="manifest.json">
-  <script>
-    if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); }); }
-  </script>
   <style>
     :root {
       --bg: #f5f5f5; --surface: #ffffff; --text-primary: #1a1a2e; --text-secondary: #999;
@@ -145,14 +141,13 @@
     </div>
   </div>
   <div class="setup-bar" id="setupBar" style="display:none;">
-    <input type="password" id="apiKeyInput" placeholder="粘贴 API Key (sk-...)" autocomplete="off">
-    <button id="saveKeyBtn">保存</button>
+    <span>☁️ API 已通过 Cloudflare Worker 连接 OpenCode Go</span>
   </div>
   <div class="token-panel" id="tokenPanel" style="display:none;">
     <span>上次消耗：<strong id="lastTokens">0</strong> tokens / <strong id="lastCost">0.0000</strong> 元</span>
     <span>剩余充值：<strong id="remainingTokens" class="editable" title="点击设置总充值金额">0</strong> tokens / <strong id="remainingCost" class="editable" title="点击设置总充值金额">0.0000</strong> 元</span>
   </div>
-  <div class="model-indicator" id="modelIndicator">当前模型：<strong id="currentModelDisplay">deepseek-v4-flash</strong></div>
+  <div class="model-indicator" id="modelIndicator">当前模型：<strong id="currentModelDisplay">opencode-go/deepseek-v4-flash</strong></div>
   <div class="env-indicator" id="envIndicator">
     <span class="weather-icon" id="weatherIcon" title="点击切换天气">☀️</span>
     <span id="envText">获取环境中...</span>
@@ -168,7 +163,7 @@
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">密钥仅保存在手机 · 点击剩余充值金额可设置总充值额</div>
+  <div class="tip">☁️ API Key 保存在 Cloudflare Worker · 点击剩余充值金额可设置本地统计的总充值额</div>
   <div class="multi-select-bar" id="multiSelectBar">
     <span>已选择 <strong id="multiSelectCount">0</strong> 条消息</span>
     <div>
@@ -213,11 +208,12 @@
   <!-- 设定面板 -->
   <div class="modal-overlay" id="settingModal">
     <div class="modal">
-      <input type="text" id="apiKeyInputSetting" placeholder="API Key (sk-...)" value="">
-      <input type="text" id="apiBaseInput" placeholder="API 地址 (例如: https://api.deepseek.com/v1)" value="https://api.deepseek.com/v1">
-      <input type="text" id="modelNameInput" placeholder="模型名称 (例如: deepseek-v4-flash)" value="deepseek-v4-flash">
+      <div class="format-hint" style="margin-bottom:8px;">☁️ API 通道：Cloudflare Worker → OpenCode Go</div>
+      <input type="text" id="apiKeyInputSetting" value="" style="display:none;">
+      <input type="text" id="apiBaseInput" value="https://lively-breeze-3e11.534717068.workers.dev/" readonly>
+      <input type="text" id="modelNameInput" value="deepseek-v4-flash" readonly>
       <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
-      <div class="format-hint">修改后点击“保存设定”立即生效。</div>
+      <div class="format-hint">API Key 不需要填写，已安全保存在 Cloudflare Worker Secret 中。API 地址和模型由程序固定。</div>
       <div class="modal-buttons">
         <button class="btn-import" id="settingSaveBtn">保存设定</button>
         <button class="btn-cancel" id="settingCancelBtn">取消</button>
@@ -264,17 +260,23 @@
       const REPROGRESS_KEY = 'reprocess_progress_index';
       const EXTRACT_INTERVAL = 5;
 
+      // ===== Cloudflare Worker / OpenCode Go 配置 =====
+      // API Key 不放在前端；它已经保存在 Cloudflare Worker 的 OPENCODE_API_KEY Secret 中。
+      const WORKER_API_URL = 'https://lively-breeze-3e11.534717068.workers.dev/';
+      const WORKER_MODEL = 'deepseek-v4-flash';
       const API_BASE_KEY = 'deepseek_api_base';
       const MODEL_NAME_KEY = 'deepseek_model_name';
-      
+
       function getApiBase() {
-        return localStorage.getItem(API_BASE_KEY) || 'https://api.deepseek.com/v1';
+        // 故意忽略旧版本 localStorage 中的 Netlify 地址，避免继续走旧代理。
+        return WORKER_API_URL;
       }
       function getModelName() {
-        return localStorage.getItem(MODEL_NAME_KEY) || 'deepseek-v4-flash';
+        // Worker 当前固定调用 DeepSeek V4 Flash。
+        return WORKER_MODEL;
       }
-      function saveApiBase(val) { localStorage.setItem(API_BASE_KEY, val); }
-      function saveModelName(val) { localStorage.setItem(MODEL_NAME_KEY, val); }
+      function saveApiBase(val) { /* 固定使用 Cloudflare Worker，不保存用户输入 */ }
+      function saveModelName(val) { /* 固定使用 DeepSeek V4 Flash */ }
 
       function updateModelDisplay() {
         $('currentModelDisplay').textContent = getModelName();
@@ -353,7 +355,8 @@
       }
       updateEnvDisplay(); setInterval(updateEnvDisplay, 60000);
 
-      let apiKey = localStorage.getItem(SK) || '';
+      // 兼容旧代码变量，但不再保存/读取任何 API Key；真实 Key 只在 Cloudflare Worker。
+      let apiKey = ''; 
       let globalSetting = localStorage.getItem(SETTING_KEY) || '';
       let compressedMemory = localStorage.getItem(MEMORY_KEY) || '';
       let fullHistory = []; const sf = localStorage.getItem(FULL_HISTORY_KEY); if (sf) try { fullHistory = JSON.parse(sf); } catch(e) {}
@@ -491,7 +494,7 @@ ${compressedMemory || '无'}`;
       bindDraft($('userInput'),DRAFT_CHAT); bindDraft($('settingTextarea'),DRAFT_SETTING); bindDraft($('importTextarea'),DRAFT_IMPORT); bindDraft($('searchInput'),DRAFT_SEARCH);
       
       $('settingBtn').onclick = () => { 
-        $('apiKeyInputSetting').value = localStorage.getItem(SK) || '';
+        $('apiKeyInputSetting').value = '';
         $('apiBaseInput').value = getApiBase();
         $('modelNameInput').value = getModelName();
         $('settingTextarea').value = loadDraft(DRAFT_SETTING)||globalSetting; 
@@ -502,24 +505,8 @@ ${compressedMemory || '无'}`;
       $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
       
       $('settingSaveBtn').onclick = () => { 
-        const newKey = $('apiKeyInputSetting').value.trim();
-        if (newKey) { 
-          localStorage.setItem(SK, newKey); 
-          apiKey = newKey; 
-          if ($('apiKeyInput')) $('apiKeyInput').value = newKey;
-          $('setupBar').style.display = 'none';
-          $('tokenPanel').style.display = 'flex';
-        } else {
-          localStorage.removeItem(SK);
-          apiKey = '';
-          $('setupBar').style.display = 'flex';
-          $('tokenPanel').style.display = 'none';
-        }
-        
-        const newBase = $('apiBaseInput').value.trim();
-        const newModel = $('modelNameInput').value.trim();
-        if (newBase) saveApiBase(newBase);
-        if (newModel) saveModelName(newModel);
+        // API Key / API 地址 / 模型均由 Cloudflare Worker 固定管理，前端不保存。
+        apiKey = '';
         updateModelDisplay();
         
         globalSetting = $('settingTextarea').value.trim(); 
@@ -527,7 +514,7 @@ ${compressedMemory || '无'}`;
         refreshSystemPrompt(); 
         saveDraft(DRAFT_SETTING,''); 
         $('settingModal').classList.remove('active'); 
-        addMsg('assistant', '✅ 所有设定已保存（含 API Key、地址、模型）。'); 
+        addMsg('assistant', '✅ 所有设定已保存。'); 
       };
       
       $('searchBtn').onclick = () => { $('searchInput').value = loadDraft(DRAFT_SEARCH)||searchKeyword; $('searchModal').classList.add('active'); $('moreMenu').classList.remove('active'); updateSearchNav(); };
@@ -538,23 +525,9 @@ ${compressedMemory || '无'}`;
       $('searchPrevBtn').onclick = () => { if (searchMatchIndex>0) jumpToMatch(searchMatchIndex-1); }; $('searchNextBtn').onclick = () => { if (searchMatchIndex<searchTotal-1) jumpToMatch(searchMatchIndex+1); };
       $('searchClearBtn').onclick = () => { searchKeyword=''; searchMatchIndex=-1; searchTotal=0; saveDraft(DRAFT_SEARCH,''); $('searchInput').value=''; $('searchModal').classList.remove('active'); renderAll(); };
       
-      if (apiKey) { 
-        $('setupBar').style.display = 'none'; 
-        $('tokenPanel').style.display = 'flex'; 
-      } else {
-        $('setupBar').style.display = 'flex';
-        $('tokenPanel').style.display = 'none';
-      }
-      $('saveKeyBtn').onclick = () => { 
-        const k = $('apiKeyInput').value.trim(); 
-        if (!k) return; 
-        localStorage.setItem(SK,k); 
-        apiKey=k; 
-        $('setupBar').style.display='none'; 
-        $('tokenPanel').style.display='flex'; 
-        if ($('apiKeyInputSetting')) $('apiKeyInputSetting').value = k;
-        addMsg('assistant','密钥已保存 ✅'); 
-      };
+      // Worker 模式无需用户输入 API Key。
+      $('setupBar').style.display = 'none';
+      $('tokenPanel').style.display = 'flex';
       
       const chatBox = $('chatBox'), scrollBtn = $('scrollToBottomBtn');
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
@@ -871,12 +844,11 @@ ${compressedMemory || '无'}`;
         if (old.length < 10) return;
         const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n');
         try {
-          if (apiKey) {
             const model = getModelName();
             const baseUrl = getApiBase();
-            const res = await fetch(`${baseUrl}/chat/completions`, {
+            const res = await fetch(baseUrl, {
               method:'POST',
-              headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+              headers:{'Content-Type':'application/json'},
               body:JSON.stringify({
                 model: model,
                 messages:[
@@ -898,12 +870,10 @@ ${compressedMemory || '无'}`;
               saveAll();
               return;
             }
-          }
         } catch(e) { console.warn('压缩失败', e); }
       }
 
       async function extractAndStoreFacts(userText, aiText) {
-        if (!apiKey) return;
         extractCounter++;
         localStorage.setItem('extract_counter', extractCounter.toString());
         if (extractCounter % EXTRACT_INTERVAL !== 0) return;
@@ -922,10 +892,10 @@ ${compressedMemory || '无'}`;
         try {
           const model = getModelName();
           const baseUrl = getApiBase();
-          const res = await fetch(`${baseUrl}/chat/completions`, { 
+          const res = await fetch(baseUrl, { 
             method:'POST', 
-            headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`}, 
-            body: JSON.stringify({model: model, messages:[{role:'user',content:prompt}], temperature:0.2}) 
+            headers:{'Content-Type':'application/json'}, 
+            body: JSON.stringify({model: model, messages:[{role:'user',content:prompt}], stream:false, temperature:0.2}) 
           });
           if (!res.ok) return;
           const data = await res.json();
@@ -1099,7 +1069,6 @@ ${compressedMemory || '无'}`;
         if (paused) { pauseBtn.textContent = '▶️ 继续整合'; pauseBtn.style.display = 'block'; } else { pauseBtn.textContent = '⏸️ 暂停整合'; pauseBtn.style.display = reprocessingActive ? 'block' : 'none'; }
       }
       async function reprocessAllHistory(continueFromProgress = false) {
-        if (!apiKey) { alert('请先设置 API Key'); return; }
         const savedIndex = parseInt(localStorage.getItem(REPROGRESS_KEY) || '0');
         if (!continueFromProgress && savedIndex > 0) { if (!confirm(`检测到上次整合在 ${savedIndex} 条处中断，是否继续？\n（选“取消”将从头开始）`)) localStorage.removeItem(REPROGRESS_KEY); else continueFromProgress = true; }
         const history = JSON.parse(localStorage.getItem(FULL_HISTORY_KEY) || '[]');
@@ -1139,9 +1108,8 @@ ${compressedMemory || '无'}`;
       document.getElementById('pauseReprocessBtn').addEventListener('click', function() { document.getElementById('moreMenu').classList.remove('active'); togglePauseReprocess(); });
       document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
-      // ========== 发送消息（增强错误显示） ==========
+      // ========== 核心发送函数（带调试日志） ==========
       async function sendToAPI(text) {
-        if (!apiKey) { addMsg('assistant', '⚠️ 请先输入 API Key'); $('setupBar').style.display = 'flex'; return; }
         const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
         let userMsg;
         if (isValidEdit) {
@@ -1175,15 +1143,19 @@ ${compressedMemory || '无'}`;
           refreshSystemPrompt();
           const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
           const model = getModelName();
-          const baseUrl = getApiBase();
-          const res = await fetch(`${baseUrl}/chat/completions`, { 
+          const baseUrl = getApiBase(); // 完整的代理地址
+          
+          // ====== 调试输出：在控制台打印实际请求的 URL ======
+          console.log('🚀 实际请求地址:', baseUrl);
+          console.log('📦 请求体:', { model, messages: apiMsgs });
+
+          const res = await fetch(baseUrl, { 
             method: 'POST', 
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, 
+            headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ model: model, messages: apiMsgs, stream: false, temperature: 0.5 }) 
           });
           load.remove();
           
-          // ====== 这里是关键：如果请求不成功，把具体的 HTTP 状态码和服务器返回的文本显示在聊天里 ======
           if (!res.ok) {
             let errorDetail = `请求失败 (HTTP ${res.status})`;
             try {
@@ -1196,7 +1168,7 @@ ${compressedMemory || '无'}`;
                 if (textBody) errorDetail = textBody.substring(0, 200);
               } catch(e2) {}
             }
-            throw new Error(`❌ ${errorDetail} (状态码: ${res.status})`);
+            throw new Error(`❌ 请求地址: ${baseUrl} 失败，错误: ${errorDetail} (状态码: ${res.status})`);
           }
           
           const data = await res.json();
@@ -1221,7 +1193,6 @@ ${compressedMemory || '无'}`;
             updateTokenDisplay(); saveAll();
           }
           
-          // 硬编码吃药记忆
           const medKeywords = ['吃过药', '吃了药', '吃药了', '已经吃了', '吃过了'];
           if (medKeywords.some(kw => text.includes(kw))) {
               let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
@@ -1247,7 +1218,7 @@ ${compressedMemory || '无'}`;
           await compressHistoryIfNeeded();
         } catch(e) { 
           load.remove(); 
-          // 把错误详情直接显示给用户
+          // 显示包含请求地址的错误信息
           addMsg('assistant', `❌ ${e.message}`); 
         }
       }
@@ -1391,7 +1362,7 @@ ${compressedMemory || '无'}`;
       $('importConfirmBtn').onclick = () => parseAndImport(false);
       $('importAppendBtn').onclick = () => parseAndImport(true);
 
-      renderAll(); if (messages.length <= 1) addMsg('assistant', apiKey ? '你好！我是M，精简人设已加载 🧠' : '👋 请先输入 API Key');
+      renderAll(); if (messages.length <= 1) addMsg('assistant', '你好！我是M，精简人设已加载 🧠');
     })();
   </script>
 </body>
