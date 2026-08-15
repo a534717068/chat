@@ -131,6 +131,19 @@
 }
 </style>
 
+<style id="memory-v2-ui">
+.memory-v2-panel{margin:12px 0;padding:14px;border:1px solid rgba(127,127,127,.22);border-radius:14px;background:rgba(127,127,127,.055)}.memory-v2-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.memory-v2-title{font-size:16px;font-weight:700}.memory-v2-sub{font-size:12px;opacity:.65;margin-top:3px}.memory-v2-stats{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.memory-v2-stat{padding:7px 10px;border-radius:10px;background:rgba(127,127,127,.09);font-size:12px}.memory-v2-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.memory-v2-search{flex:1;min-width:180px;padding:9px 11px;border-radius:10px;border:1px solid rgba(127,127,127,.25);background:transparent;color:inherit;outline:none}.memory-v2-filter{padding:8px 10px;border-radius:9px;border:1px solid rgba(127,127,127,.22);background:transparent;color:inherit;cursor:pointer}.memory-v2-filter.active{background:rgba(127,127,127,.16);font-weight:600}.memory-v2-list{display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto}.memory-v2-card{padding:11px 12px;border:1px solid rgba(127,127,127,.17);border-radius:11px;background:rgba(127,127,127,.035)}.memory-v2-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.memory-v2-type{font-size:11px;font-weight:700;padding:3px 7px;border-radius:7px;background:rgba(127,127,127,.12)}.memory-v2-fact{margin:7px 0;font-size:13px;line-height:1.55}.memory-v2-meta{display:flex;gap:9px;flex-wrap:wrap;font-size:11px;opacity:.62}.memory-v2-source{margin-top:7px;padding:7px 9px;border-left:2px solid rgba(127,127,127,.35);font-size:11px;line-height:1.45;opacity:.72}.memory-v2-empty{padding:24px;text-align:center;opacity:.55;font-size:13px}.memory-v2-btn{border:0;border-radius:9px;padding:7px 10px;background:rgba(127,127,127,.1);color:inherit;cursor:pointer}
+</style>
+<style id="legacy-ui-cleanup">#apiKeyInput,#apiKeyInputSetting,#apiKeyStatus,#apiStatus,.api-status,.apiStatus,.api-key-status,.apikey-status,.remaining-balance,.remainingBalance,.current-model,.currentModel{display:none!important}</style>
+
+<style id="final-ui-cleanup">
+#apiKeyInput,#apiKeyInputSetting,#apiKeyStatus,#apiStatus,
+.api-status,.apiStatus,.api-key-status,.apikey-status,
+.remaining-balance,.remainingBalance,.current-model,.currentModel{
+  display:none!important;
+}
+</style>
+
 </head>
 <body>
   <div class="header">
@@ -160,72 +173,7 @@
     <span>剩余充值：<strong id="remainingTokens" class="editable" title="点击设置总充值金额">0</strong> tokens / <strong id="remainingCost" class="editable" title="点击设置总充值金额">0.0000</strong> 元</span>
   </div>
   <div class="model-indicator" id="modelIndicator">当前模型：<strong id="currentModelDisplay">deepseek-v4-flash</strong></div>
-  <div class="env-indicator" id="envIndicator">
-    <span class="weather-icon" id="weatherIcon" title="点击切换天气">☀️</span>
-    <span id="envText">获取环境中...</span>
-  </div>
-  <div id="progressDisplay" style="display:none;">
-    <span class="progress-text">⏳ 整合进度：<span id="progressNum">0</span>/<span id="progressTotal">0</span></span>
-    <div class="progress-buttons">
-      <button id="pauseResumeBtn">⏸️ 暂停</button>
-    </div>
-  </div>
-  <div class="chat-container"><div class="chat-box" id="chatBox"></div><button class="scroll-to-bottom" id="scrollToBottomBtn">↓</button></div>
-  <div class="input-area">
-    <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
-    <button id="sendBtn">发送</button>
-  </div>
-  <div class="tip">☁️ API Key 保存在 Cloudflare Worker · 点击剩余充值金额可设置本地统计的总充值额</div>
-  <div class="multi-select-bar" id="multiSelectBar">
-    <span>已选择 <strong id="multiSelectCount">0</strong> 条消息</span>
-    <div>
-      <button class="cancel-multi-btn" id="cancelMultiSelectBtn">取消</button>
-      <button class="delete-multi-btn" id="confirmMultiDeleteBtn">删除选中</button>
-    </div>
-  </div>
-
-  <!-- 记忆管理面板 -->
-  <div class="modal-overlay" id="memoryModal">
-    <div class="modal">
-      <h3 style="margin:0;display:flex;justify-content:space-between;align-items:center;">
-        <span>🧠 记忆管理</span>
-        <span>
-          <button class="add-memory-btn" id="mergeMemoryBtn" style="background:#4caf50;">🧹 合并重复</button>
-          <button class="add-memory-btn" id="forgetMemoryBtn" style="background:#ff9800;">🧠 遗忘</button>
-          <button class="add-memory-btn" id="addMemoryBtn">＋ 新增</button>
-        </span>
-      </h3>
-      <div id="memoryDisplay" style="max-height:350px;overflow-y:auto;padding:4px;background:var(--bg);border-radius:8px;font-size:0.85rem;">加载中...</div>
-      <div class="modal-buttons"><button class="btn-cancel" id="memoryCloseBtn">关闭</button></div>
-    </div>
-  </div>
-
-  <!-- 导入面板 -->
-  <div class="modal-overlay" id="importModal">
-    <div class="modal">
-      <textarea id="importTextarea" placeholder="在此粘贴聊天内容..."></textarea>
-      <div class="format-hint">支持 "你:" / "M:" 开头的文本，或 JSON 数组。</div>
-      <div class="modal-buttons">
-        <button class="btn-file" id="importFileBtn">TXT</button>
-        <button class="btn-file" id="importJsonFileBtn" style="background:#e94560;">JSON</button>
-        <button class="btn-import" id="importConfirmBtn">导入（覆盖）</button>
-        <button class="btn-append" id="importAppendBtn">追加（不覆盖）</button>
-        <button class="btn-cancel" id="importCancelBtn">取消</button>
-      </div>
-      <input type="file" id="importFileInput" accept=".txt" style="display:none">
-      <input type="file" id="importJsonFileInput" accept=".json" style="display:none">
-    </div>
-  </div>
-
-  <!-- 设定面板 -->
-  <div class="modal-overlay" id="settingModal">
-    <div class="modal">
-      <div class="format-hint" style="margin-bottom:8px;">☁️ API 通道：Cloudflare Worker → OpenCode Go</div>
-      <input type="text" id="apiKeyInputSetting" value="" style="display:none;">
-      <input type="text" id="apiBaseInput" value="https://lively-breeze-3e11.534717068.workers.dev/" readonly>
-      <input type="text" id="modelNameInput" value="deepseek-v4-flash" readonly>
-      <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
-      <div class="format-hint">API Key 不需要填写，已安全保存在 Cloudflare Worker Secret 中。API 地址和模型由程序固定。</div>
+  
       <div class="modal-buttons">
         <button class="btn-import" id="settingSaveBtn">保存设定</button>
         <button class="btn-cancel" id="settingCancelBtn">取消</button>
@@ -1568,5 +1516,8 @@ M：${aiText}`;
       renderAll(); if (messages.length <= 1) addMsg('assistant', '你好！我是M，精简人设已加载 🧠');
     })();
   </script>
+<script id="memory-v2-ui-script">
+(function(){const N={preference:'偏好',relationship:'关系',identity:'长期信息',plan:'计划',constraint:'约束',event:'重要经历',habit:'习惯',other:'其他'};let ty='all',q='';function F(){try{let a=JSON.parse(localStorage.getItem('memory_facts_v3')||'[]');return Array.isArray(a)?a.filter(x=>x&&x.fact):[]}catch(e){return[]}}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function sc(f){let i=Math.max(1,Math.min(5,Number(f.importance)||3)),m=Math.min(5,Number(f.mentions)||1),d=Math.max(0,(Date.now()-Number(f.lastSeen||f.time||Date.now()))/86400000);return i*2+m+Math.max(0,2-d/60)}function stars(n){n=Math.max(1,Math.min(5,Number(n)||3));return '★'.repeat(n)+'☆'.repeat(5-n)}function render(){let p=document.getElementById('memory-v2-panel');if(!p)return;let a=F(),shown=a.filter(f=>ty==='all'||(f.type||'other')===ty).filter(f=>!q||[f.fact,f.entity,f.relation,f.object,f.quote].join(' ').toLowerCase().includes(q)).sort((a,b)=>sc(b)-sc(a));p.querySelector('#memory-v2-stats').innerHTML=`<span class="memory-v2-stat">共 ${a.length} 条</span><span class="memory-v2-stat">重要 ${a.filter(f=>Number(f.importance||3)>=4).length} 条</span><span class="memory-v2-stat">高可信 ${a.filter(f=>Number(f.confidence??.8)>=.85).length} 条</span><span class="memory-v2-stat">当前显示 ${shown.length} 条</span>`;let l=p.querySelector('#memory-v2-list');if(!shown.length){l.innerHTML='<div class="memory-v2-empty">没有符合条件的长期记忆</div>';return}l.innerHTML=shown.slice(0,120).map(f=>{let c=Math.round(Number(f.confidence??.8)*100),d=new Date(Number(f.lastSeen||f.time||Date.now())).toLocaleDateString();return `<article class="memory-v2-card"><div class="memory-v2-card-top"><span class="memory-v2-type">${esc(N[f.type]||'其他')}</span><span title="重要度">${stars(f.importance)}</span></div><div class="memory-v2-fact">${esc(f.fact)}</div><div class="memory-v2-meta"><span>重要度 ${Number(f.importance||3)}/5</span><span>可信度 ${c}%</span><span>提及 ${Number(f.mentions||1)} 次</span><span>更新 ${esc(d)}</span></div>${f.quote&&f.quote!=='手动添加'?`<div class="memory-v2-source">来源：「${esc(f.quote)}」</div>`:''}</article>`}).join('')}function boot(){if(document.getElementById('memory-v2-panel'))return;let panel=document.createElement('section');panel.id='memory-v2-panel';panel.className='memory-v2-panel';panel.innerHTML=`<div class="memory-v2-head"><div><div class="memory-v2-title">🧠 长期记忆</div><div class="memory-v2-sub">经过筛选的长期信息，不把一次性闲聊当成永久记忆</div></div><button class="memory-v2-btn" id="memory-v2-refresh">刷新</button></div><div class="memory-v2-stats" id="memory-v2-stats"></div><div class="memory-v2-toolbar"><input class="memory-v2-search" id="memory-v2-search" placeholder="搜索记忆……">${Object.entries(N).map(([k,v])=>`<button class="memory-v2-filter${k==='all'?' active':''}" data-memory-type="${k}">${v}</button>`).join('')}</div><div class="memory-v2-list" id="memory-v2-list"></div>`;let host=document.querySelector('main')||document.body;host.prepend(panel);panel.querySelector('#memory-v2-search').oninput=e=>{q=e.target.value.trim().toLowerCase();render()};panel.querySelector('#memory-v2-refresh').onclick=render;panel.querySelectorAll('[data-memory-type]').forEach(b=>b.onclick=()=>{ty=b.dataset.memoryType;panel.querySelectorAll('[data-memory-type]').forEach(x=>x.classList.remove('active'));b.classList.add('active');render()});render()}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();window.refreshMemoryV2UI=render})();
+</script>
 </body>
 </html>
