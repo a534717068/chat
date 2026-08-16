@@ -33,10 +33,6 @@
     .setup-bar { background: var(--surface); padding: 6px 10px; display: flex; gap: 6px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
     .setup-bar input { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; background: var(--surface); color: var(--text-primary); }
     .setup-bar button { padding: 8px 14px; background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 6px; font-size: 0.85rem; }
-    .token-panel { background: var(--surface); padding: 4px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; flex-shrink: 0; }
-    .token-panel .editable { cursor: pointer; border-bottom: 1px dashed var(--text-secondary); }
-    .token-panel .editable:hover { background: var(--bg); }
-    .model-indicator { background: var(--surface); padding: 2px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); text-align: center; flex-shrink: 0; }
     .env-indicator { background: var(--surface); padding: 2px 10px; font-size: 0.7rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); text-align: center; flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 6px; }
     .env-indicator .weather-icon { font-size: 1rem; cursor: pointer; }
     .env-indicator .location { font-size: 0.65rem; color: var(--text-secondary); margin-left: 4px; }
@@ -67,7 +63,6 @@
     .input-area { background: var(--surface); padding: 8px 10px; border-top: 1px solid var(--border); display: flex; gap: 6px; flex-shrink: 0; align-items: flex-end; }
     .input-area textarea { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 10px; font-size: 0.9rem; resize: none; max-height: 100px; font-family: inherit; background: var(--surface); color: var(--text-primary); }
     .input-area button { padding: 8px 14px; background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 10px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
-    .tip { color: var(--text-secondary); font-size: 0.7rem; text-align: center; padding: 2px; }
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--modal-overlay); z-index: 1000; justify-content: center; align-items: center; padding: 20px; }
     .modal-overlay.active { display: flex; }
     .modal { background: var(--modal-bg); border-radius: 14px; padding: 16px; width: 100%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; gap: 10px; }
@@ -91,13 +86,7 @@
     .memory-item .meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.75rem; color: var(--text-secondary); }
     .memory-item .meta strong { color: var(--text-primary); }
     .memory-item .fact-text { font-size: 0.9rem; }
-    .memory-item.pinned { border-left-width: 4px; }
-    .memory-source { font-size: 0.72rem; color: var(--text-secondary); background: var(--surface); border-radius: 6px; padding: 5px 7px; line-height: 1.45; }
-    .memory-source summary { cursor: pointer; user-select: none; }
-    .memory-source .quote { margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--border); opacity: 0.9; }
-    .memory-pin-btn { background: #6f42c1 !important; color: white; }
-    .memory-pin-btn.pinned { background: #f0ad00 !important; color: #222; }
-    .memory-item .actions { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
+    .memory-item .actions { display: flex; gap: 4px; justify-content: flex-end; }
     .memory-item .actions button { padding: 2px 12px; border: none; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
     .memory-item .actions .edit-btn { background: var(--btn-bg); color: white; }
     .memory-item .actions .del-btn { background: #e94560; color: white; }
@@ -126,17 +115,6 @@
     .inline-edit-hint { font-size: 0.65rem; color: var(--text-secondary); margin-top: 2px; text-align: right; }
   </style>
 
-<style id="cleanup-ui">
-/* UI cleanup: these legacy API/account status indicators are no longer needed
-   because the API key lives in the Cloudflare Worker Secret. */
-.api-status, .apiStatus, .api-key-status, .apikey-status,
-#apiKeyStatus, #apiStatus,
-.remaining-balance, .remainingBalance,
-.current-model, .currentModel {
-  display: none !important;
-}
-</style>
-
 </head>
 <body>
   <div class="header">
@@ -161,7 +139,7 @@
   <div class="setup-bar" id="setupBar" style="display:none;">
     <span>☁️ API 已通过 Cloudflare Worker 连接 OpenCode Go</span>
   </div>
-<div class="env-indicator" id="envIndicator">
+  <div class="env-indicator" id="envIndicator">
     <span class="weather-icon" id="weatherIcon" title="点击切换天气">☀️</span>
     <span id="envText">获取环境中...</span>
   </div>
@@ -221,8 +199,7 @@
   <div class="modal-overlay" id="settingModal">
     <div class="modal">
       <div class="format-hint" style="margin-bottom:8px;">☁️ API 通道：Cloudflare Worker → OpenCode Go</div>
-      <input type="text" id="apiKeyInputSetting" value="" style="display:none;">
-      <input type="text" id="apiBaseInput" value="https://lively-breeze-3e11.534717068.workers.dev/" readonly>
+<input type="text" id="apiBaseInput" value="https://lively-breeze-3e11.534717068.workers.dev/" readonly>
       <input type="text" id="modelNameInput" value="deepseek-v4-flash" readonly>
       <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
       <div class="format-hint">API Key 不需要填写，已安全保存在 Cloudflare Worker Secret 中。API 地址和模型由程序固定。</div>
@@ -261,8 +238,7 @@
     (function() {
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
-      const TRK = 'deepseek_remaining_tokens', TRC = 'deepseek_remaining_cost';
-      const TKK = 'deepseek_tokens', TCK = 'deepseek_cost', AEK = 'last_auto_export';
+      const AEK = 'last_auto_export';
       const SETTING_KEY = 'deepseek_global_setting', MEMORY_KEY = 'deepseek_compressed_memory';
       const FULL_HISTORY_KEY = 'deepseek_full_history';
       const DRAFT_CHAT = 'draft_chat_input', DRAFT_SETTING = 'draft_setting', DRAFT_IMPORT = 'draft_import', DRAFT_SEARCH = 'draft_search';
@@ -289,13 +265,6 @@
       }
       function saveApiBase(val) { /* 固定使用 Cloudflare Worker，不保存用户输入 */ }
       function saveModelName(val) { /* 固定使用 DeepSeek V4 Flash */ }
-
-      // 当前模型提示已从 UI 移除；模型仍由 Worker 固定使用。
-      function updateModelDisplay() {}
-
-      const PROMPT_PRICE = 0.000002;
-      const COMPLETION_PRICE = 0.000008;
-      const CACHED_PRICE = 0.000001;
 
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
@@ -436,7 +405,7 @@ ${compressedMemory || '无'}`;
               const mentions = Math.max(1, Number(f.mentions) || 1);
               const ageDays = Math.max(0, (now - (Number(f.time) || now)) / 86400000);
               const recency = Math.max(0, 2 - ageDays / 60);
-              const score = (f.pinned ? 1000 : 0) + importance * 2 + Math.min(mentions, 5) + recency;
+              const score = importance * 2 + Math.min(mentions, 5) + recency;
               return { ...f, score };
             })
             .sort((a, b) => b.score - a.score)
@@ -458,8 +427,7 @@ ${compressedMemory || '无'}`;
             const type = typeNames[f.type] || '其他';
             const entity = f.entity || '用户';
             memoryText += `- [${type}] ${f.fact}`;
-            if (f.pinned) memoryText += '（📌 固定记忆）';
-            else if (f.importance >= 5) memoryText += '（重要）';
+            if (f.importance >= 5) memoryText += '（重要）';
             memoryText += '\n';
           }
 
@@ -509,23 +477,10 @@ ${compressedMemory || '无'}`;
           const fallback = toSave.slice(-200);
           localStorage.setItem(CK, JSON.stringify(fallback));
         }
-        localStorage.setItem(TRK, String(remainingTokens));
-        localStorage.setItem(TRC, String(remainingCost));
       }
       function loadAll() { const s = localStorage.getItem(CK); if (s) try { const a = JSON.parse(s); if (Array.isArray(a)&&a.length) messages = [messages[0], ...a]; } catch(e) {} }
       loadAll(); if (!fullHistory.length && messages.length>1) { fullHistory = messages.filter(m=>m.role!=='system').map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); saveFullHistory(); }
       
-      let remainingTokens = parseInt(localStorage.getItem(TRK) || localStorage.getItem(TKK) || '0');
-      let remainingCost = parseFloat(localStorage.getItem(TRC) || localStorage.getItem(TCK) || '0');
-
-      // 充值统计仍然保留在本地，但对应的 UI 已移除。
-      // 这样不会影响原有的 token / 费用统计，也不会因为找不到已删除的 DOM 元素而中断整个页面。
-      function updateTokenDisplay() {
-        localStorage.setItem(TRK, String(remainingTokens));
-        localStorage.setItem(TRC, String(remainingCost));
-      }
-      updateTokenDisplay();
-
       function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'☀️':'🌙'; localStorage.setItem(TK, d?'dark':'light'); }
       setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.addEventListener('click', () => $('moreMenu').classList.remove('active')); $('moreMenu').onclick = e => e.stopPropagation();
@@ -533,7 +488,6 @@ ${compressedMemory || '无'}`;
       bindDraft($('userInput'),DRAFT_CHAT); bindDraft($('settingTextarea'),DRAFT_SETTING); bindDraft($('importTextarea'),DRAFT_IMPORT); bindDraft($('searchInput'),DRAFT_SEARCH);
       
       $('settingBtn').onclick = () => { 
-        $('apiKeyInputSetting').value = '';
         $('apiBaseInput').value = getApiBase();
         $('modelNameInput').value = getModelName();
         $('settingTextarea').value = loadDraft(DRAFT_SETTING)||globalSetting; 
@@ -546,7 +500,6 @@ ${compressedMemory || '无'}`;
       $('settingSaveBtn').onclick = () => { 
         // API Key / API 地址 / 模型均由 Cloudflare Worker 固定管理，前端不保存。
         apiKey = '';
-        updateModelDisplay();
         
         globalSetting = $('settingTextarea').value.trim(); 
         localStorage.setItem(SETTING_KEY, globalSetting); 
@@ -566,7 +519,6 @@ ${compressedMemory || '无'}`;
       
       // Worker 模式无需用户输入 API Key。
       $('setupBar').style.display = 'none';
-      // tokenPanel 已移除
       
       const chatBox = $('chatBox'), scrollBtn = $('scrollToBottomBtn');
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
@@ -1022,12 +974,9 @@ M：${aiText}`;
               confidence: Math.max(0, Math.min(1, Number(f.confidence) || 0.7)),
               fact: String(f.fact).trim(),
               quote: String(f.quote).trim(),
-              source: '聊天自动提取',
-              sourceTime: now,
               time: now,
               lastSeen: now,
-              mentions: 1,
-              pinned: false
+              mentions: 1
             }));
 
           for (const f of valid) {
@@ -1052,9 +1001,6 @@ M：${aiText}`;
               if (f.fact.length > String(existing.fact || '').length) existing.fact = f.fact;
               if (f.quote && f.quote !== '手动添加') existing.quote = f.quote;
               if (!existing.type) existing.type = f.type;
-              if (!existing.source) existing.source = f.source || '聊天自动提取';
-              if (!existing.sourceTime) existing.sourceTime = f.sourceTime || f.time || now;
-              existing.pinned = Boolean(existing.pinned);
             } else {
               allFacts.push(f);
             }
@@ -1062,7 +1008,7 @@ M：${aiText}`;
 
           // 安全上限：保留最有价值的 300 条，避免长期聊天后 prompt 无限膨胀。
           allFacts.sort((a, b) => {
-            const score = f => (f.pinned ? 1000 : 0) + (Number(f.importance) || 3) * 2 +
+            const score = f => (Number(f.importance) || 3) * 2 +
               Math.min(Number(f.mentions) || 1, 5) +
               Math.max(0, 2 - (Date.now() - (Number(f.lastSeen || f.time) || Date.now())) / 86400000 / 60);
             return score(b) - score(a);
@@ -1124,9 +1070,6 @@ M：${aiText}`;
             existing.lastSeen = Math.max(Number(existing.lastSeen) || 0, Number(f.lastSeen || f.time) || 0);
             existing.importance = Math.max(Number(existing.importance) || 3, Number(f.importance) || 3);
             existing.confidence = Math.max(Number(existing.confidence) || 0.7, Number(f.confidence) || 0.7);
-            existing.pinned = Boolean(existing.pinned) || Boolean(f.pinned);
-            if (!existing.source) existing.source = f.source || '聊天自动提取';
-            existing.sourceTime = Math.min(Number(existing.sourceTime || existing.time || Date.now()), Number(f.sourceTime || f.time || Date.now()));
             if (String(f.fact || '').length > String(existing.fact || '').length) existing.fact = f.fact;
           } else {
             map.set(key, { ...f });
@@ -1149,7 +1092,7 @@ M：${aiText}`;
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         if (!facts.length) { alert('没有记忆可遗忘'); return; }
         const choice = prompt(
-          '请选择遗忘方式（输入数字）：\n1. 按提及次数（少于 N 次）\n2. 按时间（超过 N 天未更新）\n3. 两者都执行（交集）\n\n📌 固定记忆不会被自动遗忘。',
+          '请选择遗忘方式（输入数字）：\n1. 按提及次数（少于 N 次）\n2. 按时间（超过 N 天未更新）\n3. 两者都执行（交集）',
           '3'
         );
         if (!choice) return;
@@ -1172,7 +1115,6 @@ M：${aiText}`;
         const now = Date.now();
         const filtered = facts.filter(f => {
           let keep = true;
-          if (f.pinned) return true; // 📌 固定记忆不参与自动遗忘
           if (byMentions && (f.mentions || 1) < thresholdMentions) keep = false;
           if (byDays && (now - (f.lastSeen || f.time || now)) > thresholdDays * 24 * 3600 * 1000) keep = false;
           return keep;
@@ -1186,85 +1128,14 @@ M：${aiText}`;
         alert(`遗忘完成！剩余 ${filtered.length} 条记忆。`);
       }
 
-      function escapeHtml(value) {
-        return String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
-      }
-
       function renderMemoryManager() {
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         const container = document.getElementById('memoryDisplay');
-        if (!facts.length) {
-          container.innerHTML = '<div style="padding:12px;color:var(--text-secondary);">暂无记忆，聊天后会自动提取值得长期保留的信息。</div>';
-          return;
-        }
-
-        // 固定记忆优先显示，其次按重要度、提及次数、更新时间排序。
-        const indexed = facts.map((f, originalIndex) => ({ f, originalIndex }));
-        indexed.sort((a, b) => {
-          const pin = Number(Boolean(b.f.pinned)) - Number(Boolean(a.f.pinned));
-          if (pin) return pin;
-          const score = f => (Number(f.importance) || 3) * 2 + Math.min(Number(f.mentions) || 1, 5);
-          return score(b.f) - score(a.f) || (Number(b.f.lastSeen || b.f.time || 0) - Number(a.f.lastSeen || a.f.time || 0));
-        });
-
-        const typeNames = {preference:'偏好',relationship:'关系',identity:'长期信息',plan:'计划',constraint:'约束',event:'重要经历',habit:'习惯',other:'其他'};
-        let html = `<div style="padding:4px 4px 8px;color:var(--text-secondary);font-size:.75rem;">共 ${facts.length} 条记忆 · 📌 固定记忆不会自动遗忘</div>`;
-
-        indexed.forEach(({f, originalIndex}) => {
-          const pinned = Boolean(f.pinned);
-          const source = escapeHtml(f.source || (f.quote === '手动添加' ? '手动添加' : '聊天自动提取'));
-          const sourceTime = f.sourceTime || f.time || Date.now();
-          const sourceDate = new Date(sourceTime).toLocaleString('zh-CN', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
-          const quote = escapeHtml(f.quote || '未记录原话');
-          const fact = escapeHtml(f.fact);
-          const entity = escapeHtml(f.entity);
-          const relation = escapeHtml(f.relation);
-          const object = escapeHtml(f.object);
-
-          html += `<div class="memory-item ${pinned ? 'pinned' : ''}" data-index="${originalIndex}">
-            <div class="meta">
-              <span><strong>实体：</strong>${entity}</span>
-              <span><strong>关系：</strong>${relation}</span>
-              <span><strong>对象：</strong>${object}</span>
-              <span><strong>类型：</strong>${typeNames[f.type] || '其他'}</span>
-              <span><strong>重要度：</strong>${f.importance || 3}/5</span>
-              <span><strong>提及：</strong>${f.mentions || 1}</span>
-              <span><strong>更新时间：</strong>${new Date(f.lastSeen || f.time || Date.now()).toLocaleDateString()}</span>
-              ${pinned ? '<span><strong>📌 已固定</strong></span>' : ''}
-            </div>
-            <div class="fact-text" id="fact-display-${originalIndex}">${fact}</div>
-            <details class="memory-source">
-              <summary>📎 来源：${source} · ${sourceDate}</summary>
-              <div class="quote">“${quote}”</div>
-            </details>
-            <div class="fact-edit" id="fact-edit-${originalIndex}" style="display:none;">
-              <input class="memory-edit-input" id="edit-entity-${originalIndex}" value="${entity}" placeholder="实体">
-              <input class="memory-edit-input" id="edit-relation-${originalIndex}" value="${relation}" placeholder="关系">
-              <input class="memory-edit-input" id="edit-object-${originalIndex}" value="${object}" placeholder="对象">
-              <textarea class="memory-edit-input" id="edit-fact-${originalIndex}" rows="2" style="resize:vertical;">${fact}</textarea>
-            </div>
-            <div class="actions">
-              <button class="memory-pin-btn ${pinned ? 'pinned' : ''}" onclick="window.togglePinFact(${originalIndex})">${pinned ? '📌 已固定' : '📌 固定'}</button>
-              <button class="edit-btn" onclick="window.toggleEditFact(${originalIndex})">✏️ 编辑</button>
-              <button class="del-btn" onclick="window.deleteFact(${originalIndex})">🗑️ 删除</button>
-              <button class="edit-btn" id="save-edit-${originalIndex}" style="display:none;background:#4caf50;" onclick="window.saveFact(${originalIndex})">💾 保存</button>
-              <button class="edit-btn" id="cancel-edit-${originalIndex}" style="display:none;background:#888;" onclick="window.cancelEditFact(${originalIndex})">取消</button>
-            </div>
-          </div>`;
-        });
+        if (!facts.length) { container.innerHTML = '<div style="padding:12px;color:var(--text-secondary);">暂无记忆，聊天后自动提取或点击“开始整合”。</div>'; return; }
+        let html = '';
+        facts.forEach((f, index) => { html += `<div class="memory-item" data-index="${index}"><div class="meta"><span><strong>实体：</strong>${f.entity}</span><span><strong>关系：</strong>${f.relation}</span><span><strong>对象：</strong>${f.object}</span><span><strong>类型：</strong>${({preference:"偏好",relationship:"关系",identity:"长期信息",plan:"计划",constraint:"约束",event:"重要经历",habit:"习惯",other:"其他"})[f.type] || "其他"}</span><span><strong>重要度：</strong>${f.importance || 3}/5</span><span><strong>提及：</strong>${f.mentions || 1}</span><span><strong>更新时间：</strong>${new Date(f.lastSeen || f.time || Date.now()).toLocaleDateString()}</span></div><div class="fact-text" id="fact-display-${index}">${f.fact}</div><div class="fact-edit" id="fact-edit-${index}" style="display:none;"><input class="memory-edit-input" id="edit-entity-${index}" value="${f.entity}" placeholder="实体"><input class="memory-edit-input" id="edit-relation-${index}" value="${f.relation}" placeholder="关系"><input class="memory-edit-input" id="edit-object-${index}" value="${f.object}" placeholder="对象"><textarea class="memory-edit-input" id="edit-fact-${index}" rows="2" style="resize:vertical;">${f.fact}</textarea></div><div class="actions"><button class="edit-btn" onclick="window.toggleEditFact(${index})">✏️ 编辑</button><button class="del-btn" onclick="window.deleteFact(${index})">🗑️ 删除</button><button class="edit-btn" id="save-edit-${index}" style="display:none;background:#4caf50;" onclick="window.saveFact(${index})">💾 保存</button><button class="edit-btn" id="cancel-edit-${index}" style="display:none;background:#888;" onclick="window.cancelEditFact(${index})">取消</button></div></div>`; });
         container.innerHTML = html;
       }
-
-      window.togglePinFact = function(index) {
-        const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
-        if (index >= facts.length) return;
-        facts[index].pinned = !Boolean(facts[index].pinned);
-        localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts));
-        rebuildGraph();
-        renderMemoryManager();
-        refreshSystemPrompt();
-        renderAll();
-      };
 
       window.toggleEditFact = function(index) {
         const display = document.getElementById(`fact-display-${index}`);
@@ -1291,7 +1162,7 @@ M：${aiText}`;
         const object = document.getElementById(`edit-object-${index}`).value.trim();
         const fact = document.getElementById(`edit-fact-${index}`).value.trim();
         if (!entity || !fact) { alert('实体和事实不能为空'); return; }
-        facts[index] = { ...facts[index], entity, relation, object, fact, source: facts[index].source || '手动编辑', sourceTime: facts[index].sourceTime || Date.now(), pinned: Boolean(facts[index].pinned) };
+        facts[index] = { ...facts[index], entity, relation, object, fact };
         localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); renderMemoryManager(); refreshSystemPrompt(); renderAll();
       };
       window.deleteFact = function(index) {
@@ -1306,7 +1177,7 @@ M：${aiText}`;
         const object = prompt('请输入对象') || '';
         const fact = prompt('请输入完整事实句子（第三人称）'); if (!fact) return;
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
-        facts.push({ entity, relation, object, fact, quote: '手动添加', source: '手动添加', sourceTime: Date.now(), type: 'other', importance: 4, confidence: 1, time: Date.now(), lastSeen: Date.now(), mentions: 1, pinned: false });
+        facts.push({ entity, relation, object, fact, quote: '手动添加', type: 'other', importance: 4, confidence: 1, time: Date.now(), lastSeen: Date.now(), mentions: 1 });
         localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); renderMemoryManager(); refreshSystemPrompt(); renderAll();
       }
       document.getElementById('addMemoryBtn').addEventListener('click', addNewFact);
@@ -1443,18 +1314,6 @@ M：${aiText}`;
           saveFullHistory();
           if (userMsg.history && userMsg.history.length > 0) userMsg.history[userMsg.historyIndex].reply = reply;
           renderAll(); saveAll();
-          if (data.usage) {
-            const promptTokens = data.usage.prompt_tokens;
-            const completionTokens = data.usage.completion_tokens;
-            const cachedTokens = data.usage.prompt_tokens_details?.cached_tokens || 0;
-            const promptCost = (promptTokens - cachedTokens) * PROMPT_PRICE + cachedTokens * CACHED_PRICE;
-            const completionCost = completionTokens * COMPLETION_PRICE;
-            const cost = promptCost + completionCost;
-            remainingTokens = Math.max(0, remainingTokens - data.usage.total_tokens);
-            remainingCost = Math.max(0, remainingCost - cost);
-            updateTokenDisplay(); saveAll();
-          }
-          
           const medKeywords = ['吃过药', '吃了药', '吃药了', '已经吃了', '吃过了'];
           if (medKeywords.some(kw => text.includes(kw))) {
               let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
