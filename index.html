@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>M · 智能助手</title>
+  <title>M · 智能助手 · Worker版</title>
   <style>
     :root {
       --bg: #f5f5f5; --surface: #ffffff; --text-primary: #1a1a2e; --text-secondary: #999;
@@ -236,6 +236,7 @@
 
   <script>
     (function() {
+      window.__M_WORKER_VERSION__ = '2026-08-16-worker-final';
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
@@ -252,19 +253,10 @@
       // API Key 不放在前端；它已经保存在 Cloudflare Worker 的 OPENCODE_API_KEY Secret 中。
       const WORKER_API_URL = 'https://lively-breeze-3e11.534717068.workers.dev/';
       const WORKER_MODEL = 'deepseek-v4-flash';
-      const API_BASE_KEY = 'deepseek_api_base';
-      const MODEL_NAME_KEY = 'deepseek_model_name';
-
-      function getApiBase() {
-        // 故意忽略旧版本 localStorage 中的 Netlify 地址，避免继续走旧代理。
-        return WORKER_API_URL;
-      }
-      function getModelName() {
-        // Worker 当前固定调用 DeepSeek V4 Flash。
-        return WORKER_MODEL;
-      }
-      function saveApiBase(val) { /* 固定使用 Cloudflare Worker，不保存用户输入 */ }
-      function saveModelName(val) { /* 固定使用 DeepSeek V4 Flash */ }
+      // API 地址与模型由这里唯一决定。旧版本 localStorage 配置不会参与请求。
+      // API Key 只保存在 Cloudflare Worker 的 OPENCODE_API_KEY Secret 中。
+      localStorage.removeItem('deepseek_api_base');
+      localStorage.removeItem('deepseek_model_name');
 
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
@@ -498,8 +490,8 @@ ${compressedMemory || '无'}`;
       bindDraft($('userInput'),DRAFT_CHAT); bindDraft($('settingTextarea'),DRAFT_SETTING); bindDraft($('importTextarea'),DRAFT_IMPORT); bindDraft($('searchInput'),DRAFT_SEARCH);
       
       $('settingBtn').onclick = () => { 
-        $('apiBaseInput').value = getApiBase();
-        $('modelNameInput').value = getModelName();
+        $('apiBaseInput').value = WORKER_API_URL;
+        $('modelNameInput').value = WORKER_MODEL;
         $('settingTextarea').value = loadDraft(DRAFT_SETTING)||globalSetting; 
         $('settingModal').classList.add('active'); 
         $('moreMenu').classList.remove('active'); 
@@ -845,8 +837,8 @@ ${compressedMemory || '无'}`;
         if (old.length < 10) return;
         const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n');
         try {
-            const model = getModelName();
-            const baseUrl = getApiBase();
+            const model = WORKER_MODEL;
+            const baseUrl = WORKER_API_URL;
             const res = await fetch(baseUrl, {
               method:'POST',
               headers:{'Content-Type':'application/json'},
@@ -969,12 +961,12 @@ ${compressedMemory || '无'}`;
 M：${aiText}`;
 
         try {
-          const baseUrl = getApiBase();
+          const baseUrl = WORKER_API_URL;
           const res = await fetch(baseUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              model: getModelName(),
+              model: WORKER_MODEL,
               messages: [{ role: 'user', content: prompt }],
               stream: false,
               temperature: 0.1
@@ -1366,8 +1358,8 @@ M：${aiText}`;
         try {
           refreshSystemPrompt();
           const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
-          const model = getModelName();
-          const baseUrl = getApiBase(); // 完整的代理地址
+          const model = WORKER_MODEL;
+          const baseUrl = WORKER_API_URL; // 完整的代理地址
           
           // ====== 调试输出：在控制台打印实际请求的 URL ======
           console.log('🚀 实际请求地址:', baseUrl);
