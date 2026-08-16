@@ -278,12 +278,16 @@
           if (!Array.isArray(facts) || !facts.length) return;
           let changed = false;
           const validTypes = new Set(['preference','relationship','identity','plan','constraint','event','habit','other']);
+          const validStatuses = new Set(['candidate','stable']);
           for (const f of facts) {
             if (!validTypes.has(f.type)) { f.type = 'other'; changed = true; }
             if (!Number.isFinite(Number(f.importance))) { f.importance = 3; changed = true; }
             if (!Number.isFinite(Number(f.confidence))) { f.confidence = 0.8; changed = true; }
             if (!Number.isFinite(Number(f.mentions)) || Number(f.mentions) < 1) { f.mentions = 1; changed = true; }
             if (!Number.isFinite(Number(f.lastSeen))) { f.lastSeen = Number(f.time) || Date.now(); changed = true; }
+            if (!validStatuses.has(f.status)) { f.status = 'stable'; changed = true; }
+            if (!f.memoryClass) { f.memoryClass = ['preference','relationship','identity','plan','constraint','habit'].includes(f.type) ? 'long_term' : 'event'; changed = true; }
+            if (!Number.isFinite(Number(f.stability))) { f.stability = f.status === 'stable' ? Math.max(2, Number(f.mentions) || 1) : 1; changed = true; }
           }
           if (changed) localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts));
         } catch(e) { console.warn('记忆库迁移失败', e); }
@@ -405,9 +409,13 @@ ${compressedMemory || '无'}`;
               const mentions = Math.max(1, Number(f.mentions) || 1);
               const ageDays = Math.max(0, (now - (Number(f.time) || now)) / 86400000);
               const recency = Math.max(0, 2 - ageDays / 60);
-              const score = importance * 2 + Math.min(mentions, 5) + recency;
+              const statusBonus = f.status === 'stable' ? 8 : -20;
+              const confidenceBonus = Math.max(0, Math.min(1, Number(f.confidence) || 0.7)) * 3;
+              const subjectBonus = f.subject && f.subject !== '用户' ? 0.5 : 0;
+              const score = statusBonus + importance * 2 + Math.min(mentions, 5) + recency + confidenceBonus + subjectBonus;
               return { ...f, score };
             })
+            .filter(f => f.status === 'stable')
             .sort((a, b) => b.score - a.score)
             .slice(0, 80);
 
@@ -427,6 +435,8 @@ ${compressedMemory || '无'}`;
             const type = typeNames[f.type] || '其他';
             const entity = f.entity || '用户';
             memoryText += `- [${type}] ${f.fact}`;
+            if (f.subject && f.subject !== '用户') memoryText += `（主体：${f.subject}）`;
+            if (Number(f.confidence) < 0.85) memoryText += '（置信度较低，仅作参考）';
             if (f.importance >= 5) memoryText += '（重要）';
             memoryText += '\n';
           }
@@ -884,20 +894,55 @@ ${compressedMemory || '无'}`;
 
 【不要记住】
 1. 一次性的闲聊、当天吃什么、临时心情、普通寒暄。
-2. 仅在这一轮出现、没有长期价值的动作或事件。
-3. 助手自己说出的内容；quote 必须来自用户原话。
-4. 猜测、推理、心理分析、可能性、模型自己补全的信息。
-5. 与已有事实只是措辞不同、但本质相同的重复信息。
-6. 任何没有明确证据的事实。
+2. “我现在很开心/难过/生气/累/焦虑”等当下状态；除非用户明确说明这是长期、持续的状态。
+3. 具体的一次性事件、当天发生的事情、刚刚做过的事情；除非它明确体现出长期偏好、长期计划、稳定关系或会持续影响以后回答的事实。
+4. 助手自己说出的内容；quote 必须来自用户原话。
+5. 猜测、推理、心理分析、可能性、模型自己补全的信息。
+6. 与已有事实只是措辞不同、但本质相同的重复信息。
+7. 任何没有明确证据的事实。
+
+【主体归属——非常重要】
+- 每条记忆都必须判断“这是谁的事情”，不要默认全部属于用户。
+- entity 表示这条事实的主体。只有事实明确属于用户时才写“用户”；如果是父母、阿慕、朋友、宠物等，必须写对应的人/对象。
+- 如果一句话是“我爸最近工作很忙”，主体应是“我爸”，而不是“用户”。
+- 如果一句话是“阿慕最近很忙”，主体应是“阿慕”，而不是“用户”。
+- 如果主体不确定，不要猜，降低 confidence；无法确定时不要保存。
+- fact 必须与 entity 保持一致，不能出现“实体写阿慕、事实却描述用户”的错配。
+
+【记忆类型判断】
+- preference：稳定偏好、喜欢/不喜欢，且预计未来仍有用。
+- relationship：稳定的人际关系或长期关系事实。
+- identity：用户明确的长期身份、背景、长期生活情况。
+- plan：明确的持续计划、项目或长期目标，而不是“今天打算做什么”。
+- constraint：以后回答时需要遵守的长期要求或限制。
+- habit：反复出现、稳定存在的习惯或行为模式；一次行为不算习惯。
+- event：只有真正重要、未来再次提及时仍有价值的长期经历才能使用；普通一次性事件不要记。
+- other：只有确实具有长期价值、但无法归入以上类型时使用。
+
+【记忆稳定性】
+- memoryClass 只能是：long_term（稳定长期信息）或 event（具体经历/事件）。
+- status 只能是：candidate（候选）或 stable（稳定记忆）。
+- 第一次出现的偏好、习惯、计划、长期信息，通常只能标记为 candidate；除非用户明确说“以后记住/请记住/这是一直如此”等，或是非常明确的身份、关系、长期约束。
+- 只有已经重复表达、明显长期稳定，或用户明确要求记住的信息，才标记 stable。
+- 一次性的具体事件默认只能是 candidate，不能因为事情很具体就变成 stable。
+- stability 表示稳定程度：1=只出现一次，2=出现过至少两次或明确长期，3=非常稳定。
+- confidence 表示“用户原话对这条事实的支持有多确定”，不是重要度。明确陈述可给 0.9-1.0；“可能/好像/应该/也许/想过”等不确定表达最多 0.6。
+- 如果只是模型根据上下文推断出来的，confidence 必须低于 0.7，最终不要保存。
+- 如果发现与已有信息可能冲突，不要替换旧信息；返回新信息，并尽量让它代表“当前状态”。
+- 涉及“以前/曾经/现在/最近/已经/不再/又开始/重新”等时间变化时，要把当前状态与过去状态区分开，不要把过去状态写成当前事实。
+
+【特别重要】
+如果一句话同时包含“当下状态 + 具体原因/事件”，不要因为原因具体就把原因自动保存。
+例如：“我今天把事情解决了，现在很开心。”通常应该输出 []。
+只有当用户明确表达“这件事让我长期改变/以后会持续影响我/这是我长期计划的一部分”等长期意义时，才考虑保存。
 
 【重要】
-- 宁可少记，也不要乱记。
+- 宁可少记，也不要乱记。长期陪伴 AI 最重要的是记忆质量，而不是数量。
 - 一轮最多输出 5 条。
 - importance 只能是 1-5：5=非常重要且长期稳定，4=明显有长期价值，3=有一定长期价值，1-2=通常不应保存。
 - 只输出 importance >= 3 的条目。
 - confidence 只能是 0-1，表示用户原话对该事实的支持程度。
-- type 必须从 preference / relationship / identity / plan / constraint / event / habit / other 中选择。
-- fact 必须用第三人称、简洁、客观的完整句子。
+- fact 必须用第三人称、简洁、客观的完整句子，而且必须描述长期有价值的信息，而不是复述本轮发生的事情。
 - quote 必须逐字摘录用户原话中的一小段，不能改写。
 - 如果没有值得长期保存的信息，输出 []。
 - 只输出 JSON 数组，不要 Markdown，不要解释。
@@ -905,10 +950,13 @@ ${compressedMemory || '无'}`;
 格式：
 [
   {
-    "entity": "实体名",
+    "entity": "主体名（这条事实是谁的）",
     "relation": "关系",
     "object": "对象",
     "type": "preference",
+    "memoryClass": "long_term",
+    "status": "candidate",
+    "stability": 1,
     "importance": 4,
     "confidence": 0.95,
     "fact": "完整客观事实句子",
@@ -956,20 +1004,34 @@ M：${aiText}`;
             .replace(/[，。！？、；：""''（）()【】\[\]\s]/g, '');
 
           const valid = extracted
-            .filter(f =>
-              f &&
-              f.fact &&
-              f.quote &&
-              String(f.quote).trim() &&
-              Number(f.importance || 0) >= 3 &&
-              Number(f.confidence ?? 0) >= 0.7
-            )
+            .filter(f => {
+              if (!f || !f.fact || !f.quote || !String(f.quote).trim()) return false;
+              if (Number(f.importance || 0) < 3 || Number(f.confidence ?? 0) < 0.7) return false;
+
+              // 二次防线：临时状态和普通一次性事件不进入长期记忆。
+              const type = String(f.type || 'other').trim().toLowerCase();
+              if (type === 'temporary_state' || type === 'current_state' || type === 'mood') return false;
+
+              // 具体事件默认只作为候选，不直接进入长期记忆；极重要且高度确定的事件也先观察一次。
+              if (type === 'event') { f.status = 'candidate'; f.memoryClass = 'event'; }
+
+              // 主体防线：如果事实明确提到“我/用户”以外的人名或关系主体，却把 entity 写成用户，降低可信度并拒绝保存。
+              const entity = String(f.entity || '').trim();
+              const fact = String(f.fact || '');
+              const otherSubjectHint = /(?:我爸|我妈|爸爸|妈妈|父亲|母亲|阿慕|朋友|同事|男朋友|女朋友|老婆|老公|猫|狗)/.test(fact);
+              if (entity === '用户' && otherSubjectHint && !/(?:我|用户)/.test(fact.slice(0, 12))) return false;
+
+              return true;
+            })
             .slice(0, 5)
             .map(f => ({
               entity: String(f.entity || '用户').trim(),
               relation: String(f.relation || '').trim(),
               object: String(f.object || '').trim(),
               type: ['preference','relationship','identity','plan','constraint','event','habit','other'].includes(f.type) ? f.type : 'other',
+              memoryClass: f.memoryClass === 'event' ? 'event' : 'long_term',
+              status: f.status === 'stable' ? 'stable' : 'candidate',
+              stability: Math.max(1, Math.min(3, Number(f.stability) || 1)),
               importance: Math.max(3, Math.min(5, Number(f.importance) || 3)),
               confidence: Math.max(0, Math.min(1, Number(f.confidence) || 0.7)),
               fact: String(f.fact).trim(),
@@ -978,6 +1040,15 @@ M：${aiText}`;
               lastSeen: now,
               mentions: 1
             }));
+
+          // 第一次出现默认是候选；明确“记住”或稳定身份/关系/约束可直接成为稳定记忆。
+          const explicitRemember = /(?:记住|记下来|以后别忘|不要忘|请记住|一直都是|长期以来)/i.test(userText);
+          for (const f of valid) {
+            if (explicitRemember || ((['identity','relationship','constraint'].includes(f.type)) && f.confidence >= 0.9 && f.importance >= 4)) {
+              f.status = 'stable';
+              f.stability = 3;
+            }
+          }
 
           for (const f of valid) {
             // 先按原话去重；同一用户原话重复出现时只更新引用时间。
@@ -998,10 +1069,28 @@ M：${aiText}`;
               existing.time = Math.max(Number(existing.time) || 0, now);
               existing.importance = Math.max(Number(existing.importance) || 3, f.importance);
               existing.confidence = Math.max(Number(existing.confidence) || 0.7, f.confidence);
+              existing.stability = Math.min(3, Math.max(Number(existing.stability) || 1, Number(f.stability) || 1) + 1);
+              if (existing.status !== 'stable' && (f.status === 'stable' || existing.stability >= 2)) existing.status = 'stable';
               if (f.fact.length > String(existing.fact || '').length) existing.fact = f.fact;
               if (f.quote && f.quote !== '手动添加') existing.quote = f.quote;
               if (!existing.type) existing.type = f.type;
             } else {
+              // 同一实体+关系+类型但对象不同：不要覆盖旧记忆，标记为可能冲突，让最新条目代表当前状态。
+              const conflict = allFacts.find(a =>
+                normalize(a.entity) === normalize(f.entity) &&
+                normalize(a.relation) === normalize(f.relation) &&
+                (a.type || 'other') === f.type &&
+                normalize(a.object) !== normalize(f.object)
+              );
+              if (conflict) {
+                const group = conflict.conflictGroup || ('cg_' + now + '_' + Math.random().toString(36).slice(2, 7));
+                conflict.conflictGroup = group;
+                conflict.conflict = true;
+                f.conflictGroup = group;
+                f.conflict = true;
+                f.status = 'stable';
+                f.stability = Math.max(2, Number(f.stability) || 1);
+              }
               allFacts.push(f);
             }
           }
@@ -1133,7 +1222,7 @@ M：${aiText}`;
         const container = document.getElementById('memoryDisplay');
         if (!facts.length) { container.innerHTML = '<div style="padding:12px;color:var(--text-secondary);">暂无记忆，聊天后自动提取或点击“开始整合”。</div>'; return; }
         let html = '';
-        facts.forEach((f, index) => { html += `<div class="memory-item" data-index="${index}"><div class="meta"><span><strong>实体：</strong>${f.entity}</span><span><strong>关系：</strong>${f.relation}</span><span><strong>对象：</strong>${f.object}</span><span><strong>类型：</strong>${({preference:"偏好",relationship:"关系",identity:"长期信息",plan:"计划",constraint:"约束",event:"重要经历",habit:"习惯",other:"其他"})[f.type] || "其他"}</span><span><strong>重要度：</strong>${f.importance || 3}/5</span><span><strong>提及：</strong>${f.mentions || 1}</span><span><strong>更新时间：</strong>${new Date(f.lastSeen || f.time || Date.now()).toLocaleDateString()}</span></div><div class="fact-text" id="fact-display-${index}">${f.fact}</div><div class="fact-edit" id="fact-edit-${index}" style="display:none;"><input class="memory-edit-input" id="edit-entity-${index}" value="${f.entity}" placeholder="实体"><input class="memory-edit-input" id="edit-relation-${index}" value="${f.relation}" placeholder="关系"><input class="memory-edit-input" id="edit-object-${index}" value="${f.object}" placeholder="对象"><textarea class="memory-edit-input" id="edit-fact-${index}" rows="2" style="resize:vertical;">${f.fact}</textarea></div><div class="actions"><button class="edit-btn" onclick="window.toggleEditFact(${index})">✏️ 编辑</button><button class="del-btn" onclick="window.deleteFact(${index})">🗑️ 删除</button><button class="edit-btn" id="save-edit-${index}" style="display:none;background:#4caf50;" onclick="window.saveFact(${index})">💾 保存</button><button class="edit-btn" id="cancel-edit-${index}" style="display:none;background:#888;" onclick="window.cancelEditFact(${index})">取消</button></div></div>`; });
+        facts.forEach((f, index) => { html += `<div class="memory-item" data-index="${index}"><div class="meta"><span><strong>主体：</strong>${f.entity}</span><span><strong>关系：</strong>${f.relation}</span><span><strong>对象：</strong>${f.object}</span><span><strong>类型：</strong>${({preference:"偏好",relationship:"关系",identity:"长期信息",plan:"计划",constraint:"约束",event:"重要经历",habit:"习惯",other:"其他"})[f.type] || "其他"}</span><span><strong>状态：</strong>${f.status === 'stable' ? '🟢 稳定' : '🟡 观察中'}</span><span><strong>稳定度：</strong>${f.stability || 1}/3</span><span><strong>重要度：</strong>${f.importance || 3}/5</span><span><strong>置信度：</strong>${Math.round((Number(f.confidence) || 0.7) * 100)}%</span><span><strong>提及：</strong>${f.mentions || 1}</span><span><strong>更新时间：</strong>${new Date(f.lastSeen || f.time || Date.now()).toLocaleDateString()}</span></div><div class="fact-text" id="fact-display-${index}">${f.fact}</div>${f.conflict ? '<div style="font-size:.72rem;color:#ff9800;">⚠️ 这条记忆可能与较早的信息发生变化，AI 会优先参考较新的表达。</div>' : ''}${f.status === 'candidate' ? '<div style="font-size:.72rem;color:var(--text-secondary);">🟡 候选记忆：AI 会继续观察它是否稳定出现；再次出现或明确要求记住后，才会进入长期记忆。</div>' : ''}<div class="fact-edit" id="fact-edit-${index}" style="display:none;"><input class="memory-edit-input" id="edit-entity-${index}" value="${f.entity}" placeholder="实体"><input class="memory-edit-input" id="edit-relation-${index}" value="${f.relation}" placeholder="关系"><input class="memory-edit-input" id="edit-object-${index}" value="${f.object}" placeholder="对象"><textarea class="memory-edit-input" id="edit-fact-${index}" rows="2" style="resize:vertical;">${f.fact}</textarea></div><div class="actions"><button class="edit-btn" onclick="window.toggleEditFact(${index})">✏️ 编辑</button><button class="del-btn" onclick="window.deleteFact(${index})">🗑️ 删除</button><button class="edit-btn" id="save-edit-${index}" style="display:none;background:#4caf50;" onclick="window.saveFact(${index})">💾 保存</button><button class="edit-btn" id="cancel-edit-${index}" style="display:none;background:#888;" onclick="window.cancelEditFact(${index})">取消</button></div></div>`; });
         container.innerHTML = html;
       }
 
