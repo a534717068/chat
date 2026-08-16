@@ -155,12 +155,7 @@
   <div class="setup-bar" id="setupBar" style="display:none;">
     <span>☁️ API 已通过 Cloudflare Worker 连接 OpenCode Go</span>
   </div>
-  <div class="token-panel" id="tokenPanel" style="display:none;">
-    <span>上次消耗：<strong id="lastTokens">0</strong> tokens / <strong id="lastCost">0.0000</strong> 元</span>
-    <span>剩余充值：<strong id="remainingTokens" class="editable" title="点击设置总充值金额">0</strong> tokens / <strong id="remainingCost" class="editable" title="点击设置总充值金额">0.0000</strong> 元</span>
-  </div>
-  <div class="model-indicator" id="modelIndicator">当前模型：<strong id="currentModelDisplay">deepseek-v4-flash</strong></div>
-  <div class="env-indicator" id="envIndicator">
+<div class="env-indicator" id="envIndicator">
     <span class="weather-icon" id="weatherIcon" title="点击切换天气">☀️</span>
     <span id="envText">获取环境中...</span>
   </div>
@@ -175,7 +170,6 @@
     <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
-  <div class="tip">☁️ API Key 保存在 Cloudflare Worker · 点击剩余充值金额可设置本地统计的总充值额</div>
   <div class="multi-select-bar" id="multiSelectBar">
     <span>已选择 <strong id="multiSelectCount">0</strong> 条消息</span>
     <div>
@@ -586,7 +580,7 @@ ${compressedMemory || '无'}`;
       
       // Worker 模式无需用户输入 API Key。
       $('setupBar').style.display = 'none';
-      $('tokenPanel').style.display = 'flex';
+      // tokenPanel 已移除
       
       const chatBox = $('chatBox'), scrollBtn = $('scrollToBottomBtn');
       function nearBottom() { return chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60; }
