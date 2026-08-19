@@ -359,7 +359,22 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      function buildSystemPrompt() {
+      // 根据当前用户消息召回相关长期记忆，避免每次把整库记忆塞进请求。
+      function memoryTokens(text) {
+        const raw = String(text || '').toLowerCase();
+        const latin = raw.match(/[a-z0-9_]{2,}/g) || [];
+        const zh = raw.match(/[\u4e00-\u9fff]{2,}/g) || [];
+        const chunks = [];
+        for (const part of zh) {
+          chunks.push(part);
+          for (let n = 2; n <= Math.min(4, part.length); n++) {
+            for (let i = 0; i + n <= part.length; i++) chunks.push(part.slice(i, i + n));
+          }
+        }
+        return [...new Set([...latin, ...chunks].filter(x => x.length >= 2))];
+      }
+
+      function buildSystemPrompt(queryText = '') {
         let p = `
 【绝对禁令】你永远只能用“你”来称呼我，绝对不可以用“她”、“他”、“它”、“对方”、“这位”等任何第三人称指代我。这是最优先规则，违反就是错误。
 
@@ -389,27 +404,40 @@
 当用户问你关于过去的事情、问你记不记得某件事时，你只能根据下方【记忆条目】中的内容回答。如果记忆中没有，就说"我不记得了"，绝对禁止编造。
 
 【对话摘要】
-${compressedMemory || '无'}`;
+${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
 
         try {
           const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
           const now = Date.now();
+          const query = String(queryText || messages.filter(m => m.role === 'user').at(-1)?.content || '');
+          const qTokens = memoryTokens(query);
           const ranked = facts
-            .filter(f => f && f.fact)
+            .filter(f => f && f.fact && f.status === 'stable')
             .map(f => {
               const importance = Math.max(1, Math.min(5, Number(f.importance) || 3));
               const mentions = Math.max(1, Number(f.mentions) || 1);
-              const ageDays = Math.max(0, (now - (Number(f.time) || now)) / 86400000);
+              const ageDays = Math.max(0, (now - (Number(f.lastSeen || f.time) || now)) / 86400000);
               const recency = Math.max(0, 2 - ageDays / 60);
-              const statusBonus = f.status === 'stable' ? 8 : -20;
-              const confidenceBonus = Math.max(0, Math.min(1, Number(f.confidence) || 0.7)) * 3;
-              const subjectBonus = f.subject && f.subject !== '用户' ? 0.5 : 0;
-              const score = statusBonus + importance * 2 + Math.min(mentions, 5) + recency + confidenceBonus + subjectBonus;
-              return { ...f, score };
+              const confidence = Math.max(0, Math.min(1, Number(f.confidence) || 0.7));
+              const haystack = `${f.fact} ${f.entity || ''} ${f.subject || ''} ${f.relation || ''} ${f.object || ''}`.toLowerCase();
+              const hits = qTokens.reduce((n, t) => n + (haystack.includes(t) ? 1 : 0), 0);
+              const relevance = qTokens.length ? Math.min(8, hits * 2.2) : 0;
+              const core = importance >= 5 ? 2 : 0;
+              const score = relevance + core + importance * 1.4 + Math.min(mentions, 5) * 0.8 + recency + confidence * 2;
+              return { ...f, score, hits };
             })
-            .filter(f => f.status === 'stable')
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 80);
+            .sort((a, b) => b.score - a.score);
+
+          // 相关记忆优先；再补少量高价值核心记忆。最多 18 条，而不是原来的 80 条。
+          let selected = qTokens.length
+            ? ranked.filter(f => f.hits > 0).slice(0, 14)
+            : ranked.slice(0, 14);
+          const selectedIds = new Set(selected.map(f => f.id));
+          for (const f of ranked) {
+            if (selected.length >= 18) break;
+            if (!selectedIds.has(f.id) && f.importance >= 5) { selected.push(f); selectedIds.add(f.id); }
+          }
+          selected = selected.slice(0, 18);
 
           let memoryText = '';
           const typeNames = {
@@ -676,7 +704,8 @@ ${compressedMemory || '无'}`;
       }
 
       function getApiMessages() {
-        refreshSystemPrompt();
+        const latestUserText = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+        refreshSystemPrompt(latestUserText);
         const systemMsg = messages[0];
         const nonSystem = messages.filter(m => m.role !== 'system');
         
@@ -857,7 +886,7 @@ ${compressedMemory || '无'}`;
               const d = await res.json();
               const s = d.choices[0].message.content.trim();
               compressedMemory = compressedMemory ? compressedMemory+'\n'+s : s;
-              if (compressedMemory.length>5000) compressedMemory = compressedMemory.slice(-5000);
+              if (compressedMemory.length>3500) compressedMemory = compressedMemory.slice(-3500);
               localStorage.setItem(MEMORY_KEY, compressedMemory);
               refreshSystemPrompt();
               saveAll();
@@ -1364,6 +1393,8 @@ M：${aiText}`;
           // ====== 调试输出：在控制台打印实际请求的 URL ======
           console.log('🚀 实际请求地址:', baseUrl);
           console.log('📦 请求体:', { model, messages: apiMsgs });
+          const approxChars = apiMsgs.reduce((n, m) => n + String(m.content || '').length, 0);
+          console.log(`📉 本次请求上下文约 ${approxChars} 字符（仅为粗略估算，不等于实际计费 Token）`);
 
           const res = await fetch(baseUrl, { 
             method: 'POST', 
