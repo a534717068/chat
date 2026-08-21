@@ -63,6 +63,16 @@
     .input-area { background: var(--surface); padding: 8px 10px; border-top: 1px solid var(--border); display: flex; gap: 6px; flex-shrink: 0; align-items: flex-end; }
     .input-area textarea { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 10px; font-size: 0.9rem; resize: none; max-height: 100px; font-family: inherit; background: var(--surface); color: var(--text-primary); }
     .input-area button { padding: 8px 14px; background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 10px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
+    .image-upload-btn { padding: 8px 11px !important; font-size: 1rem !important; flex: 0 0 auto; }
+    .image-upload-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .image-preview-bar { display: none; gap: 8px; padding: 7px 10px; background: var(--surface); border-top: 1px solid var(--border); overflow-x: auto; }
+    .image-preview-bar.active { display: flex; }
+    .image-preview-item { position: relative; flex: 0 0 auto; width: 72px; height: 72px; border-radius: 9px; overflow: hidden; border: 1px solid var(--border); background: var(--bg); }
+    .image-preview-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .image-preview-item button { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border: none; border-radius: 50%; background: rgba(0,0,0,.65); color: #fff; cursor: pointer; line-height: 20px; padding: 0; font-size: 13px; }
+    .message-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+    .message-images img { display: block; max-width: min(280px, 78vw); max-height: 280px; border-radius: 10px; cursor: pointer; object-fit: contain; background: rgba(0,0,0,.05); }
+    .image-hint { font-size: 0.7rem; color: var(--text-secondary); padding: 0 10px 5px; background: var(--surface); }
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--modal-overlay); z-index: 1000; justify-content: center; align-items: center; padding: 20px; }
     .modal-overlay.active { display: flex; }
     .modal { background: var(--modal-bg); border-radius: 14px; padding: 16px; width: 100%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; gap: 10px; }
@@ -150,8 +160,12 @@
     </div>
   </div>
   <div class="chat-container"><div class="chat-box" id="chatBox"></div><button class="scroll-to-bottom" id="scrollToBottomBtn">↓</button></div>
+  <div id="imagePreviewBar" class="image-preview-bar"></div>
+  <div id="imageHint" class="image-hint" style="display:none;">已选择图片。发送后会作为图片输入给当前模型。</div>
   <div class="input-area">
-    <textarea id="userInput" rows="1" placeholder="输入消息..."></textarea>
+    <input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style="display:none;">
+    <button id="imageUploadBtn" class="image-upload-btn" title="上传图片" aria-label="上传图片">📎</button>
+    <textarea id="userInput" rows="1" placeholder="输入消息，或先上传图片..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
   <div class="multi-select-bar" id="multiSelectBar">
@@ -207,7 +221,7 @@
         <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
       </select>
       <button class="btn-cancel" id="refreshModelsBtn" style="width:100%;margin-bottom:8px;">🔄 刷新 OpenCode Go 模型</button>
-      <div id="modelStatus" class="format-hint" style="margin-bottom:8px;">模型列表由 Cloudflare Worker 从 OpenCode Go 自动获取。</div>
+      <div id="modelStatus" class="format-hint" style="margin-bottom:8px;">模型列表由 Cloudflare Worker 从 OpenCode Go 自动获取。</div><div class="format-hint" style="margin-bottom:8px;">🖼️ 图片聊天：选择支持视觉输入的模型（例如 DeepSeek V4 Flash Vision Exp）后即可上传图片。</div>
       <input type="password" id="directApiKeyInput" placeholder="OpenCode API Key（仅直连模式需要）" style="display:none;width:100%;margin-bottom:8px;">
       <div id="directKeyHint" class="format-hint" style="display:none;margin-bottom:8px;">⚠️ 直连模式会把 Key 保存在此浏览器的 localStorage。不要在公共电脑使用。推荐平时使用 Cloudflare Worker 模式。</div>
       <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
@@ -245,7 +259,7 @@
 
   <script>
     (function() {
-      window.__M_WORKER_VERSION__ = '2026-08-16-worker-final';
+      window.__M_WORKER_VERSION__ = '2026-08-22-image-upload-go';
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
@@ -257,6 +271,11 @@
       const MEMORY_FACTS_KEY = 'memory_facts_v3', MEMORY_GRAPH_KEY = 'memory_graph_v3';
       const REPROGRESS_KEY = 'reprocess_progress_index';
       const EXTRACT_INTERVAL = 5;
+      const MAX_IMAGE_COUNT = 3;
+      const MAX_IMAGE_DIMENSION = 1600;
+      const IMAGE_JPEG_QUALITY = 0.86;
+      let pendingImages = [];
+
 
       // ===== Cloudflare Worker / OpenCode Go 配置 =====
       // API Key 不放在前端；它已经保存在 Cloudflare Worker 的 OPENCODE_API_KEY Secret 中。
@@ -543,14 +562,13 @@
 如果时间不在这个范围，则不需要提醒。这个规则优先级极高，必须执行。
 
 【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
-**【叙述视角】你永远保持第一人称（我）和第二人称（你），就像在和你面前的人说话。
-绝对不要描写用户的动作、表情、心理、情绪或语言。**
+**【叙述视角】你永远保持第一人称（我）和第二人称（你），就像在和你面前的人说话。**
 
 【回复格式要求——分段规则】
 你的回复必须分段清晰。当出现以下情况时必须换行独立成段：
 - 对话（直接引语）：每一句对话单独一段，引号和对话内容在同一段
-- 动作描写：动作、姿态变化等独立成段
-- 心理活动：内心想法、感受独立成段
+- 动作描写：你的动作、姿态变化等独立成段
+- 心理活动：你的内心想法、感受独立成段
 - 场景转换：从一个场景切换到另一个场景时换行
 不要把所有内容挤在同一个段落里。分段可以控制叙述节奏，让阅读更有呼吸感。
 
@@ -856,6 +874,182 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
         return result.trim();
       }
 
+      function getMessageText(msg) {
+        if (!msg) return '';
+        return typeof msg.content === 'string' ? msg.content : '';
+      }
+
+      function getApiContent(msg) {
+        const text = getMessageText(msg);
+        const attachments = Array.isArray(msg?.attachments) ? msg.attachments : [];
+
+        if (!attachments.length) return text;
+
+        const parts = [];
+        if (text.trim()) {
+          parts.push({ type: 'text', text });
+        } else {
+          parts.push({ type: 'text', text: '请分析我上传的图片。' });
+        }
+
+        for (const item of attachments) {
+          if (item && typeof item.dataUrl === 'string' && item.dataUrl.startsWith('data:image/')) {
+            parts.push({
+              type: 'image_url',
+              image_url: { url: item.dataUrl }
+            });
+          }
+        }
+
+        return parts;
+      }
+
+      function escapeHtml(s) {
+        return String(s ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function renderMessageImages(attachments) {
+        if (!Array.isArray(attachments) || !attachments.length) return '';
+        return `<div class="message-images">${
+          attachments.map((a, i) => {
+            const src = typeof a?.dataUrl === 'string' ? a.dataUrl : '';
+            if (!src.startsWith('data:image/')) return '';
+            return `<img src="${src}" alt="上传的图片 ${i + 1}" title="点击查看大图" onclick="window._viewImage(this.src)">`;
+          }).join('')
+        }</div>`;
+      }
+
+      window._viewImage = function(src) {
+        if (!src) return;
+        const w = window.open('', '_blank');
+        if (!w) return;
+        w.document.write(`<title>图片</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${src}" style="max-width:100%;max-height:100vh;object-fit:contain;"></body>`);
+        w.document.close();
+      };
+
+      function updateImagePreview() {
+        const bar = $('imagePreviewBar');
+        const hint = $('imageHint');
+        if (!bar) return;
+
+        bar.innerHTML = '';
+
+        if (!pendingImages.length) {
+          bar.classList.remove('active');
+          if (hint) hint.style.display = 'none';
+          return;
+        }
+
+        bar.classList.add('active');
+        if (hint) hint.style.display = '';
+
+        pendingImages.forEach((img, index) => {
+          const item = document.createElement('div');
+          item.className = 'image-preview-item';
+          item.innerHTML = `
+            <img src="${img.dataUrl}" alt="待发送图片">
+            <button type="button" title="移除图片">×</button>
+          `;
+          item.querySelector('button').onclick = () => {
+            pendingImages.splice(index, 1);
+            updateImagePreview();
+          };
+          bar.appendChild(item);
+        });
+      }
+
+      function fileToCompressedDataUrl(file) {
+        return new Promise((resolve, reject) => {
+          if (!file || !file.type.startsWith('image/')) {
+            reject(new Error('请选择图片文件。'));
+            return;
+          }
+
+          const reader = new FileReader();
+
+          reader.onload = () => {
+            const img = new Image();
+
+            img.onload = () => {
+              let w = img.naturalWidth;
+              let h = img.naturalHeight;
+
+              if (!w || !h) {
+                reject(new Error('无法读取图片尺寸。'));
+                return;
+              }
+
+              const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(w, h));
+              w = Math.max(1, Math.round(w * scale));
+              h = Math.max(1, Math.round(h * scale));
+
+              const canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = h;
+
+              const ctx = canvas.getContext('2d', { alpha: false });
+              ctx.fillStyle = '#fff';
+              ctx.fillRect(0, 0, w, h);
+              ctx.drawImage(img, 0, 0, w, h);
+
+              const dataUrl = canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY);
+
+              // 防止单张图片过大导致 localStorage 很快爆掉
+              if (dataUrl.length > 900000) {
+                const smaller = canvas.toDataURL('image/jpeg', 0.72);
+                resolve(smaller);
+              } else {
+                resolve(dataUrl);
+              }
+            };
+
+            img.onerror = () => reject(new Error('图片读取失败。'));
+            img.src = reader.result;
+          };
+
+          reader.onerror = () => reject(new Error('读取图片文件失败。'));
+          reader.readAsDataURL(file);
+        });
+      }
+
+      async function handleImageFiles(files) {
+        const selected = Array.from(files || []).filter(f => f.type && f.type.startsWith('image/'));
+
+        if (!selected.length) return;
+
+        const room = MAX_IMAGE_COUNT - pendingImages.length;
+        if (room <= 0) {
+          alert(`一次最多上传 ${MAX_IMAGE_COUNT} 张图片。`);
+          return;
+        }
+
+        const useFiles = selected.slice(0, room);
+
+        if (selected.length > room) {
+          alert(`一次最多上传 ${MAX_IMAGE_COUNT} 张图片，已只选择前 ${room} 张。`);
+        }
+
+        for (const file of useFiles) {
+          try {
+            const dataUrl = await fileToCompressedDataUrl(file);
+            pendingImages.push({
+              name: file.name,
+              dataUrl
+            });
+          } catch (e) {
+            console.warn('图片处理失败', e);
+            alert(`${file.name}：${e.message}`);
+          }
+        }
+
+        updateImagePreview();
+      }
+
       function getApiMessages() {
         const latestUserText = [...messages].reverse().find(m => m.role === 'user')?.content || '';
         refreshSystemPrompt(latestUserText);
@@ -913,7 +1107,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
           if (msg.role === 'system') return;
           const row = document.createElement('div'); row.className = `message-row ${msg.role}`; row.dataset.index = idx;
           const timeStr = formatTime(msg.time || Date.now());
-          let content = typeof msg.content === 'string' ? msg.content : '[图片]';
+          let content = typeof msg.content === 'string' ? msg.content : ''; if (!content && Array.isArray(msg.attachments) && msg.attachments.length) content = '<span style="opacity:.7;">图片</span>';
           if (msg.role === 'assistant') { content = formatAssistantContent(content); }
           if (searchKeyword) { const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); content = content.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>'); }
           let btns = '';
@@ -954,7 +1148,8 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
             return;
           }
           
-          row.innerHTML = `<div class="time-label">${timeStr}</div><div class="bubble-row">${checkboxHTML}<div class="bubble-actions">${btns}</div><div class="bubble">${content}</div></div>${verHTML}`;
+          const imageHTML = renderMessageImages(msg.attachments);
+          row.innerHTML = `<div class="time-label">${timeStr}</div><div class="bubble-row">${checkboxHTML}<div class="bubble-actions">${btns}</div><div class="bubble">${imageHTML}${content}</div></div>${verHTML}`;
           chatBox.appendChild(row);
         });
         if (multiSelectMode) {
@@ -1509,7 +1704,7 @@ M：${aiText}`;
       document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
       // ========== 核心发送函数（带调试日志） ==========
-      async function sendToAPI(text) {
+      async function sendToAPI(text, attachments = []) {
         const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
         let userMsg;
         if (isValidEdit) {
@@ -1524,6 +1719,7 @@ M：${aiText}`;
           }
           messages = messages.slice(0, editingIdx + 1);
           parent.content = text;
+          if (attachments && attachments.length) parent.attachments = attachments.slice(0, MAX_IMAGE_COUNT);
           parent.time = Date.now();
           parent.history.push({ content: text, reply: '', time: parent.time });
           parent.historyIndex = parent.history.length - 1;
@@ -1531,7 +1727,7 @@ M：${aiText}`;
           editingIdx = -1;
         } else {
           editingIdx = -1;
-          userMsg = { role: 'user', content: text, id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 };
+          userMsg = { role: 'user', content: text, attachments: Array.isArray(attachments) ? attachments.slice(0, MAX_IMAGE_COUNT) : [], id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 };
           const last = messages[messages.length - 1];
           if (last && last.role !== 'system') userMsg.parentId = last.id;
           messages.push(userMsg);
@@ -1541,7 +1737,7 @@ M：${aiText}`;
         const load = document.createElement('div'); load.className = 'message-row assistant'; load.innerHTML = '<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>'; chatBox.appendChild(load); chatBox.scrollTop = chatBox.scrollHeight;
         try {
           refreshSystemPrompt();
-          const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
+          const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: getApiContent(m) }));
           const target = getRequestTarget();
           const model = target.model;
           const baseUrl = target.url; // Worker 或 OpenCode 官方 API
@@ -1612,8 +1808,32 @@ M：${aiText}`;
         }
       }
 
-      $('sendBtn').onclick = () => { const t = $('userInput').value.trim(); if (t) { $('userInput').value = ''; sendToAPI(t); } };
-      $('userInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('sendBtn').click(); } };
+      $('imageUploadBtn').onclick = () => $('imageInput').click();
+
+      $('imageInput').addEventListener('change', async (e) => {
+        await handleImageFiles(e.target.files);
+        e.target.value = '';
+      });
+
+      $('sendBtn').onclick = () => {
+        const t = $('userInput').value.trim();
+        if (!t && !pendingImages.length) return;
+
+        const imgs = pendingImages.slice();
+        pendingImages = [];
+        updateImagePreview();
+
+        $('userInput').value = '';
+        sendToAPI(t, imgs);
+      };
+
+      $('userInput').onkeydown = e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          $('sendBtn').click();
+        }
+      };
+
       
       $('exportBtn').onclick = () => {
         const dataToExport = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system').map(m => ({
