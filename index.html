@@ -137,7 +137,7 @@
     </div>
   </div>
   <div class="setup-bar" id="setupBar" style="display:none;">
-    <span>☁️ API 已通过 Cloudflare Worker 连接 OpenCode Go</span>
+    <span id="setupStatusText">☁️ Cloudflare Worker → OpenCode Go</span>
   </div>
   <div class="env-indicator" id="envIndicator">
     <span class="weather-icon" id="weatherIcon" title="点击切换天气">☀️</span>
@@ -198,11 +198,20 @@
   <!-- 设定面板 -->
   <div class="modal-overlay" id="settingModal">
     <div class="modal">
-      <div class="format-hint" style="margin-bottom:8px;">☁️ API 通道：Cloudflare Worker → OpenCode Go</div>
-<input type="text" id="apiBaseInput" value="https://lively-breeze-3e11.534717068.workers.dev/" readonly>
-      <input type="text" id="modelNameInput" value="deepseek-v4-flash" readonly>
+      <div class="format-hint" style="margin-bottom:8px;">🔌 API 通道</div>
+      <select id="apiModeSelect" style="width:100%;margin-bottom:8px;">
+        <option value="worker">☁️ Cloudflare Worker → OpenCode Go（推荐）</option>
+        <option value="direct">⚡ OpenCode 官方 API 直连（本机 Key）</option>
+      </select>
+      <select id="modelSelect" style="width:100%;margin-bottom:8px;">
+        <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
+      </select>
+      <button class="btn-cancel" id="refreshModelsBtn" style="width:100%;margin-bottom:8px;">🔄 刷新 OpenCode Go 模型列表</button>
+      <div id="modelStatus" class="format-hint" style="margin-bottom:8px;">模型列表会从 OpenCode 自动获取。</div>
+      <input type="password" id="directApiKeyInput" placeholder="OpenCode API Key（仅直连模式需要）" style="display:none;width:100%;margin-bottom:8px;">
+      <div id="directKeyHint" class="format-hint" style="display:none;margin-bottom:8px;">⚠️ 直连模式会把 Key 保存在此浏览器的 localStorage。不要在公共电脑使用。推荐平时使用 Cloudflare Worker 模式。</div>
       <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
-      <div class="format-hint">API Key 不需要填写，已安全保存在 Cloudflare Worker Secret 中。API 地址和模型由程序固定。</div>
+      <div class="format-hint">Worker 模式不会在网页保存 API Key。直连模式仅适合你自己的设备。</div>
       <div class="modal-buttons">
         <button class="btn-import" id="settingSaveBtn">保存设定</button>
         <button class="btn-cancel" id="settingCancelBtn">取消</button>
@@ -252,11 +261,67 @@
       // ===== Cloudflare Worker / OpenCode Go 配置 =====
       // API Key 不放在前端；它已经保存在 Cloudflare Worker 的 OPENCODE_API_KEY Secret 中。
       const WORKER_API_URL = 'https://lively-breeze-3e11.534717068.workers.dev/';
-      const WORKER_MODEL = 'deepseek-v4-flash';
-      // API 地址与模型由这里唯一决定。旧版本 localStorage 配置不会参与请求。
-      // API Key 只保存在 Cloudflare Worker 的 OPENCODE_API_KEY Secret 中。
+      const OPENCODE_GO_URL = 'https://opencode.ai/zen/go/v1/chat/completions';
+      const OPENCODE_GO_MODELS_URL = 'https://opencode.ai/zen/go/v1/models';
+      const MODEL_KEY = 'm_selected_model_v3';
+      const API_MODE_KEY = 'm_api_mode_v3';
+      const DIRECT_KEY = 'm_opencode_direct_key_v3';
+      const DEFAULT_MODEL = 'deepseek-v4-flash';
       localStorage.removeItem('deepseek_api_base');
       localStorage.removeItem('deepseek_model_name');
+
+      function getSelectedModel(){ return localStorage.getItem(MODEL_KEY) || DEFAULT_MODEL; }
+      function setSelectedModel(v){ localStorage.setItem(MODEL_KEY, v || DEFAULT_MODEL); }
+      function getApiMode(){ return localStorage.getItem(API_MODE_KEY) || 'worker'; }
+      function setApiMode(v){ localStorage.setItem(API_MODE_KEY, v === 'direct' ? 'direct' : 'worker'); }
+      function getDirectKey(){ return localStorage.getItem(DIRECT_KEY) || ''; }
+      function setDirectKey(v){ if(v) localStorage.setItem(DIRECT_KEY, v); else localStorage.removeItem(DIRECT_KEY); }
+      function getRequestTarget(){
+        const direct = getApiMode() === 'direct';
+        return {
+          url: direct ? OPENCODE_GO_URL : WORKER_API_URL,
+          headers: direct && getDirectKey() ? { 'Content-Type':'application/json', 'Authorization':'Bearer '+getDirectKey() } : { 'Content-Type':'application/json' },
+          model: getSelectedModel(),
+          direct
+        };
+      }
+      function updateConnectionUI(){
+        const mode = getApiMode();
+        const sel = $('apiModeSelect'); if(sel) sel.value = mode;
+        const key = $('directApiKeyInput'); if(key){ key.style.display = mode === 'direct' ? '' : 'none'; key.value = getDirectKey(); }
+        const hint = $('directKeyHint'); if(hint) hint.style.display = mode === 'direct' ? '' : 'none';
+        const setup = $('setupStatusText'); if(setup) setup.textContent = mode === 'direct' ? '⚡ OpenCode 官方 API 直连' : '☁️ Cloudflare Worker → OpenCode Go';
+        const modelInput = $('modelNameInput'); if(modelInput) modelInput.value = getSelectedModel();
+      }
+      async function loadOpenCodeModels(){
+        const status=$('modelStatus');
+        try{
+          if(status) status.textContent='正在从 OpenCode 获取 Go 模型列表…';
+          const headers = getDirectKey() ? { 'Authorization':'Bearer '+getDirectKey() } : {};
+          // 优先通过 Worker，避免浏览器 CORS/Key 问题；Worker 需要支持 GET /models。
+          let r = await fetch(WORKER_API_URL + (WORKER_API_URL.endsWith('/')?'':'/') + 'models', {headers});
+          if(!r.ok && getDirectKey()) r = await fetch(OPENCODE_GO_MODELS_URL, {headers});
+          if(!r.ok) throw new Error('HTTP '+r.status);
+          const d=await r.json();
+          const arr=Array.isArray(d?.data)?d.data:(Array.isArray(d?.models)?d.models:[]);
+          const select=$('modelSelect'); if(!select) return;
+          const current=getSelectedModel(); select.innerHTML='';
+          const fallback=[{id:'deepseek-v4-flash',name:'DeepSeek V4 Flash'},{id:'deepseek-v4-flash-free',name:'DeepSeek V4 Flash Free'}];
+          const list=[...fallback];
+          for(const m of arr){ const id=m?.id||m?.model; if(id && !list.some(x=>x.id===id)) list.push({id,name:m?.name||id}); }
+          for(const m of list){ const o=document.createElement('option'); o.value=m.id; o.textContent=m.name; select.appendChild(o); }
+          select.value=list.some(x=>x.id===current)?current:list[0].id; setSelectedModel(select.value);
+          if(status) status.textContent='已加载 '+list.length+' 个模型；选择后立即生效。';
+        }catch(e){ if(status) status.textContent='模型列表获取失败，已保留内置模型。'; console.warn('OpenCode 模型列表获取失败',e); }
+      }
+      function initModelAndApiUI(){
+        const ms=$('modelSelect'); if(ms){ ms.value=getSelectedModel(); ms.addEventListener('change',()=>{ setSelectedModel(ms.value); updateConnectionUI(); }); }
+        const am=$('apiModeSelect'); if(am) am.addEventListener('change',()=>{ setApiMode(am.value); updateConnectionUI(); });
+        const dk=$('directApiKeyInput'); if(dk) dk.addEventListener('change',()=>setDirectKey(dk.value.trim()));
+        const rb=$('refreshModelsBtn'); if(rb) rb.addEventListener('click',loadOpenCodeModels);
+        updateConnectionUI();
+        loadOpenCodeModels();
+      }
 
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
@@ -285,6 +350,8 @@
         } catch(e) { console.warn('记忆库迁移失败', e); }
       }
       migrateMemorySchema();
+
+      initModelAndApiUI();
 
 
       let weatherCache = { desc: '获取中...', emoji: '🌤️', city: '' };
@@ -395,10 +462,10 @@
 【回复格式要求——分段规则】
 你的回复必须分段清晰。当出现以下情况时必须换行独立成段：
 - 对话（直接引语）：每一句对话单独一段，引号和对话内容在同一段
-- 动作描写：动作、姿态变化等独立成段
-- 心理活动：内心想法、感受独立成段
+- 动作描写：你的动作、姿态变化等独立成段
+- 心理活动：你的内心想法、感受独立成段
 - 场景转换：从一个场景切换到另一个场景时换行
-不要把所有内容挤在同一个段落里。分段可以控制叙述节奏，让阅读更有呼吸感。绝对不要描写用户的动作、表情、心理、情绪或语言。
+不要把所有内容挤在同一个段落里。分段可以控制叙述节奏，让阅读更有呼吸感。
 
 【关于过去对话的记忆——最高优先级铁律】
 当用户问你关于过去的事情、问你记不记得某件事时，你只能根据下方【记忆条目】中的内容回答。如果记忆中没有，就说"我不记得了"，绝对禁止编造。
@@ -518,8 +585,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
       bindDraft($('userInput'),DRAFT_CHAT); bindDraft($('settingTextarea'),DRAFT_SETTING); bindDraft($('importTextarea'),DRAFT_IMPORT); bindDraft($('searchInput'),DRAFT_SEARCH);
       
       $('settingBtn').onclick = () => { 
-        $('apiBaseInput').value = WORKER_API_URL;
-        $('modelNameInput').value = WORKER_MODEL;
+        updateConnectionUI();
         $('settingTextarea').value = loadDraft(DRAFT_SETTING)||globalSetting; 
         $('settingModal').classList.add('active'); 
         $('moreMenu').classList.remove('active'); 
@@ -866,11 +932,12 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
         if (old.length < 10) return;
         const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n');
         try {
-            const model = WORKER_MODEL;
-            const baseUrl = WORKER_API_URL;
+            const target = getRequestTarget();
+            const model = target.model;
+            const baseUrl = target.url;
             const res = await fetch(baseUrl, {
               method:'POST',
-              headers:{'Content-Type':'application/json'},
+              headers:target.headers,
               body:JSON.stringify({
                 model: model,
                 messages:[
@@ -990,12 +1057,13 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
 M：${aiText}`;
 
         try {
-          const baseUrl = WORKER_API_URL;
+          const target = getRequestTarget();
+          const baseUrl = target.url;
           const res = await fetch(baseUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: target.headers,
             body: JSON.stringify({
-              model: WORKER_MODEL,
+              model: target.model,
               messages: [{ role: 'user', content: prompt }],
               stream: false,
               temperature: 0.1
@@ -1387,8 +1455,9 @@ M：${aiText}`;
         try {
           refreshSystemPrompt();
           const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[图片]' }));
-          const model = WORKER_MODEL;
-          const baseUrl = WORKER_API_URL; // 完整的代理地址
+          const target = getRequestTarget();
+          const model = target.model;
+          const baseUrl = target.url; // Worker 或 OpenCode 官方 API
           
           // ====== 调试输出：在控制台打印实际请求的 URL ======
           console.log('🚀 实际请求地址:', baseUrl);
@@ -1398,7 +1467,7 @@ M：${aiText}`;
 
           const res = await fetch(baseUrl, { 
             method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
+            headers: target.headers, 
             body: JSON.stringify({ model: model, messages: apiMsgs, stream: false, temperature: 0.5 }) 
           });
           load.remove();
