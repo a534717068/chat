@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>M · 智能助手 · OpenCode Go 模型切换版</title>
+  <title>M · 智能助手 · 双 API 版</title>
   <style>
     :root {
       --bg: #f5f5f5; --surface: #ffffff; --text-primary: #1a1a2e; --text-secondary: #999;
@@ -214,18 +214,19 @@
     <div class="modal">
       <div class="format-hint" style="margin-bottom:8px;">🔌 API 通道</div>
       <select id="apiModeSelect" style="width:100%;margin-bottom:8px;">
-        <option value="worker">☁️ Cloudflare Worker → OpenCode Go（推荐）</option>
-        <option value="direct">⚡ OpenCode 官方 API 直连（本机 Key）</option>
+        <option value="worker">☁️ OpenCode Go → Cloudflare Worker</option>
+        <option value="deepseek">⚡ DeepSeek 官方 API</option>
       </select>
+      <input type="password" id="directApiKeyInput" placeholder="DeepSeek API Key（仅官方 API 模式需要）" style="display:none;width:100%;margin-bottom:8px;">
+      <div id="directKeyHint" class="format-hint" style="display:none;margin-bottom:8px;">⚠️ DeepSeek 官方 API Key 会保存在此浏览器的 localStorage。只建议在你自己的设备使用；不要把 Key 发给别人。</div>
       <select id="modelSelect" style="width:100%;margin-bottom:8px;">
         <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
       </select>
-      <button class="btn-cancel" id="refreshModelsBtn" style="width:100%;margin-bottom:8px;">🔄 刷新 OpenCode Go 模型</button>
-      <div id="modelStatus" class="format-hint" style="margin-bottom:8px;">模型列表由 Cloudflare Worker 从 OpenCode Go 自动获取。</div><div class="format-hint" style="margin-bottom:8px;">🖼️ 图片聊天：选择支持视觉输入的模型（例如 DeepSeek V4 Flash Vision Exp）后即可上传图片。</div>
-      <input type="password" id="directApiKeyInput" placeholder="OpenCode API Key（仅直连模式需要）" style="display:none;width:100%;margin-bottom:8px;">
-      <div id="directKeyHint" class="format-hint" style="display:none;margin-bottom:8px;">⚠️ 直连模式会把 Key 保存在此浏览器的 localStorage。不要在公共电脑使用。推荐平时使用 Cloudflare Worker 模式。</div>
+      <button class="btn-cancel" id="refreshModelsBtn" style="width:100%;margin-bottom:8px;">🔄 刷新当前接口模型</button>
+      <div id="modelStatus" class="format-hint" style="margin-bottom:8px;">模型列表会根据当前接口自动获取。</div>
+      <div id="visionStatus" class="format-hint" style="margin-bottom:8px;">🖼️ 图片上传状态：检查当前模型能力中…</div>
       <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
-      <div class="format-hint">Worker 模式不会在网页保存 API Key。直连模式仅适合你自己的设备。</div>
+      <div class="format-hint">☁️ Go 模式：API Key 保存在 Cloudflare Worker。⚡ DeepSeek 模式：API Key 仅保存在本机浏览器。</div>
       <div class="modal-buttons">
         <button class="btn-import" id="settingSaveBtn">保存设定</button>
         <button class="btn-cancel" id="settingCancelBtn">取消</button>
@@ -259,7 +260,7 @@
 
   <script>
     (function() {
-      window.__M_WORKER_VERSION__ = '2026-08-22-image-upload-go';
+      window.__M_WORKER_VERSION__ = '2026-08-25-dual-api-go-deepseek';
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
@@ -277,155 +278,209 @@
       let pendingImages = [];
 
 
-      // ===== Cloudflare Worker / OpenCode Go 配置 =====
-      // API Key 不放在前端；它已经保存在 Cloudflare Worker 的 OPENCODE_API_KEY Secret 中。
+      // ===== 双 API 配置：OpenCode Go + DeepSeek 官方 API =====
       const WORKER_API_URL = 'https://solitary-water-3b2a.534717068.workers.dev/';
       const OPENCODE_GO_URL = 'https://opencode.ai/zen/go/v1/chat/completions';
-      const MODEL_KEY = 'm_selected_model_v3';
-      const API_MODE_KEY = 'm_api_mode_v3';
-      const DIRECT_KEY = 'm_opencode_direct_key_v3';
-      const DEFAULT_MODEL = 'deepseek-v4-flash';
-      localStorage.removeItem('deepseek_api_base');
-      localStorage.removeItem('deepseek_model_name');
+      const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
+      const DEEPSEEK_MODELS_URL = 'https://api.deepseek.com/models';
 
-      function getSelectedModel(){ return localStorage.getItem(MODEL_KEY) || DEFAULT_MODEL; }
-      function setSelectedModel(v){ localStorage.setItem(MODEL_KEY, v || DEFAULT_MODEL); }
-      function getApiMode(){ return localStorage.getItem(API_MODE_KEY) || 'worker'; }
-      function setApiMode(v){ localStorage.setItem(API_MODE_KEY, v === 'direct' ? 'direct' : 'worker'); }
-      function getDirectKey(){ return localStorage.getItem(DIRECT_KEY) || ''; }
-      function setDirectKey(v){ if(v) localStorage.setItem(DIRECT_KEY, v); else localStorage.removeItem(DIRECT_KEY); }
+      const MODEL_KEY = 'm_selected_model_v4';
+      const API_MODE_KEY = 'm_api_mode_v4';
+      const DEEPSEEK_KEY = 'm_deepseek_api_key_v1';
+      const DEFAULT_GO_MODEL = 'deepseek-v4-flash';
+      const DEFAULT_DS_MODEL = 'deepseek-v4-flash';
+
+      function getSelectedModel(){
+        return localStorage.getItem(MODEL_KEY) || DEFAULT_GO_MODEL;
+      }
+      function setSelectedModel(v){
+        if(v) localStorage.setItem(MODEL_KEY, v);
+      }
+      function getApiMode(){
+        const v = localStorage.getItem(API_MODE_KEY);
+        return v === 'deepseek' ? 'deepseek' : 'worker';
+      }
+      function setApiMode(v){
+        localStorage.setItem(API_MODE_KEY, v === 'deepseek' ? 'deepseek' : 'worker');
+      }
+      function getDeepSeekKey(){
+        return localStorage.getItem(DEEPSEEK_KEY) || '';
+      }
+      function setDeepSeekKey(v){
+        if(v) localStorage.setItem(DEEPSEEK_KEY, v);
+        else localStorage.removeItem(DEEPSEEK_KEY);
+      }
+
+      function isVisionModel(model){
+        const id = String(model || '').toLowerCase();
+        // OpenCode Go 的 Vision 实验模型目前带有 vision 标识；
+        // DeepSeek 官方 V4 API 当前公开模型为 text-only，因此官方 API 模式默认关闭图片发送。
+        return id.includes('vision');
+      }
+
       function getRequestTarget(){
-        const direct = getApiMode() === 'direct';
+        const mode = getApiMode();
+        if(mode === 'deepseek'){
+          const key = getDeepSeekKey();
+          return {
+            url: DEEPSEEK_URL,
+            headers: {
+              'Content-Type':'application/json',
+              ...(key ? {'Authorization':'Bearer '+key} : {})
+            },
+            model: getSelectedModel(),
+            mode: 'deepseek'
+          };
+        }
         return {
-          url: direct ? OPENCODE_GO_URL : WORKER_API_URL,
-          headers: direct && getDirectKey() ? { 'Content-Type':'application/json', 'Authorization':'Bearer '+getDirectKey() } : { 'Content-Type':'application/json' },
+          url: WORKER_API_URL,
+          headers: {'Content-Type':'application/json'},
           model: getSelectedModel(),
-          direct
+          mode: 'worker'
         };
       }
-      function updateConnectionUI(){
-        const mode = getApiMode();
-        const sel = $('apiModeSelect'); if(sel) sel.value = mode;
-        const key = $('directApiKeyInput'); if(key){ key.style.display = mode === 'direct' ? '' : 'none'; key.value = getDirectKey(); }
-        const hint = $('directKeyHint'); if(hint) hint.style.display = mode === 'direct' ? '' : 'none';
-        const setup = $('setupStatusText'); if(setup) setup.textContent = mode === 'direct' ? '⚡ OpenCode 官方 API 直连' : '☁️ Cloudflare Worker → OpenCode Go';
-        const modelInput = $('modelNameInput'); if(modelInput) modelInput.value = getSelectedModel();
-      }
-      async function loadOpenCodeModels(){
-        const status = $('modelStatus');
 
-        try {
-          if(status) {
-            status.textContent = '正在通过 Cloudflare Worker 获取 OpenCode Go 模型列表…';
-          }
+      function updateImageUploadAvailability(){
+        const btn = $('imageUploadBtn');
+        const status = $('visionStatus');
+        if(!btn) return;
 
-          const workerUrl =
-            WORKER_API_URL.replace(/\/+$/, '') + '/models';
+        const enabled = getApiMode() === 'worker' && isVisionModel(getSelectedModel());
+        btn.disabled = !enabled;
+        btn.title = enabled ? '上传图片' : '当前接口/模型不支持图片输入';
 
-          const r = await fetch(workerUrl, {
-            method: 'GET',
-            cache: 'no-store'
-          });
-
-          const responseText = await r.text();
-
-          if(!r.ok){
-            let detail = responseText;
-            try {
-              const parsed = JSON.parse(responseText);
-              detail = parsed?.error?.message || parsed?.error || responseText;
-            } catch(e) {}
-
-            throw new Error(
-              `Worker /models HTTP ${r.status}: ${detail}`
-            );
-          }
-
-          let d;
-          try {
-            d = JSON.parse(responseText);
-          } catch(e) {
-            throw new Error('Worker /models 返回的不是有效 JSON');
-          }
-
-          const arr = Array.isArray(d?.data)
-            ? d.data
-            : [];
-
-          const select = $('modelSelect');
-          if(!select) return;
-
-          const current = getSelectedModel();
-
-          select.innerHTML = '';
-
-          // 仅在 OpenCode Go 暂时没有返回列表时保留一个默认项。
-          // 不再添加任何 Zen 模型，也不再直接访问 OpenCode /models。
-          const list = [];
-
-          for(const m of arr){
-            const id = m?.id || m?.model;
-            if(!id) continue;
-
-            if(!list.some(x => x.id === id)){
-              list.push({
-                id,
-                name: m?.name || id
-              });
-            }
-          }
-
-          if(!list.length){
-            list.push({
-              id: DEFAULT_MODEL,
-              name: 'DeepSeek V4 Flash（默认）'
-            });
-          }
-
-          for(const m of list){
-            const o = document.createElement('option');
-            o.value = m.id;
-            o.textContent = m.name;
-            select.appendChild(o);
-          }
-
-          if(list.some(x => x.id === current)){
-            select.value = current;
-          } else {
-            select.value = list[0].id;
-            setSelectedModel(select.value);
-          }
-
-          if(status){
-            if(arr.length){
-              status.textContent =
-                `已获取 ${arr.length} 个 OpenCode Go 模型，可以直接切换。`;
-            } else {
-              status.textContent =
-                'Worker 已连接，但 OpenCode Go 暂时没有返回模型列表，已使用默认模型。';
-            }
-          }
-
-        } catch(e) {
-          console.error(
-            'OpenCode Go 模型列表获取失败：',
-            e
-          );
-
-          if(status){
-            status.textContent =
-              `获取失败：${e.message}`;
+        if(status){
+          if(getApiMode() === 'deepseek'){
+            status.textContent = '🖼️ 当前为 DeepSeek 官方 API：官方当前公开的 V4 Flash / V4 Pro API 模型为文本输入，图片按钮已禁用。';
+          }else if(enabled){
+            status.textContent = '🖼️ 当前模型支持视觉输入，可以上传图片。';
+          }else{
+            status.textContent = '🖼️ 当前 Go 模型不是 Vision 模型。切换到带 Vision 的模型后即可上传图片。';
           }
         }
       }
 
+      function updateConnectionUI(){
+        const mode = getApiMode();
+        const sel = $('apiModeSelect'); if(sel) sel.value = mode;
+        const key = $('directApiKeyInput');
+        if(key){
+          key.style.display = mode === 'deepseek' ? '' : 'none';
+          key.value = getDeepSeekKey();
+        }
+        const hint = $('directKeyHint'); if(hint) hint.style.display = mode === 'deepseek' ? '' : 'none';
+        const setup = $('setupStatusText');
+        if(setup) setup.textContent = mode === 'deepseek' ? '⚡ DeepSeek 官方 API' : '☁️ OpenCode Go → Cloudflare Worker';
+        const modelInput = $('modelNameInput'); if(modelInput) modelInput.value = getSelectedModel();
+        updateImageUploadAvailability();
+      }
+
+      async function loadCurrentModels(){
+        const status = $('modelStatus');
+        const select = $('modelSelect');
+        if(!select) return;
+
+        const mode = getApiMode();
+
+        try{
+          if(mode === 'deepseek'){
+            const key = getDeepSeekKey();
+            if(!key){
+              status.textContent = '请先填写 DeepSeek API Key，然后点击“刷新当前接口模型”。';
+              select.innerHTML = '<option value="deepseek-v4-flash">DeepSeek V4 Flash</option>';
+              setSelectedModel(DEFAULT_DS_MODEL);
+              updateConnectionUI();
+              return;
+            }
+
+            status.textContent = '正在从 DeepSeek 官方 API 获取模型列表…';
+            const r = await fetch(DEEPSEEK_MODELS_URL, {
+              method:'GET',
+              headers:{'Authorization':'Bearer '+key, 'Accept':'application/json'},
+              cache:'no-store'
+            });
+            const txt = await r.text();
+            if(!r.ok){
+              let detail = txt;
+              try{ const j=JSON.parse(txt); detail=j?.error?.message || j?.error || txt; }catch(e){}
+              throw new Error(`DeepSeek /models HTTP ${r.status}: ${detail}`);
+            }
+            let d;
+            try{ d=JSON.parse(txt); }catch(e){ throw new Error('DeepSeek /models 返回的不是有效 JSON'); }
+            const arr = Array.isArray(d?.data) ? d.data : [];
+            const current = getSelectedModel();
+            select.innerHTML='';
+            const list=[];
+            for(const m of arr){
+              const id=m?.id;
+              if(!id) continue;
+              if(!list.some(x=>x.id===id)) list.push({id,name:id});
+            }
+            if(!list.length) list.push({id:DEFAULT_DS_MODEL,name:'DeepSeek V4 Flash'});
+            for(const m of list){
+              const o=document.createElement('option'); o.value=m.id; o.textContent=m.name; select.appendChild(o);
+            }
+            const chosen=list.some(x=>x.id===current)?current:list[0].id;
+            select.value=chosen; setSelectedModel(chosen);
+            status.textContent=`已获取 ${arr.length || list.length} 个 DeepSeek 官方模型，可以直接切换。`;
+            updateConnectionUI();
+            return;
+          }
+
+          status.textContent = '正在通过 Cloudflare Worker 获取 OpenCode Go 模型列表…';
+          const workerUrl = WORKER_API_URL.replace(/\/+$/, '') + '/models';
+          const r = await fetch(workerUrl,{method:'GET',cache:'no-store'});
+          const txt = await r.text();
+          if(!r.ok){
+            let detail=txt;
+            try{const j=JSON.parse(txt);detail=j?.error?.message||j?.error||txt;}catch(e){}
+            throw new Error(`Worker /models HTTP ${r.status}: ${detail}`);
+          }
+          let d;
+          try{d=JSON.parse(txt);}catch(e){throw new Error('Worker /models 返回的不是有效 JSON');}
+          const arr=Array.isArray(d?.data)?d.data:[];
+          const current=getSelectedModel();
+          select.innerHTML='';
+          const list=[];
+          for(const m of arr){
+            const id=m?.id||m?.model;if(!id)continue;
+            if(!list.some(x=>x.id===id))list.push({id,name:m?.name||id});
+          }
+          if(!list.length)list.push({id:DEFAULT_GO_MODEL,name:'DeepSeek V4 Flash（默认）'});
+          for(const m of list){const o=document.createElement('option');o.value=m.id;o.textContent=m.name;select.appendChild(o);}
+          const chosen=list.some(x=>x.id===current)?current:list[0].id;
+          select.value=chosen;setSelectedModel(chosen);
+          status.textContent=arr.length?`已获取 ${arr.length} 个 OpenCode Go 模型，可以直接切换。`:'Worker 已连接，但 OpenCode Go 暂时没有返回模型列表，已使用默认模型。';
+          updateConnectionUI();
+        }catch(e){
+          console.error('模型列表获取失败：',e);
+          status.textContent=`获取失败：${e.message}`;
+          updateConnectionUI();
+        }
+      }
+
       function initModelAndApiUI(){
-        const ms=$('modelSelect'); if(ms){ ms.value=getSelectedModel(); ms.addEventListener('change',()=>{ setSelectedModel(ms.value); updateConnectionUI(); }); }
-        const am=$('apiModeSelect'); if(am) am.addEventListener('change',()=>{ setApiMode(am.value); updateConnectionUI(); });
-        const dk=$('directApiKeyInput'); if(dk) dk.addEventListener('change',()=>setDirectKey(dk.value.trim()));
-        const rb=$('refreshModelsBtn'); if(rb) rb.addEventListener('click',loadOpenCodeModels);
+        const ms=$('modelSelect');
+        if(ms){
+          ms.addEventListener('change',()=>{setSelectedModel(ms.value);updateConnectionUI();});
+        }
+        const am=$('apiModeSelect');
+        if(am) am.addEventListener('change',()=>{
+          setApiMode(am.value);
+          // 切换接口后，先放一个安全默认模型，再从对应接口刷新列表。
+          setSelectedModel(am.value === 'deepseek' ? DEFAULT_DS_MODEL : DEFAULT_GO_MODEL);
+          updateConnectionUI();
+          loadCurrentModels();
+        });
+        const dk=$('directApiKeyInput');
+        if(dk) dk.addEventListener('change',()=>{
+          setDeepSeekKey(dk.value.trim());
+          if(getApiMode()==='deepseek') loadCurrentModels();
+        });
+        const rb=$('refreshModelsBtn');
+        if(rb) rb.addEventListener('click',loadCurrentModels);
         updateConnectionUI();
-        loadOpenCodeModels();
+        loadCurrentModels();
       }
 
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
@@ -521,7 +576,7 @@
       }
       updateEnvDisplay(); setInterval(updateEnvDisplay, 60000);
 
-      // 兼容旧代码变量，但不再保存/读取任何 API Key；真实 Key 只在 Cloudflare Worker。
+      // 兼容旧代码变量；Worker Key 不在前端，DeepSeek Key 仅保存在本机 localStorage。
       let apiKey = ''; 
       let globalSetting = localStorage.getItem(SETTING_KEY) || '';
       let compressedMemory = localStorage.getItem(MEMORY_KEY) || '';
@@ -881,7 +936,9 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
 
       function getApiContent(msg) {
         const text = getMessageText(msg);
-        const attachments = Array.isArray(msg?.attachments) ? msg.attachments : [];
+        const attachments = (getApiMode() === 'worker' && isVisionModel(getSelectedModel()))
+          ? (Array.isArray(msg?.attachments) ? msg.attachments : [])
+          : [];
 
         if (!attachments.length) return text;
 
@@ -1740,7 +1797,7 @@ M：${aiText}`;
           const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: getApiContent(m) }));
           const target = getRequestTarget();
           const model = target.model;
-          const baseUrl = target.url; // Worker 或 OpenCode 官方 API
+          const baseUrl = target.url; // OpenCode Go Worker 或 DeepSeek 官方 API
           
           // ====== 调试输出：在控制台打印实际请求的 URL ======
           console.log('🚀 实际请求地址:', baseUrl);
@@ -1808,7 +1865,13 @@ M：${aiText}`;
         }
       }
 
-      $('imageUploadBtn').onclick = () => $('imageInput').click();
+      $('imageUploadBtn').onclick = () => {
+        if($('imageUploadBtn').disabled){
+          alert('当前接口/模型不支持图片输入。OpenCode Go 请切换到带 Vision 的模型；DeepSeek 官方 V4 API 当前为文本输入。');
+          return;
+        }
+        $('imageInput').click();
+      };
 
       $('imageInput').addEventListener('change', async (e) => {
         await handleImageFiles(e.target.files);
@@ -1818,6 +1881,11 @@ M：${aiText}`;
       $('sendBtn').onclick = () => {
         const t = $('userInput').value.trim();
         if (!t && !pendingImages.length) return;
+
+        if(pendingImages.length && !(getApiMode() === 'worker' && isVisionModel(getSelectedModel()))){
+          alert('当前接口/模型不支持图片输入，请切换到 OpenCode Go 的 Vision 模型。');
+          return;
+        }
 
         const imgs = pendingImages.slice();
         pendingImages = [];
