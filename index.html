@@ -313,8 +313,6 @@
 
       function isVisionModel(model){
         const id = String(model || '').toLowerCase();
-        // OpenCode Go 的 Vision 实验模型目前带有 vision 标识；
-        // DeepSeek 官方 V4 API 当前公开模型为 text-only，因此官方 API 模式默认关闭图片发送。
         return id.includes('vision');
       }
 
@@ -345,17 +343,17 @@
         const status = $('visionStatus');
         if(!btn) return;
 
-        const enabled = getApiMode() === 'worker' && isVisionModel(getSelectedModel());
+        const enabled = isVisionModel(getSelectedModel());
         btn.disabled = !enabled;
-        btn.title = enabled ? '上传图片' : '当前接口/模型不支持图片输入';
+        btn.title = enabled ? '上传图片' : '请先选择 Vision 模型';
 
         if(status){
-          if(getApiMode() === 'deepseek'){
-            status.textContent = '🖼️ 当前为 DeepSeek 官方 API：官方当前公开的 V4 Flash / V4 Pro API 模型为文本输入，图片按钮已禁用。';
-          }else if(enabled){
-            status.textContent = '🖼️ 当前模型支持视觉输入，可以上传图片。';
+          if(enabled){
+            status.textContent = getApiMode() === 'deepseek'
+              ? '🖼️ DeepSeek 官方 Vision 模型已启用，可以上传图片。'
+              : '🖼️ OpenCode Go Vision 模型已启用，可以上传图片。';
           }else{
-            status.textContent = '🖼️ 当前 Go 模型不是 Vision 模型。切换到带 Vision 的模型后即可上传图片。';
+            status.textContent = '🖼️ 当前模型不是 Vision 模型。选择带 Vision 的模型后即可上传图片。';
           }
         }
       }
@@ -416,7 +414,16 @@
               if(!id) continue;
               if(!list.some(x=>x.id===id)) list.push({id,name:id});
             }
-            if(!list.length) list.push({id:DEFAULT_DS_MODEL,name:'DeepSeek V4 Flash'});
+            // DeepSeek Vision 实验模型：如果 /models 暂时没有返回，仍提供可选项。
+            if(!arr.some(m => m?.id === 'deepseek-v4-flash')){
+              list.push({id:DEFAULT_DS_MODEL,name:'DeepSeek V4 Flash'});
+            }
+            if(!list.some(x => x.id === 'deepseek-v4-flash-vision-exp')){
+              list.push({
+                id:'deepseek-v4-flash-vision-exp',
+                name:'DeepSeek V4 Flash Vision Exp（图片）'
+              });
+            }
             for(const m of list){
               const o=document.createElement('option'); o.value=m.id; o.textContent=m.name; select.appendChild(o);
             }
@@ -936,7 +943,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
 
       function getApiContent(msg) {
         const text = getMessageText(msg);
-        const attachments = (getApiMode() === 'worker' && isVisionModel(getSelectedModel()))
+        const attachments = isVisionModel(getSelectedModel())
           ? (Array.isArray(msg?.attachments) ? msg.attachments : [])
           : [];
 
@@ -1867,7 +1874,18 @@ M：${aiText}`;
 
       $('imageUploadBtn').onclick = () => {
         if($('imageUploadBtn').disabled){
-          alert('当前接口/模型不支持图片输入。OpenCode Go 请切换到带 Vision 的模型；DeepSeek 官方 V4 API 当前为文本输入。');
+          const select = $('modelSelect');
+          const visionOption = select ? Array.from(select.options).find(o => isVisionModel(o.value)) : null;
+
+          if(visionOption){
+            select.value = visionOption.value;
+            setSelectedModel(visionOption.value);
+            updateImageUploadAvailability();
+            $('imageInput').click();
+            return;
+          }
+
+          alert('当前接口没有可用的 Vision 模型，请先刷新模型列表。');
           return;
         }
         $('imageInput').click();
@@ -1882,8 +1900,8 @@ M：${aiText}`;
         const t = $('userInput').value.trim();
         if (!t && !pendingImages.length) return;
 
-        if(pendingImages.length && !(getApiMode() === 'worker' && isVisionModel(getSelectedModel()))){
-          alert('当前接口/模型不支持图片输入，请切换到 OpenCode Go 的 Vision 模型。');
+        if(pendingImages.length && !isVisionModel(getSelectedModel())){
+          alert('当前模型不支持图片输入，请先切换到 Vision 模型。');
           return;
         }
 
