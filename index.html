@@ -521,22 +521,174 @@
       initModelAndApiUI();
 
 
-      let weatherCache = { desc: '获取中...', emoji: '🌤️', city: '' };
-      async function fetchRealWeather() {
-        try {
-          const cached = localStorage.getItem('deepseek_weather_cache');
-          if (cached) { const p = JSON.parse(cached); if (Date.now() - p.time < 30*60*1000) { weatherCache = p.data; updateEnvDisplay(); return; } }
-          let pos; try { pos = await new Promise((r, e) => navigator.geolocation.getCurrentPosition(r, e, { timeout: 5000 })); } catch (geoErr) { console.warn('无法获取位置', geoErr); if (cached) { weatherCache = JSON.parse(cached).data; updateEnvDisplay(); } else { weatherCache = { desc: '（天气信息未获取到，请以实际为准）', emoji: '🌤️', city: '' }; updateEnvDisplay(); } return; }
-          const controller = new AbortController(); const timeoutId = setTimeout(() => controller.abort(), 8000);
-          let res; try { res = await fetch(`https://wttr.in/${pos.coords.latitude},${pos.coords.longitude}?format=j1`, { signal: controller.signal }); } catch (fetchErr) { console.warn('天气请求失败', fetchErr); if (cached) { weatherCache = JSON.parse(cached).data; updateEnvDisplay(); } else { weatherCache = { desc: '（天气信息未获取到，请以实际为准）', emoji: '🌤️', city: '' }; updateEnvDisplay(); } return; } finally { clearTimeout(timeoutId); }
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const d = await res.json(); if (!d.current_condition || !d.current_condition.length) throw new Error('无效数据');
-          const c = d.current_condition[0]; const code = parseInt(c.weatherCode) || 0; const emojis = ['☀️','⛅','☁️','🌧️','⛈️','❄️','🌫️'];
-          weatherCache = { desc: `${c.weatherDesc[0].value} ${c.temp_C}°C`, emoji: emojis[Math.min(6, Math.floor(code/50))]||'☀️', city: d.nearest_area?.[0]?.areaName?.[0]?.value || '' };
-          localStorage.setItem('deepseek_weather_cache', JSON.stringify({ data: weatherCache, time: Date.now() }));
-        } catch(e) { console.warn('天气异常', e); const cached = localStorage.getItem('deepseek_weather_cache'); if (cached) weatherCache = JSON.parse(cached).data; else weatherCache = { desc: '（天气信息未获取到，请以实际为准）', emoji: '🌤️', city: '' }; } updateEnvDisplay();
+      // ===== V8 天气模块：Open-Meteo，无需 API Key =====
+      // 天气刷新只更新网页本地缓存，不会触发任何 AI 请求。
+      let weatherCache = {
+        desc: '天气信息获取中…',
+        emoji: '🌤️',
+        city: ''
+      };
+
+      const WEATHER_CACHE_KEY = 'm_weather_cache_v8';
+      const WEATHER_REFRESH_MS = 30 * 60 * 1000; // 仅网页打开期间，每30分钟刷新一次
+      let weatherLastFetch = 0;
+      let weatherRefreshing = false;
+
+      function weatherCodeToText(code){
+        const c = Number(code);
+        if(c === 0) return ['晴','☀️'];
+        if([1,2].includes(c)) return ['少云','🌤️'];
+        if(c === 3) return ['阴','☁️'];
+        if([45,48].includes(c)) return ['雾','🌫️'];
+        if([51,53,55,56,57].includes(c)) return ['毛毛雨','🌦️'];
+        if([61,63,65,66,67].includes(c)) return ['下雨','🌧️'];
+        if([71,73,75,77].includes(c)) return ['下雪','❄️'];
+        if([80,81,82].includes(c)) return ['阵雨','🌦️'];
+        if([85,86].includes(c)) return ['阵雪','🌨️'];
+        if([95,96,99].includes(c)) return ['雷雨','⛈️'];
+        return ['天气未知','🌤️'];
       }
-      fetchRealWeather(); setInterval(fetchRealWeather, 30*60*1000);
+
+      function loadWeatherCache(){
+        try{
+          const raw = localStorage.getItem(WEATHER_CACHE_KEY);
+          if(!raw) return false;
+          const saved = JSON.parse(raw);
+          if(saved && saved.data){
+            weatherCache = saved.data;
+            weatherLastFetch = Number(saved.time) || 0;
+            updateEnvDisplay();
+            return true;
+          }
+        }catch(e){
+          console.warn('天气缓存读取失败', e);
+        }
+        return false;
+      }
+
+      function saveWeatherCache(){
+        try{
+          localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({
+            data: weatherCache,
+            time: weatherLastFetch
+          }));
+        }catch(e){}
+      }
+
+      async function fetchRealWeather(force=false){
+        if(weatherRefreshing) return;
+
+        // 非强制刷新时，30分钟内不重复请求天气。
+        if(!force && weatherLastFetch && Date.now() - weatherLastFetch < WEATHER_REFRESH_MS){
+          updateEnvDisplay();
+          return;
+        }
+
+        if(!navigator.geolocation){
+          weatherCache = {
+            desc: '无法获取位置，天气暂缺',
+            emoji: '🌤️',
+            city: ''
+          };
+          updateEnvDisplay();
+          return;
+        }
+
+        weatherRefreshing = true;
+        updateEnvDisplay();
+
+        try{
+          const position = await new Promise((resolve,reject)=>{
+            navigator.geolocation.getCurrentPosition(
+              resolve,
+              reject,
+              {
+                enableHighAccuracy:false,
+                timeout:8000,
+                maximumAge:15 * 60 * 1000
+              }
+            );
+          });
+
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(()=>controller.abort(), 10000);
+
+          try{
+            const url =
+              'https://api.open-meteo.com/v1/forecast' +
+              `?latitude=${encodeURIComponent(lat)}` +
+              `&longitude=${encodeURIComponent(lon)}` +
+              '&current=temperature_2m,weather_code' +
+              '&timezone=auto';
+
+            const res = await fetch(url, {
+              method:'GET',
+              cache:'no-store',
+              signal:controller.signal
+            });
+
+            if(!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
+
+            const d = await res.json();
+            if(!d.current) throw new Error('Open-Meteo 返回数据无 current');
+
+            const [desc, emoji] = weatherCodeToText(d.current.weather_code);
+            const temp = Math.round(Number(d.current.temperature_2m));
+
+            weatherCache = {
+              desc: `${desc} ${temp}°C`,
+              emoji,
+              city: ''
+            };
+
+            weatherLastFetch = Date.now();
+            saveWeatherCache();
+          } finally {
+            clearTimeout(timeoutId);
+          }
+
+          // Open-Meteo 不需要反向地理编码；如果旧版本已有城市缓存，则继续保留。
+          updateEnvDisplay();
+        }catch(e){
+          console.warn('天气请求失败', e);
+
+          // 失败时只使用最近一次成功缓存，但明确标记为旧数据。
+          // 不再无限期把旧的“下雨”伪装成当前天气。
+          if(weatherLastFetch){
+            const ageMin = Math.max(1, Math.round((Date.now()-weatherLastFetch)/60000));
+            weatherCache.desc = `${weatherCache.desc} · ${ageMin}分钟前`;
+          }else{
+            weatherCache = {
+              desc: '天气暂时无法获取',
+              emoji: '🌤️',
+              city: ''
+            };
+          }
+          updateEnvDisplay();
+        }finally{
+          weatherRefreshing = false;
+          updateEnvDisplay();
+        }
+      }
+
+      // 首次打开：优先显示缓存，同时后台尝试更新。
+      loadWeatherCache();
+      fetchRealWeather(false);
+
+      // 每30分钟刷新一次天气数据。
+      // 这只是天气 API 请求，不会调用 AI。
+      setInterval(()=>fetchRealWeather(false), WEATHER_REFRESH_MS);
+
+      // 点击顶部天气图标：立即强制刷新天气。
+      const weatherIconEl = $('weatherIcon');
+      if(weatherIconEl){
+        weatherIconEl.title = '点击立即刷新天气';
+        weatherIconEl.style.cursor = 'pointer';
+        weatherIconEl.addEventListener('click', ()=>fetchRealWeather(true));
+      }
 
       function getFullEnvString() {
         const now = new Date();
