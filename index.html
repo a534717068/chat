@@ -209,22 +209,6 @@
     </div>
   </div>
 
-  <!-- Worker 登录面板 -->
-  <div class="modal-overlay" id="loginModal" style="display:none;">
-    <div class="modal">
-      <h3 style="margin-top:0;">🔒 登录</h3>
-      <div class="format-hint" style="margin-bottom:10px;">
-        这是你的私人 AI Worker。请输入你在 Cloudflare Worker 中设置的 APP_PASSWORD。
-      </div>
-      <input type="password" id="workerPasswordInput" placeholder="输入登录密码" autocomplete="current-password"
-             style="width:100%;margin-bottom:8px;">
-      <div id="loginStatus" class="format-hint" style="margin-bottom:8px;"></div>
-      <div class="modal-buttons">
-        <button class="btn-import" id="workerLoginBtn">登录</button>
-      </div>
-    </div>
-  </div>
-
   <!-- 设定面板 -->
   <div class="modal-overlay" id="settingModal">
     <div class="modal">
@@ -233,7 +217,8 @@
         <option value="worker">☁️ OpenCode Go → Cloudflare Worker</option>
         <option value="deepseek">⚡ DeepSeek 官方 API</option>
       </select>
-      <div id="directKeyHint" class="format-hint" style="margin-bottom:8px;">🔒 OpenCode Go 和 DeepSeek 官方 API 都通过 Cloudflare Worker，API Key 不保存在网页或浏览器中。</div>
+      <input type="password" id="directApiKeyInput" placeholder="DeepSeek API Key（仅官方 API 模式需要）" style="display:none;width:100%;margin-bottom:8px;">
+      <div id="directKeyHint" class="format-hint" style="display:none;margin-bottom:8px;">⚠️ DeepSeek 官方 API Key 会保存在此浏览器的 localStorage。只建议在你自己的设备使用；不要把 Key 发给别人。</div>
       <select id="modelSelect" style="width:100%;margin-bottom:8px;">
         <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
       </select>
@@ -241,7 +226,7 @@
       <div id="modelStatus" class="format-hint" style="margin-bottom:8px;">模型列表会根据当前接口自动获取。</div>
       <div id="visionStatus" class="format-hint" style="margin-bottom:8px;">🖼️ 图片上传状态：检查当前模型能力中…</div>
       <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
-      <div class="format-hint">🔒 两个接口都通过 Cloudflare Worker。API Key 只保存在 Worker Secrets。</div>
+      <div class="format-hint">☁️ Go 模式：API Key 保存在 Cloudflare Worker。⚡ DeepSeek 模式：API Key 仅保存在本机浏览器。</div>
       <div class="modal-buttons">
         <button class="btn-import" id="settingSaveBtn">保存设定</button>
         <button class="btn-cancel" id="settingCancelBtn">取消</button>
@@ -293,14 +278,17 @@
       let pendingImages = [];
 
 
-      // ===== 双 API：统一通过 Cloudflare Worker =====
+      // ===== 双 API 配置：OpenCode Go + DeepSeek 官方 API =====
       const WORKER_API_URL = 'https://solitary-water-3b2a.534717068.workers.dev/';
+      const OPENCODE_GO_URL = 'https://opencode.ai/zen/go/v1/chat/completions';
+      const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
+      const DEEPSEEK_MODELS_URL = 'https://api.deepseek.com/models';
+
       const MODEL_KEY = 'm_selected_model_v4';
       const API_MODE_KEY = 'm_api_mode_v4';
+      const DEEPSEEK_KEY = 'm_deepseek_api_key_v1';
       const DEFAULT_GO_MODEL = 'deepseek-v4-flash';
       const DEFAULT_DS_MODEL = 'deepseek-v4-flash';
-
-      let workerAuthenticated = false;
 
       function getSelectedModel(){
         return localStorage.getItem(MODEL_KEY) || DEFAULT_GO_MODEL;
@@ -315,105 +303,12 @@
       function setApiMode(v){
         localStorage.setItem(API_MODE_KEY, v === 'deepseek' ? 'deepseek' : 'worker');
       }
-
-      function workerUrl(path=''){
-        return WORKER_API_URL.replace(/\\/+$/, '') + path;
+      function getDeepSeekKey(){
+        return localStorage.getItem(DEEPSEEK_KEY) || '';
       }
-
-      async function workerFetch(path, options = {}){
-        const opts = {...options, credentials:'include'};
-        opts.headers = {
-          ...(options.headers || {})
-        };
-        const res = await fetch(workerUrl(path), opts);
-        if(res.status === 401){
-          workerAuthenticated = false;
-          showLoginModal('登录已失效，请重新登录。');
-          throw new Error('未登录，请先登录 Worker');
-        }
-        return res;
-      }
-
-      async function checkWorkerAuth(){
-        try{
-          const r = await fetch(workerUrl('/auth'), {
-            method:'GET',
-            credentials:'include',
-            cache:'no-store'
-          });
-          const d = await r.json().catch(()=>({}));
-          workerAuthenticated = !!d.authenticated;
-          return workerAuthenticated;
-        }catch(e){
-          workerAuthenticated = false;
-          return false;
-        }
-      }
-
-      function showLoginModal(message=''){
-        const modal = $('loginModal');
-        const input = $('workerPasswordInput');
-        const status = $('loginStatus');
-        if(status) status.textContent = message;
-        if(modal) modal.style.display = 'flex';
-        if(input){
-          input.value = '';
-          setTimeout(()=>input.focus(), 50);
-        }
-      }
-
-      function hideLoginModal(){
-        const modal = $('loginModal');
-        if(modal) modal.style.display = 'none';
-      }
-
-      async function loginWorker(){
-        const input = $('workerPasswordInput');
-        const status = $('loginStatus');
-        const password = input ? input.value : '';
-        if(!password){
-          if(status) status.textContent = '请输入密码。';
-          return false;
-        }
-
-        if(status) status.textContent = '正在登录…';
-
-        try{
-          const r = await fetch(workerUrl('/login'), {
-            method:'POST',
-            credentials:'include',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({password})
-          });
-          const d = await r.json().catch(()=>({}));
-          if(!r.ok){
-            if(status) status.textContent = d?.error?.message || `登录失败（HTTP ${r.status}）`;
-            return false;
-          }
-          workerAuthenticated = true;
-          hideLoginModal();
-          await loadCurrentModels();
-          return true;
-        }catch(e){
-          if(status) status.textContent = '登录失败：' + e.message;
-          return false;
-        }
-      }
-
-      function isVisionModel(model){
-        const id = String(model || '').toLowerCase();
-        return id.includes('vision');
-      }
-
-      function getRequestTarget(){
-        const mode = getApiMode();
-        return {
-          url: WORKER_API_URL,
-          headers: {'Content-Type':'application/json'},
-          model: getSelectedModel(),
-          mode,
-          provider: mode === 'deepseek' ? 'deepseek' : 'opencode'
-        };
+      function setDeepSeekKey(v){
+        if(v) localStorage.setItem(DEEPSEEK_KEY, v);
+        else localStorage.removeItem(DEEPSEEK_KEY);
       }
 
       function isVisionModel(model){
@@ -466,20 +361,19 @@
       function updateConnectionUI(){
         const mode = getApiMode();
         const sel = $('apiModeSelect'); if(sel) sel.value = mode;
-        const hint = $('directKeyHint');
-        if(hint) hint.textContent = '🔒 ' + (mode === 'deepseek' ? 'DeepSeek 官方 API' : 'OpenCode Go') + ' 通过 Cloudflare Worker，API Key 不保存在网页或浏览器中。';
+        const key = $('directApiKeyInput');
+        if(key){
+          key.style.display = mode === 'deepseek' ? '' : 'none';
+          key.value = getDeepSeekKey();
+        }
+        const hint = $('directKeyHint'); if(hint) hint.style.display = mode === 'deepseek' ? '' : 'none';
         const setup = $('setupStatusText');
-        if(setup) setup.textContent = mode === 'deepseek' ? '⚡ DeepSeek 官方 API → Cloudflare Worker' : '☁️ OpenCode Go → Cloudflare Worker';
+        if(setup) setup.textContent = mode === 'deepseek' ? '⚡ DeepSeek 官方 API' : '☁️ OpenCode Go → Cloudflare Worker';
         const modelInput = $('modelNameInput'); if(modelInput) modelInput.value = getSelectedModel();
         updateImageUploadAvailability();
       }
 
       async function loadCurrentModels(){
-        if(!workerAuthenticated){
-          const ok = await checkWorkerAuth();
-          if(!ok){ showLoginModal('请先登录你的私人 Worker。'); return; }
-          workerAuthenticated = true;
-        }
         const status = $('modelStatus');
         const select = $('modelSelect');
         if(!select) return;
@@ -488,37 +382,50 @@
 
         try{
           if(mode === 'deepseek'){
-            status.textContent = '正在通过 Cloudflare Worker 获取 DeepSeek 官方 API 模型列表…';
-            const r = await workerFetch('/models?provider=deepseek', {
+            const key = getDeepSeekKey();
+            if(!key){
+              status.textContent = '请先填写 DeepSeek API Key，然后点击“刷新当前接口模型”。';
+              select.innerHTML = '<option value="deepseek-v4-flash">DeepSeek V4 Flash</option>';
+              setSelectedModel(DEFAULT_DS_MODEL);
+              updateConnectionUI();
+              return;
+            }
+
+            status.textContent = '正在从 DeepSeek 官方 API 获取模型列表…';
+            const r = await fetch(DEEPSEEK_MODELS_URL, {
               method:'GET',
+              headers:{'Authorization':'Bearer '+key, 'Accept':'application/json'},
               cache:'no-store'
             });
             const txt = await r.text();
             if(!r.ok){
               let detail = txt;
               try{ const j=JSON.parse(txt); detail=j?.error?.message || j?.error || txt; }catch(e){}
-              throw new Error(`Worker /models HTTP ${r.status}: ${detail}`);
+              throw new Error(`DeepSeek /models HTTP ${r.status}: ${detail}`);
             }
             let d;
-            try{ d=JSON.parse(txt); }catch(e){ throw new Error('Worker /models 返回的不是有效 JSON'); }
+            try{ d=JSON.parse(txt); }catch(e){ throw new Error('DeepSeek /models 返回的不是有效 JSON'); }
             const arr = Array.isArray(d?.data) ? d.data : [];
             const current = getSelectedModel();
             select.innerHTML='';
             const list=[];
             for(const m of arr){
-              const id=m?.id || m?.model;
+              const id=m?.id;
               if(!id) continue;
-              if(!list.some(x=>x.id===id)) list.push({id,name:m?.name || id});
+              if(!list.some(x=>x.id===id)) list.push({id,name:id});
             }
-            if(!list.some(x => x.id === DEFAULT_DS_MODEL)){
+            // DeepSeek Vision 实验模型：如果 /models 暂时没有返回，仍提供可选项。
+            if(!arr.some(m => m?.id === 'deepseek-v4-flash')){
               list.push({id:DEFAULT_DS_MODEL,name:'DeepSeek V4 Flash'});
             }
             if(!list.some(x => x.id === 'deepseek-v4-flash-vision-exp')){
-              list.push({id:'deepseek-v4-flash-vision-exp',name:'DeepSeek V4 Flash Vision Exp（图片）'});
+              list.push({
+                id:'deepseek-v4-flash-vision-exp',
+                name:'DeepSeek V4 Flash Vision Exp（图片）'
+              });
             }
             for(const m of list){
-              const o=document.createElement('option');
-              o.value=m.id; o.textContent=m.name; select.appendChild(o);
+              const o=document.createElement('option'); o.value=m.id; o.textContent=m.name; select.appendChild(o);
             }
             const chosen=list.some(x=>x.id===current)?current:list[0].id;
             select.value=chosen; setSelectedModel(chosen);
@@ -528,7 +435,8 @@
           }
 
           status.textContent = '正在通过 Cloudflare Worker 获取 OpenCode Go 模型列表…';
-          const r = await workerFetch('/models?provider=opencode',{method:'GET',cache:'no-store'});
+          const workerUrl = WORKER_API_URL.replace(/\/+$/, '') + '/models';
+          const r = await fetch(workerUrl,{method:'GET',cache:'no-store'});
           const txt = await r.text();
           if(!r.ok){
             let detail=txt;
@@ -558,15 +466,6 @@
         }
       }
 
-      async function initWorkerSecurity(){
-        const ok = await checkWorkerAuth();
-        if(!ok){
-          showLoginModal('请先登录你的私人 Worker。');
-          return false;
-        }
-        return true;
-      }
-
       function initModelAndApiUI(){
         const ms=$('modelSelect');
         if(ms){
@@ -580,18 +479,16 @@
           updateConnectionUI();
           loadCurrentModels();
         });
+        const dk=$('directApiKeyInput');
+        if(dk) dk.addEventListener('change',()=>{
+          setDeepSeekKey(dk.value.trim());
+          if(getApiMode()==='deepseek') loadCurrentModels();
+        });
         const rb=$('refreshModelsBtn');
         if(rb) rb.addEventListener('click',loadCurrentModels);
         updateConnectionUI();
-        initWorkerSecurity().then(ok => { if(ok) loadCurrentModels(); });
+        loadCurrentModels();
       }
-
-      const workerLoginBtn = $('workerLoginBtn');
-      if(workerLoginBtn) workerLoginBtn.addEventListener('click', loginWorker);
-      const workerPasswordInput = $('workerPasswordInput');
-      if(workerPasswordInput) workerPasswordInput.addEventListener('keydown', e => {
-        if(e.key === 'Enter') loginWorker();
-      });
 
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
@@ -1536,11 +1433,10 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
             const target = getRequestTarget();
             const model = target.model;
             const baseUrl = target.url;
-            const res = await workerFetch('/', {
+            const res = await fetch(baseUrl, {
               method:'POST',
               headers:target.headers,
               body:JSON.stringify({
-                provider: target.provider,
                 model: model,
                 messages:[
                   {role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},
@@ -1661,11 +1557,10 @@ M：${aiText}`;
         try {
           const target = getRequestTarget();
           const baseUrl = target.url;
-          const res = await workerFetch('/', {
+          const res = await fetch(baseUrl, {
             method: 'POST',
             headers: target.headers,
             body: JSON.stringify({
-              provider: target.provider,
               model: target.model,
               messages: [{ role: 'user', content: prompt }],
               stream: false,
@@ -2069,10 +1964,10 @@ M：${aiText}`;
           const approxChars = apiMsgs.reduce((n, m) => n + String(m.content || '').length, 0);
           console.log(`📉 本次请求上下文约 ${approxChars} 字符（仅为粗略估算，不等于实际计费 Token）`);
 
-          const res = await workerFetch('/', { 
+          const res = await fetch(baseUrl, { 
             method: 'POST', 
             headers: target.headers, 
-            body: JSON.stringify({ provider: target.provider, model: model, messages: apiMsgs, stream: false, temperature: 0.5 }) 
+            body: JSON.stringify({ model: model, messages: apiMsgs, stream: false, temperature: 0.5 }) 
           });
           load.remove();
           
