@@ -275,7 +275,7 @@
 
   <script>
     (function() {
-      window.__M_WORKER_VERSION__ = '2026-08-28-v9-worker-bearer';
+      window.__M_WORKER_VERSION__ = '2026-08-25-dual-api-go-deepseek';
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
@@ -293,210 +293,219 @@
       let pendingImages = [];
 
 
-      // ===== V9.1：双 API 统一通过 Cloudflare Worker =====
-      // 保留 V9 的 UI、聊天记录、记忆、天气和图片功能；只统一修复 API/登录通信。
+      // ===== V9 FINAL：Worker Token + 跨设备聊天备份 =====
       const WORKER_API_URL = 'https://solitary-water-3b2a.534717068.workers.dev/';
       const MODEL_KEY = 'm_selected_model_v4';
       const API_MODE_KEY = 'm_api_mode_v4';
-      const WORKER_TOKEN_KEY = 'm_worker_session_v1';
+      const WORKER_TOKEN_KEY = 'm_worker_session_v3';
+      const BACKUP_ENABLED_KEY = 'm_cloud_backup_enabled_v1';
       const DEFAULT_GO_MODEL = 'deepseek-v4-flash';
       const DEFAULT_DS_MODEL = 'deepseek-v4-flash';
 
       let workerAuthenticated = false;
+      let backupSyncTimer = null;
+      let backupSyncRunning = false;
+      let backupSyncPending = false;
 
-      function getSelectedModel(){
-        return localStorage.getItem(MODEL_KEY) || DEFAULT_GO_MODEL;
-      }
-      function setSelectedModel(v){
-        if(v) localStorage.setItem(MODEL_KEY, v);
-      }
-      function getApiMode(){
-        return localStorage.getItem(API_MODE_KEY) === 'deepseek' ? 'deepseek' : 'worker';
-      }
-      function setApiMode(v){
-        localStorage.setItem(API_MODE_KEY, v === 'deepseek' ? 'deepseek' : 'worker');
-      }
-      function getWorkerToken(){
-        try { return localStorage.getItem(WORKER_TOKEN_KEY) || ''; } catch(e) { return ''; }
-      }
-      function setWorkerToken(v){
-        try {
-          if(v) localStorage.setItem(WORKER_TOKEN_KEY, v);
-          else localStorage.removeItem(WORKER_TOKEN_KEY);
-        } catch(e) {}
-      }
-      function workerUrl(path=''){
-        return WORKER_API_URL.replace(/\/+$/, '') + path;
-      }
-      function workerHeaders(extra={}){
-        const h = {...extra};
-        const token = getWorkerToken();
-        if(token) h.Authorization = 'Bearer ' + token;
-        return h;
-      }
-      async function checkWorkerAuth(){
-        try{
-          const r = await fetch(workerUrl('/auth'), {
-            method:'GET', headers:workerHeaders(), cache:'no-store'
-          });
-          const d = await r.json().catch(()=>({}));
-          workerAuthenticated = d.authenticated === true;
-          if(!workerAuthenticated && r.status === 401) setWorkerToken('');
-          return workerAuthenticated;
-        }catch(e){
-          workerAuthenticated = false;
-          return false;
-        }
-      }
+      function getSelectedModel(){ return localStorage.getItem(MODEL_KEY) || DEFAULT_GO_MODEL; }
+      function setSelectedModel(v){ if(v) localStorage.setItem(MODEL_KEY,v); }
+      function getApiMode(){ return localStorage.getItem(API_MODE_KEY)==='deepseek' ? 'deepseek' : 'opencode'; }
+      function setApiMode(v){ localStorage.setItem(API_MODE_KEY,v==='deepseek'?'deepseek':'opencode'); }
+      function getWorkerToken(){ try{return localStorage.getItem(WORKER_TOKEN_KEY)||'';}catch(e){return '';} }
+      function setWorkerToken(v){ try{ if(v)localStorage.setItem(WORKER_TOKEN_KEY,v); else localStorage.removeItem(WORKER_TOKEN_KEY); }catch(e){} }
+      function workerUrl(path=''){ return WORKER_API_URL.replace(/\/+$/,'')+path; }
+
       function showLoginModal(message=''){
         const modal=$('loginModal'), input=$('workerPasswordInput'), status=$('loginStatus');
         if(status) status.textContent=message;
         if(modal) modal.style.display='flex';
         if(input) setTimeout(()=>input.focus(),50);
       }
-      function hideLoginModal(){
-        const modal=$('loginModal');
-        if(modal) modal.style.display='none';
-      }
+      function hideLoginModal(){ const modal=$('loginModal'); if(modal) modal.style.display='none'; }
+
       async function loginWorker(){
-        const input=$('workerPasswordInput'), status=$('loginStatus');
-        const password=input ? input.value : '';
-        if(!password){ if(status) status.textContent='请输入密码。'; return false; }
-        if(status) status.textContent='正在登录…';
+        const input=$('workerPasswordInput'), status=$('loginStatus'), password=input?input.value:'';
+        if(!password){ if(status)status.textContent='请输入密码。'; return false; }
+        if(status)status.textContent='正在登录…';
         try{
-          const r=await fetch(workerUrl('/login'),{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({password}),
-            cache:'no-store'
-          });
+          const r=await fetch(workerUrl('/login'),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({password}),cache:'no-store'});
           const d=await r.json().catch(()=>({}));
-          if(!r.ok || !d.token){
-            if(status) status.textContent=d?.error?.message || `登录失败（HTTP ${r.status}）`;
-            return false;
-          }
-          setWorkerToken(d.token);
-          workerAuthenticated=true;
-          if(input) input.value='';
-          hideLoginModal();
+          if(!r.ok || !d.token){ if(status)status.textContent=d?.error?.message||`登录失败（HTTP ${r.status}）`; return false; }
+          setWorkerToken(d.token); workerAuthenticated=true; hideLoginModal();
           await loadCurrentModels();
+          await pullCloudBackup();
           return true;
+        }catch(e){ if(status)status.textContent='登录失败：'+e.message; return false; }
+      }
+
+      async function checkWorkerAuth(){
+        const token=getWorkerToken();
+        if(!token){ workerAuthenticated=false; return false; }
+        try{
+          const r=await fetch(workerUrl('/auth'),{method:'GET',headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'});
+          const d=await r.json().catch(()=>({}));
+          if(r.status===401 || d.authenticated!==true){ setWorkerToken(''); workerAuthenticated=false; return false; }
+          workerAuthenticated=true; return true;
         }catch(e){
-          if(status) status.textContent='登录失败：'+e.message;
+          // 网络暂时失败不能等同于登录失效。
+          workerAuthenticated=false;
           return false;
         }
       }
-      async function workerFetch(path, options={}){
-        const opts={...options, headers:workerHeaders(options.headers || {})};
+
+      async function workerFetch(path='',options={}){
+        const opts={...options};
+        const headers={...(options.headers||{})};
+        const token=getWorkerToken();
+        if(token) headers['Authorization']='Bearer '+token;
+        opts.headers=headers;
         const r=await fetch(workerUrl(path),opts);
         if(r.status===401){
-          workerAuthenticated=false;
-          setWorkerToken('');
-          showLoginModal('登录已失效，请重新登录。');
-          throw new Error('未登录，请先登录 Worker');
+          let d={}; try{d=await r.clone().json();}catch(e){}
+          if(d?.error?.code==='UNAUTHORIZED'){
+            setWorkerToken(''); workerAuthenticated=false; showLoginModal('登录已失效，请重新登录。');
+            throw new Error('Worker 登录已失效');
+          }
+          throw new Error(d?.error?.message||'上游 API 返回 HTTP 401');
         }
         return r;
       }
-      function isVisionModel(model){
-        return String(model || '').toLowerCase().includes('vision');
-      }
-      function getRequestTarget(){
-        const mode=getApiMode();
+
+      function backupEnabled(){ return localStorage.getItem(BACKUP_ENABLED_KEY)!=='0'; }
+
+      function makeBackupPayload(){
+        const cleanMessages=messages.filter(m=>m.role!=='system');
+        const max=500;
+        const msgs=cleanMessages.length>max?cleanMessages.slice(-max):cleanMessages;
         return {
-          url:WORKER_API_URL,
-          headers:{'Content-Type':'application/json'},
+          version:1,
+          updatedAt:Date.now(),
+          messages:msgs,
+          fullHistory:Array.isArray(fullHistory)?fullHistory.slice(-2000):[],
+          globalSetting:globalSetting||'',
+          compressedMemory:compressedMemory||'',
+          memoryFacts:(()=>{try{return JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY)||'[]')}catch(e){return[]}})(),
+          memoryGraph:(()=>{try{return JSON.parse(localStorage.getItem(MEMORY_GRAPH_KEY)||'{}')}catch(e){return{}}})(),
           model:getSelectedModel(),
-          mode,
-          provider:mode==='deepseek' ? 'deepseek' : 'opencode'
+          apiMode:getApiMode()
         };
       }
-      function updateImageUploadAvailability(){
-        const btn=$('imageUploadBtn'), status=$('visionStatus');
-        if(!btn) return;
-        const enabled=isVisionModel(getSelectedModel());
-        btn.disabled=!enabled;
-        btn.title=enabled?'上传图片':'请先选择 Vision 模型';
-        if(status){
-          status.textContent=enabled
-            ? (getApiMode()==='deepseek'?'🖼️ DeepSeek 官方 Vision 模型已启用，可以上传图片。':'🖼️ OpenCode Go Vision 模型已启用，可以上传图片。')
-            : '🖼️ 当前模型不是 Vision 模型。选择带 Vision 的模型后即可上传图片。';
-        }
+
+      async function pushCloudBackup(){
+        if(!workerAuthenticated || !getWorkerToken() || !backupEnabled()) return;
+        backupSyncPending=true;
+        if(backupSyncRunning) return;
+        backupSyncRunning=true;
+        try{
+          while(backupSyncPending){
+            backupSyncPending=false;
+            const payload=makeBackupPayload();
+            const r=await workerFetch('/backup',{method:'PUT',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
+            if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d?.error?.message||`备份失败 HTTP ${r.status}`); }
+          }
+        }catch(e){ console.warn('☁️ 云端备份失败：',e); }
+        finally{ backupSyncRunning=false; }
       }
-      function updateConnectionUI(){
+
+      function scheduleCloudBackup(){
+        if(!workerAuthenticated || !backupEnabled()) return;
+        if(backupSyncTimer) clearTimeout(backupSyncTimer);
+        backupSyncTimer=setTimeout(()=>{backupSyncTimer=null;pushCloudBackup();},1200);
+      }
+
+      async function pullCloudBackup(){
+        if(!workerAuthenticated || !getWorkerToken() || !backupEnabled()) return false;
+        try{
+          const r=await workerFetch('/backup',{method:'GET',cache:'no-store'});
+          if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d?.error?.message||`读取备份失败 HTTP ${r.status}`); }
+          const d=await r.json();
+          if(!d.exists || !d.backup) return false;
+          const b=d.backup;
+          const serverMsgs=Array.isArray(b.messages)?b.messages:[];
+          const localMsgs=messages.filter(m=>m.role!=='system');
+
+          // 云端有数据时优先恢复云端；当前设备没有聊天时尤其如此。
+          // 如果本机还有未上传的新消息，则按消息签名合并，避免覆盖。
+          const sig=m=>`${m.role}|${m.time||''}|${typeof m.content==='string'?m.content:''}`;
+          const merged=[...serverMsgs];
+          const seen=new Set(merged.map(sig));
+          for(const m of localMsgs){ if(!seen.has(sig(m))){merged.push(m);seen.add(sig(m));} }
+          merged.sort((a,b)=>(a.time||0)-(b.time||0));
+          messages=[messages[0],...merged.slice(-500)];
+
+          if(Array.isArray(b.fullHistory) && b.fullHistory.length){ fullHistory=b.fullHistory; saveFullHistory(); }
+          if(typeof b.globalSetting==='string'){ globalSetting=b.globalSetting; localStorage.setItem(SETTING_KEY,globalSetting); }
+          if(typeof b.compressedMemory==='string'){ compressedMemory=b.compressedMemory; localStorage.setItem(MEMORY_KEY,compressedMemory); }
+          if(Array.isArray(b.memoryFacts)) localStorage.setItem(MEMORY_FACTS_KEY,JSON.stringify(b.memoryFacts));
+          if(b.memoryGraph && typeof b.memoryGraph==='object') localStorage.setItem(MEMORY_GRAPH_KEY,JSON.stringify(b.memoryGraph));
+          if(b.model) setSelectedModel(b.model);
+          if(b.apiMode) setApiMode(b.apiMode);
+          if(typeof rebuildGraph==='function') rebuildGraph();
+          if(typeof refreshSystemPrompt==='function') refreshSystemPrompt();
+          renderAll(); saveAll(false);
+
+          // 把合并后的结果重新上传，确保两台设备最终一致。
+          scheduleCloudBackup();
+          return true;
+        }catch(e){ console.warn('☁️ 云端恢复失败：',e); return false; }
+      }
+
+      function isVisionModel(model){ return String(model||'').toLowerCase().includes('vision'); }
+
+      function getRequestTarget(){
         const mode=getApiMode();
-        const sel=$('apiModeSelect'); if(sel) sel.value=mode;
-        const key=$('directApiKeyInput'); if(key) key.style.display='none';
-        const hint=$('directKeyHint');
-        if(hint){
-          hint.style.display='';
-          hint.textContent='🔒 '+(mode==='deepseek'?'DeepSeek 官方 API':'OpenCode Go')+' 通过 Cloudflare Worker，API Key 只保存在 Worker Secrets。';
-        }
-        const setup=$('setupStatusText');
-        if(setup) setup.textContent=mode==='deepseek'?'⚡ DeepSeek 官方 API → Cloudflare Worker':'☁️ OpenCode Go → Cloudflare Worker';
-        const modelInput=$('modelNameInput'); if(modelInput) modelInput.value=getSelectedModel();
+        return {url:WORKER_API_URL,headers:{'Content-Type':'application/json'},model:getSelectedModel(),mode,provider:mode};
+      }
+
+      function updateImageUploadAvailability(){
+        const btn=$('imageUploadBtn'), status=$('visionStatus'); if(!btn)return;
+        const enabled=isVisionModel(getSelectedModel()); btn.disabled=!enabled; btn.title=enabled?'上传图片':'请先选择 Vision 模型';
+        if(status)status.textContent=enabled?'🖼️ 当前 Vision 模型已启用，可以上传图片。':'🖼️ 当前模型不是 Vision 模型。选择带 Vision 的模型后即可上传图片。';
+      }
+
+      function updateConnectionUI(){
+        const mode=getApiMode(), sel=$('apiModeSelect'); if(sel)sel.value=mode;
+        const hint=$('directKeyHint'); if(hint)hint.textContent='🔒 '+(mode==='deepseek'?'DeepSeek 官方 API':'OpenCode Go')+' 通过 Cloudflare Worker，API Key 不保存在网页或浏览器中。';
+        const setup=$('setupStatusText'); if(setup)setup.textContent=mode==='deepseek'?'⚡ DeepSeek 官方 API → Cloudflare Worker':'☁️ OpenCode Go → Cloudflare Worker';
+        const modelInput=$('modelNameInput'); if(modelInput)modelInput.value=getSelectedModel();
         updateImageUploadAvailability();
       }
+
       async function loadCurrentModels(){
-        const status=$('modelStatus'), select=$('modelSelect');
-        if(!select) return;
-        if(!workerAuthenticated){
-          const ok=await checkWorkerAuth();
-          if(!ok){ showLoginModal('请先登录你的私人 Worker。'); return; }
-        }
+        const status=$('modelStatus'),select=$('modelSelect'); if(!select)return;
         const mode=getApiMode();
         try{
-          status.textContent=mode==='deepseek'
-            ? '正在通过 Cloudflare Worker 获取 DeepSeek 官方 API 模型列表…'
-            : '正在通过 Cloudflare Worker 获取 OpenCode Go 模型列表…';
-          const r=await workerFetch('/models?provider='+encodeURIComponent(mode==='deepseek'?'deepseek':'opencode'),{method:'GET',cache:'no-store'});
-          const txt=await r.text();
-          if(!r.ok){
-            let detail=txt; try{const j=JSON.parse(txt); detail=j?.error?.message || j?.error || txt;}catch(e){}
-            throw new Error(`Worker /models HTTP ${r.status}: ${detail}`);
-          }
-          let d; try{d=JSON.parse(txt);}catch(e){throw new Error('Worker /models 返回的不是有效 JSON');}
-          const arr=Array.isArray(d?.data)?d.data:[];
-          const current=getSelectedModel();
-          const list=[];
-          for(const m of arr){
-            const id=m?.id || m?.model; if(!id) continue;
-            if(!list.some(x=>x.id===id)) list.push({id,name:m?.name || m?.display_name || id});
-          }
+          status.textContent=`正在通过 Cloudflare Worker 获取 ${mode==='deepseek'?'DeepSeek 官方':'OpenCode Go'} 模型列表…`;
+          const r=await workerFetch('/models?provider='+encodeURIComponent(mode),{method:'GET',cache:'no-store'});
+          const txt=await r.text(); let d={}; try{d=JSON.parse(txt)}catch(e){throw new Error('Worker /models 返回的不是有效 JSON');}
+          if(!r.ok)throw new Error(d?.error?.message||`Worker /models HTTP ${r.status}`);
+          const arr=Array.isArray(d.data)?d.data:[],current=getSelectedModel(),list=[];
+          for(const m of arr){const id=m?.id||m?.model;if(id&&!list.some(x=>x.id===id))list.push({id,name:m?.name||m?.display_name||id});}
           const fallback=mode==='deepseek'?DEFAULT_DS_MODEL:DEFAULT_GO_MODEL;
-          if(!list.some(x=>x.id===fallback)) list.unshift({id:fallback,name:mode==='deepseek'?'DeepSeek V4 Flash':'DeepSeek V4 Flash（默认）'});
-          if(!list.some(x=>x.id==='deepseek-v4-flash-vision-exp')) list.push({id:'deepseek-v4-flash-vision-exp',name:'DeepSeek V4 Flash Vision Exp（图片）'});
-          select.innerHTML='';
-          list.forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name;select.appendChild(o);});
-          const chosen=list.some(x=>x.id===current)?current:list[0].id;
-          select.value=chosen; setSelectedModel(chosen);
-          status.textContent=`已获取 ${arr.length || list.length} 个 ${mode==='deepseek'?'DeepSeek 官方':'OpenCode Go'} 模型，可以直接切换。`;
-          updateConnectionUI();
-        }catch(e){
-          console.error('模型列表获取失败：',e);
-          status.textContent='获取失败：'+e.message;
-          updateConnectionUI();
-        }
+          if(!list.some(x=>x.id===fallback))list.unshift({id:fallback,name:'DeepSeek V4 Flash'});
+          if(!list.some(x=>x.id==='deepseek-v4-flash-vision-exp'))list.push({id:'deepseek-v4-flash-vision-exp',name:'DeepSeek V4 Flash Vision Exp（图片）'});
+          select.innerHTML=''; for(const m of list){const o=document.createElement('option');o.value=m.id;o.textContent=m.name;select.appendChild(o);}
+          const chosen=list.some(x=>x.id===current)?current:list[0].id; select.value=chosen;setSelectedModel(chosen);
+          status.textContent=`已获取 ${arr.length||list.length} 个模型，可以直接切换。`;updateConnectionUI();
+        }catch(e){console.error('模型列表获取失败：',e);status.textContent='获取失败：'+e.message;updateConnectionUI();}
       }
-      function initModelAndApiUI(){
-        const ms=$('modelSelect');
-        if(ms) ms.addEventListener('change',()=>{setSelectedModel(ms.value);updateConnectionUI();});
-        const am=$('apiModeSelect');
-        if(am) am.addEventListener('change',()=>{
-          setApiMode(am.value);
-          setSelectedModel(am.value==='deepseek'?DEFAULT_DS_MODEL:DEFAULT_GO_MODEL);
-          updateConnectionUI();
-          if(workerAuthenticated) loadCurrentModels(); else showLoginModal('请先登录 Worker。');
+
+      function initWorkerSecurity(){
+        checkWorkerAuth().then(async ok=>{
+          if(ok){ await pullCloudBackup(); await loadCurrentModels(); }
+          else if(!getWorkerToken()) showLoginModal('请先登录你的私人 Worker。');
         });
-        const rb=$('refreshModelsBtn'); if(rb) rb.addEventListener('click',loadCurrentModels);
-        const lb=$('workerLoginBtn'); if(lb) lb.addEventListener('click',loginWorker);
-        const pi=$('workerPasswordInput'); if(pi) pi.addEventListener('keydown',e=>{if(e.key==='Enter') loginWorker();});
-        updateConnectionUI();
-        checkWorkerAuth().then(ok=>{if(ok) loadCurrentModels(); else showLoginModal('请先登录你的私人 Worker。');});
       }
-      function initWorkerLoginOnly(){
-        const lb=$('workerLoginBtn'); if(lb) lb.addEventListener('click',loginWorker);
-        const pi=$('workerPasswordInput'); if(pi) pi.addEventListener('keydown',e=>{if(e.key==='Enter') loginWorker();});
+
+      function initModelAndApiUI(){
+        const ms=$('modelSelect'); if(ms)ms.addEventListener('change',()=>{setSelectedModel(ms.value);updateConnectionUI();scheduleCloudBackup();});
+        const am=$('apiModeSelect'); if(am)am.addEventListener('change',()=>{setApiMode(am.value);setSelectedModel(am.value==='deepseek'?DEFAULT_DS_MODEL:DEFAULT_GO_MODEL);updateConnectionUI();if(workerAuthenticated)loadCurrentModels();else if(!getWorkerToken())showLoginModal('请先登录 Worker。');});
+        const rb=$('refreshModelsBtn'); if(rb)rb.addEventListener('click',loadCurrentModels);
+        updateConnectionUI();initWorkerSecurity();
       }
+
+      const workerLoginBtn=$('workerLoginBtn'); if(workerLoginBtn)workerLoginBtn.addEventListener('click',loginWorker);
+      const workerPasswordInput=$('workerPasswordInput'); if(workerPasswordInput)workerPasswordInput.addEventListener('keydown',e=>{if(e.key==='Enter')loginWorker();});
 
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
@@ -889,7 +898,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
         return `${y}-${m}-${day} ${t}`;
       }
 
-      function saveAll() {
+      function saveAll(scheduleBackup = true) {
         const MAX_STORED_MSGS = 500;
         let toSave = messages.filter(m => m.role !== 'system');
         if (toSave.length > MAX_STORED_MSGS) {
@@ -901,6 +910,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
           const fallback = toSave.slice(-200);
           localStorage.setItem(CK, JSON.stringify(fallback));
         }
+        if (scheduleBackup) scheduleCloudBackup();
       }
       function loadAll() { const s = localStorage.getItem(CK); if (s) try { const a = JSON.parse(s); if (Array.isArray(a)&&a.length) messages = [messages[0], ...a]; } catch(e) {} }
       loadAll(); if (!fullHistory.length && messages.length>1) { fullHistory = messages.filter(m=>m.role!=='system').map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); saveFullHistory(); }
@@ -1566,8 +1576,9 @@ M：${aiText}`;
         try {
           const target = getRequestTarget();
           const baseUrl = target.url;
-          const res = await workerFetch('', {
+          const res = await fetch(baseUrl, {
             method: 'POST',
+            credentials: 'include',
             headers: target.headers,
             body: JSON.stringify({
               provider: target.provider,
