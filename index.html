@@ -2047,21 +2047,18 @@ M：${aiText}`;
           refreshSystemPrompt();
           let apiMsgs = getApiMessages().map(m => ({ role: m.role, content: getApiContent(m) }));
 
-          // 重新生成：告诉模型这是同一条 USER 的新回答，
-          // 要求换一种表达，但保持人物、上下文和语气一致。
+          // 重新生成：复用当前 USER，但要求模型换一个回答角度。
+          // 不把上一版完整回答再次发送给模型，避免模型照着上一版复现。
           if (isRegenerate) {
-            const previousReply = window._regeneratePreviousReply || '';
-
             apiMsgs.unshift({
               role: 'system',
               content:
-                '这是一次“重新生成回答”请求。' +
-                '请针对用户最后一条消息重新生成一个明显不同的回答。' +
-                '不要机械重复上一版回答，也不要解释你正在重新生成。' +
-                '保持角色、人设、语气和上下文一致，但在措辞、表达方式、细节或回应角度上做出明显变化。' +
-                (previousReply
-                  ? '\n上一版回答如下，请不要照搬：\n' + previousReply
-                  : '')
+                '这是一次重新生成回答的请求。' +
+                '请针对用户最后一条消息重新回答。' +
+                '保持角色、人设、语气、事实和上下文一致，' +
+                '但不要复用上一版回答的句式、结构或表达方式。' +
+                '请主动换一个回应角度，使用明显不同的措辞和组织方式。' +
+                '不要提及“重新生成”、上一版回答或本提示。'
             });
           }
 
@@ -2078,7 +2075,13 @@ M：${aiText}`;
           const res = await workerFetch('', {
             method: 'POST',
             headers: target.headers,
-            body: JSON.stringify({ provider: target.provider, model: model, messages: apiMsgs, stream: false, temperature: 0.5 })
+            body: JSON.stringify({
+              provider: target.provider,
+              model: model,
+              messages: apiMsgs,
+              stream: false,
+              temperature: isRegenerate ? 0.8 : 0.5
+            })
           });
           load.remove();
 
