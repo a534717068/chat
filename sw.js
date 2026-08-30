@@ -33,21 +33,33 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// 拦截请求：优先使用网络，网络失败时回退到缓存
+// 拦截请求：
+// GET 请求：优先网络，成功后更新缓存，网络失败时回退缓存。
+// POST / PUT / DELETE 等非 GET 请求：只走网络，绝不写入 Cache。
+// Cache API 不支持用 cache.put() 缓存这些请求。
 self.addEventListener('fetch', event => {
+  const request = event.request;
+
+  if (request.method !== 'GET') {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   event.respondWith(
-    fetch(event.request)
+    fetch(request)
       .then(response => {
-        // 网络请求成功，更新缓存
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then(cache => {
-          cache.put(event.request, responseClone);
-        });
+        // 只有 GET 请求才写入 Cache
+        if (response && response.ok) {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(request, responseClone).catch(() => {});
+          });
+        }
         return response;
       })
       .catch(() => {
-        // 网络请求失败，使用缓存
-        return caches.match(event.request);
+        // GET 网络失败时才回退到缓存
+        return caches.match(request);
       })
   );
 });
