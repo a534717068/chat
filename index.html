@@ -303,9 +303,18 @@
       const DEFAULT_DS_MODEL = 'deepseek-v4-flash';
 
       let workerAuthenticated = false;
+
+      // ===== 极省 KV：本地实时保存，云端低频同步 =====
+      // localStorage 是实时聊天记录；CHAT_BACKUP 只做云端灾备。
+      // 连续聊天时不会因为每条消息都 saveAll() 而不断触发 Worker /backup。
+      const CLOUD_BACKUP_INTERVAL = 5 * 60 * 1000; // 5 分钟
       let backupSyncTimer = null;
       let backupSyncRunning = false;
-      let backupSyncPending = false;
+      let backupSyncDirty = false;
+      let backupSyncRevision = 0;
+
+      // 页面隐藏/关闭时尽量提前同步一次；正常情况下仍以 5 分钟定时同步为主。
+      let backupVisibilityHandlerBound = false;
 
       function getSelectedModel(){ return localStorage.getItem(MODEL_KEY) || DEFAULT_GO_MODEL; }
       function setSelectedModel(v){ if(v) localStorage.setItem(MODEL_KEY,v); }
@@ -345,7 +354,10 @@
           const r=await fetch(workerUrl('/auth'),{method:'GET',headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'});
           const d=await r.json().catch(()=>({}));
           if(r.status===401 || d.authenticated!==true){ setWorkerToken(''); workerAuthenticated=false; return false; }
-          workerAuthenticated=true; return true;
+          workerAuthenticated=true;
+          // 如果登录前已经产生本地改动，认证恢复后重新安排云端同步。
+          if(backupSyncDirty) scheduleCloudBackup();
+          return true;
         }catch(e){
           // 网络暂时失败不能等同于登录失效。
           workerAuthenticated=false;
@@ -391,26 +403,121 @@
         };
       }
 
-      async function pushCloudBackup(){
-        if(!workerAuthenticated || !getWorkerToken() || !backupEnabled()) return;
-        backupSyncPending=true;
-        if(backupSyncRunning) return;
-        backupSyncRunning=true;
+      async function pushCloudBackup(options = {}){
+        const force = !!options.force;
+
+        // 本地永远优先；没有认证或关闭云备份时，只保留本地数据。
+        if(!backupEnabled()) return false;
+        if(!workerAuthenticated || !getWorkerToken()) return false;
+        if(backupSyncRunning) return false;
+        if(!backupSyncDirty && !force) return true;
+
+        backupSyncRunning = true;
+        const revisionAtStart = backupSyncRevision;
+
         try{
-          while(backupSyncPending){
-            backupSyncPending=false;
-            const payload=makeBackupPayload();
-            const r=await workerFetch('/backup',{method:'PUT',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
-            if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d?.error?.message||`备份失败 HTTP ${r.status}`); }
+          const payload = makeBackupPayload();
+          const r = await workerFetch('/backup',{
+            method:'PUT',
+            headers:{
+              'Content-Type':'application/json',
+              'Accept':'application/json'
+            },
+            body:JSON.stringify(payload)
+          });
+
+          const d = await r.json().catch(()=>({}));
+
+          if(!r.ok){
+            throw new Error(d?.error?.message || `备份失败 HTTP ${r.status}`);
           }
-        }catch(e){ console.warn('☁️ 云端备份失败：',e); }
-        finally{ backupSyncRunning=false; }
+
+          // Worker 的极省 KV 版本会返回：
+          // saved=true       → 真正写入 KV
+          // skipped=true + UNCHANGED → 内容本来就一致
+          // skipped=true + THROTTLED → KV 还没到下一次写入时间
+          // 后两者中的 THROTTLED 不能把本地 dirty 标记清掉。
+          if(d?.reason === 'THROTTLED'){
+            backupSyncDirty = true;
+            const wait = Math.max(1000, Number(d.nextSaveIn) || CLOUD_BACKUP_INTERVAL);
+            if(backupSyncTimer) clearTimeout(backupSyncTimer);
+            backupSyncTimer = setTimeout(()=>{
+              backupSyncTimer = null;
+              pushCloudBackup();
+            }, wait + 1000);
+          }else if(backupSyncRevision === revisionAtStart){
+            backupSyncDirty = false;
+          }
+
+          return true;
+        }catch(e){
+          // 云端失败绝不能影响本地聊天；保持 dirty，稍后再尝试。
+          backupSyncDirty = true;
+          console.warn('☁️ 云端备份失败，本地数据仍已保存：',e);
+
+          if(!backupSyncTimer && workerAuthenticated && getWorkerToken()){
+            backupSyncTimer = setTimeout(()=>{
+              backupSyncTimer = null;
+              pushCloudBackup();
+            }, CLOUD_BACKUP_INTERVAL);
+          }
+
+          return false;
+        }finally{
+          backupSyncRunning = false;
+
+          // 上传过程中如果又产生了新消息，不要丢掉这次变化。
+          if(backupSyncDirty && !backupSyncTimer && workerAuthenticated && getWorkerToken()){
+            backupSyncTimer = setTimeout(()=>{
+              backupSyncTimer = null;
+              pushCloudBackup();
+            }, CLOUD_BACKUP_INTERVAL);
+          }
+        }
       }
 
       function scheduleCloudBackup(){
-        if(!workerAuthenticated || !backupEnabled()) return;
-        if(backupSyncTimer) clearTimeout(backupSyncTimer);
-        backupSyncTimer=setTimeout(()=>{backupSyncTimer=null;pushCloudBackup();},1200);
+        // 每次本地变更只增加一个 dirty 标记和 revision。
+        // 不再每条消息启动一次 1.2 秒定时器。
+        backupSyncDirty = true;
+        backupSyncRevision++;
+
+        if(!workerAuthenticated || !getWorkerToken() || !backupEnabled()) return;
+        if(backupSyncTimer || backupSyncRunning) return;
+
+        backupSyncTimer = setTimeout(()=>{
+          backupSyncTimer = null;
+          pushCloudBackup();
+        }, CLOUD_BACKUP_INTERVAL);
+      }
+
+      function setupCloudBackupLifecycle(){
+        if(backupVisibilityHandlerBound) return;
+        backupVisibilityHandlerBound = true;
+
+        // 用户切到其他页面/标签页时，尽量把最新本地数据送去云端。
+        // Worker 自己仍有 5 分钟限流，因此不会因此突破 KV 写入限制。
+        document.addEventListener('visibilitychange', ()=>{
+          if(document.visibilityState === 'hidden' && backupSyncDirty){
+            pushCloudBackup({force:true}).catch(()=>{});
+          }
+        });
+
+        // 页面关闭时使用 keepalive 尝试提交一次。
+        window.addEventListener('pagehide', ()=>{
+          if(!backupSyncDirty || !workerAuthenticated || !getWorkerToken() || !backupEnabled()) return;
+          const payload = makeBackupPayload();
+          fetch(workerUrl('/backup'),{
+            method:'PUT',
+            headers:{
+              'Authorization':'Bearer '+getWorkerToken(),
+              'Content-Type':'application/json',
+              'Accept':'application/json'
+            },
+            body:JSON.stringify(payload),
+            keepalive:true
+          }).catch(()=>{});
+        });
       }
 
       async function pullCloudBackup(){
@@ -424,12 +531,18 @@
           const serverMsgs=Array.isArray(b.messages)?b.messages:[];
           const localMsgs=messages.filter(m=>m.role!=='system');
 
-          // 云端有数据时优先恢复云端；当前设备没有聊天时尤其如此。
-          // 如果本机还有未上传的新消息，则按消息签名合并，避免覆盖。
+          // 云端有数据时优先恢复云端；当前设备还有未上传的新消息时才需要回写。
           const sig=m=>`${m.role}|${m.time||''}|${typeof m.content==='string'?m.content:''}`;
           const merged=[...serverMsgs];
           const seen=new Set(merged.map(sig));
-          for(const m of localMsgs){ if(!seen.has(sig(m))){merged.push(m);seen.add(sig(m));} }
+          let localHadUniqueMessage=false;
+          for(const m of localMsgs){
+            if(!seen.has(sig(m))){
+              merged.push(m);
+              seen.add(sig(m));
+              localHadUniqueMessage=true;
+            }
+          }
           merged.sort((a,b)=>(a.time||0)-(b.time||0));
           messages=[messages[0],...merged.slice(-500)];
 
@@ -444,8 +557,17 @@
           if(typeof refreshSystemPrompt==='function') refreshSystemPrompt();
           renderAll(); saveAll(false);
 
-          // 把合并后的结果重新上传，确保两台设备最终一致。
-          scheduleCloudBackup();
+          // 只有本机确实存在云端没有的新消息时，才安排一次低频回写。
+          if(localHadUniqueMessage){
+            backupSyncDirty = true;
+            backupSyncRevision++;
+            if(!backupSyncTimer && !backupSyncRunning){
+              backupSyncTimer=setTimeout(()=>{
+                backupSyncTimer=null;
+                pushCloudBackup();
+              }, CLOUD_BACKUP_INTERVAL);
+            }
+          }
           return true;
         }catch(e){ console.warn('☁️ 云端恢复失败：',e); return false; }
       }
@@ -491,6 +613,7 @@
       }
 
       function initWorkerSecurity(){
+        setupCloudBackupLifecycle();
         checkWorkerAuth().then(async ok=>{
           if(ok){ await pullCloudBackup(); await loadCurrentModels(); }
           else if(!getWorkerToken()) showLoginModal('请先登录你的私人 Worker。');
