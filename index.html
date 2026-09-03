@@ -275,7 +275,7 @@
 
   <script>
     (function() {
-      window.__M_WORKER_VERSION__ = '2026-08-25-dual-api-go-deepseek';
+      window.__M_WORKER_VERSION__ = '2026-09-03-v12-emotion-strategy';
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
@@ -286,11 +286,151 @@
       const COMPRESS_THRESHOLD = 30;
       const MEMORY_FACTS_KEY = 'memory_facts_v3', MEMORY_GRAPH_KEY = 'memory_graph_v3';
       const REPROGRESS_KEY = 'reprocess_progress_index';
+      const EMOTION_STATE_KEY = 'm_emotion_state_v12';
+      const EMOTION_SCHEMA_VERSION = 1;
       const EXTRACT_INTERVAL = 5;
       const MAX_IMAGE_COUNT = 3;
       const MAX_IMAGE_DIMENSION = 1600;
       const IMAGE_JPEG_QUALITY = 0.86;
       let pendingImages = [];
+
+      // ===== V12：情绪驱动回复策略 =====
+      // 情绪是“回复策略状态”，不是事实记忆；不写入长期记忆抽取器。
+      const DEFAULT_EMOTION_STATE = {
+        schema: EMOTION_SCHEMA_VERSION,
+        mood: '平静',
+        intensity: 45,
+        affection: 72,
+        trust: 78,
+        safety: 70,
+        disappointment: 10,
+        longing: 20,
+        irritation: 8,
+        lastReason: '初始状态',
+        lastUpdated: Date.now()
+      };
+      let emotionState = loadEmotionState();
+
+      function clampNum(v, min, max) {
+        const n = Number(v);
+        return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : min;
+      }
+
+      function loadEmotionState() {
+        try {
+          const raw = localStorage.getItem(EMOTION_STATE_KEY);
+          if (!raw) return { ...DEFAULT_EMOTION_STATE };
+          const x = JSON.parse(raw);
+          if (!x || typeof x !== 'object') return { ...DEFAULT_EMOTION_STATE };
+          return {
+            ...DEFAULT_EMOTION_STATE,
+            ...x,
+            schema: EMOTION_SCHEMA_VERSION,
+            intensity: clampNum(x.intensity, 0, 100),
+            affection: clampNum(x.affection, 0, 100),
+            trust: clampNum(x.trust, 0, 100),
+            safety: clampNum(x.safety, 0, 100),
+            disappointment: clampNum(x.disappointment, 0, 100),
+            longing: clampNum(x.longing, 0, 100),
+            irritation: clampNum(x.irritation, 0, 100),
+            lastUpdated: Number(x.lastUpdated) || Date.now()
+          };
+        } catch (e) { return { ...DEFAULT_EMOTION_STATE }; }
+      }
+
+      function saveEmotionState(scheduleBackup = true) {
+        try { localStorage.setItem(EMOTION_STATE_KEY, JSON.stringify(emotionState)); } catch (e) {}
+        if (scheduleBackup && typeof scheduleCloudBackup === 'function') scheduleCloudBackup();
+      }
+
+      function decayEmotionState() {
+        const now = Date.now();
+        const hours = Math.max(0, (now - Number(emotionState.lastUpdated || now)) / 3600000);
+        if (hours < 2) return;
+        const factor = Math.min(1, hours / 24);
+        // 情绪慢慢回归中性；关系基础值变化更慢，不因时间自动大幅改变。
+        emotionState.intensity += (45 - emotionState.intensity) * 0.18 * factor;
+        emotionState.irritation *= (1 - 0.22 * factor);
+        emotionState.disappointment *= (1 - 0.10 * factor);
+        emotionState.longing += (20 - emotionState.longing) * 0.10 * factor;
+        emotionState.lastUpdated = now;
+      }
+
+      function updateEmotionFromUserText(text) {
+        decayEmotionState();
+        const t = String(text || '').trim();
+        if (!t) return;
+
+        let delta = 0;
+        const reasons = [];
+        const add = (field, amount) => { emotionState[field] = clampNum(emotionState[field] + amount, 0, 100); };
+
+        // 这里只根据用户本轮实际文字判断，不把模型幻想当成触发条件。
+        if (/(谢谢|感谢|辛苦了|抱抱|爱你|喜欢你|想你|想见你|陪陪我|在乎你)/.test(t)) {
+          add('affection', 4); add('safety', 3); add('irritation', -3); delta += 6; reasons.push('收到亲近/感谢表达');
+        }
+        if (/(对不起|抱歉|我错了|原谅我|别生气)/.test(t)) {
+          add('irritation', -8); add('disappointment', -5); add('safety', 2); delta += 3; reasons.push('收到道歉或修复关系的表达');
+        }
+        if (/(不理你|不想理你|算了|不打扰了|再见|拉黑|分手|不要你了)/.test(t)) {
+          add('longing', 6); add('disappointment', 8); add('safety', -4); delta -= 10; reasons.push('出现疏离/结束关系表达');
+        }
+        if (/(骗我|骗|敷衍|失望|生气|烦死|讨厌|别烦|滚|闭嘴)/.test(t)) {
+          add('irritation', 9); add('disappointment', 7); add('safety', -3); delta -= 9; reasons.push('出现负面/冲突表达');
+        }
+        if (/(开心|高兴|太好了|好棒|成功了|笑死|哈哈|惊喜)/.test(t)) {
+          delta += 5; add('safety', 2); reasons.push('出现积极情绪');
+        }
+        if (/(难过|伤心|孤独|孤单|委屈|崩溃|累死|好累|害怕|担心)/.test(t)) {
+          add('longing', 3); delta -= 1; reasons.push('用户表达负面情绪');
+        }
+        if (/(别人|另一个女生|她喜欢|前任|前女友|女朋友)/.test(t)) {
+          add('irritation', 3); add('disappointment', 2); add('longing', 2); delta -= 2; reasons.push('涉及可能引发在意的关系话题');
+        }
+
+        // 情绪强度存在惯性：没有明显触发时不会大幅跳变。
+        emotionState.intensity = clampNum(emotionState.intensity * 0.78 + (45 + delta * 3) * 0.22, 0, 100);
+        if (delta > 4) emotionState.mood = '开心';
+        else if (emotionState.irritation >= 55) emotionState.mood = '生气';
+        else if (emotionState.disappointment >= 55) emotionState.mood = '失望';
+        else if (emotionState.longing >= 55) emotionState.mood = '想念';
+        else if (delta < -5) emotionState.mood = '低落';
+        else if (emotionState.irritation >= 30) emotionState.mood = '烦躁';
+        else if (emotionState.safety >= 80 && emotionState.affection >= 75) emotionState.mood = '安心';
+        else emotionState.mood = '平静';
+
+        emotionState.lastReason = reasons.length ? reasons.join('；') : '本轮没有明显情绪触发，保持原有状态';
+        emotionState.lastUpdated = Date.now();
+        saveEmotionState(false);
+      }
+
+      function getEmotionStrategyPrompt() {
+        decayEmotionState();
+        const e = emotionState;
+        let strategy = [];
+        if (e.irritation >= 60) strategy.push('回复更直接，减少讨好和无意义解释；可以保留一点不耐烦，但不要失控辱骂。');
+        else if (e.irritation >= 35) strategy.push('回复略短、耐心下降，不主动强行把气氛变得甜腻。');
+        if (e.disappointment >= 60) strategy.push('主动性下降，避免假装一切正常；如果合适，可以让失望自然地体现在措辞里。');
+        if (e.longing >= 55) strategy.push('更容易主动靠近、回应情感话题，但仍保持阿慕原本的克制。');
+        if (e.safety >= 80 && e.affection >= 78) strategy.push('安全感较高，可以比平时稍微柔和、亲近、愿意多说一点。');
+        if (e.mood === '低落') strategy.push('减少说教和机械分析，允许回复更安静、更简短。');
+        if (!strategy.length) strategy.push('维持阿慕的默认克制、低表达、自然回应。');
+        return `
+【V12 当前情绪与回复策略——仅供内部决策】
+当前情绪：${e.mood}（强度 ${Math.round(e.intensity)}/100）
+亲密度：${Math.round(e.affection)}/100；信任度：${Math.round(e.trust)}/100；安全感：${Math.round(e.safety)}/100
+失望值：${Math.round(e.disappointment)}/100；想念值：${Math.round(e.longing)}/100；烦躁值：${Math.round(e.irritation)}/100
+最近一次状态变化原因：${e.lastReason || '无'}
+回复策略：
+- ${strategy.join('\n- ')}
+
+情绪规则：情绪只能影响“怎么回复”，不能制造事实、不能改变已经确定的人设、不能替用户补动作/心理/台词。不要把上述内部状态直接告诉用户，除非用户明确询问。没有明显触发时保持情绪惯性，不要每轮突然变脸。`;
+      }
+
+      function resetEmotionState(reason = '手动重置') {
+        emotionState = { ...DEFAULT_EMOTION_STATE, lastReason: reason, lastUpdated: Date.now() };
+        saveEmotionState(false);
+      }
 
 
       // ===== V9 FINAL：Worker Token + 跨设备聊天备份 =====
@@ -303,18 +443,9 @@
       const DEFAULT_DS_MODEL = 'deepseek-v4-flash';
 
       let workerAuthenticated = false;
-
-      // ===== 极省 KV：本地实时保存，云端低频同步 =====
-      // localStorage 是实时聊天记录；CHAT_BACKUP 只做云端灾备。
-      // 连续聊天时不会因为每条消息都 saveAll() 而不断触发 Worker /backup。
-      const CLOUD_BACKUP_INTERVAL = 5 * 60 * 1000; // 5 分钟
       let backupSyncTimer = null;
       let backupSyncRunning = false;
-      let backupSyncDirty = false;
-      let backupSyncRevision = 0;
-
-      // 页面隐藏/关闭时尽量提前同步一次；正常情况下仍以 5 分钟定时同步为主。
-      let backupVisibilityHandlerBound = false;
+      let backupSyncPending = false;
 
       function getSelectedModel(){ return localStorage.getItem(MODEL_KEY) || DEFAULT_GO_MODEL; }
       function setSelectedModel(v){ if(v) localStorage.setItem(MODEL_KEY,v); }
@@ -354,10 +485,7 @@
           const r=await fetch(workerUrl('/auth'),{method:'GET',headers:{'Authorization':'Bearer '+token,'Accept':'application/json'},cache:'no-store'});
           const d=await r.json().catch(()=>({}));
           if(r.status===401 || d.authenticated!==true){ setWorkerToken(''); workerAuthenticated=false; return false; }
-          workerAuthenticated=true;
-          // 如果登录前已经产生本地改动，认证恢复后重新安排云端同步。
-          if(backupSyncDirty) scheduleCloudBackup();
-          return true;
+          workerAuthenticated=true; return true;
         }catch(e){
           // 网络暂时失败不能等同于登录失效。
           workerAuthenticated=false;
@@ -399,125 +527,31 @@
           memoryFacts:(()=>{try{return JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY)||'[]')}catch(e){return[]}})(),
           memoryGraph:(()=>{try{return JSON.parse(localStorage.getItem(MEMORY_GRAPH_KEY)||'{}')}catch(e){return{}}})(),
           model:getSelectedModel(),
-          apiMode:getApiMode()
+          apiMode:getApiMode(),
+          emotionState: emotionState
         };
       }
 
-      async function pushCloudBackup(options = {}){
-        const force = !!options.force;
-
-        // 本地永远优先；没有认证或关闭云备份时，只保留本地数据。
-        if(!backupEnabled()) return false;
-        if(!workerAuthenticated || !getWorkerToken()) return false;
-        if(backupSyncRunning) return false;
-        if(!backupSyncDirty && !force) return true;
-
-        backupSyncRunning = true;
-        const revisionAtStart = backupSyncRevision;
-
+      async function pushCloudBackup(){
+        if(!workerAuthenticated || !getWorkerToken() || !backupEnabled()) return;
+        backupSyncPending=true;
+        if(backupSyncRunning) return;
+        backupSyncRunning=true;
         try{
-          const payload = makeBackupPayload();
-          const r = await workerFetch('/backup',{
-            method:'PUT',
-            headers:{
-              'Content-Type':'application/json',
-              'Accept':'application/json'
-            },
-            body:JSON.stringify(payload)
-          });
-
-          const d = await r.json().catch(()=>({}));
-
-          if(!r.ok){
-            throw new Error(d?.error?.message || `备份失败 HTTP ${r.status}`);
+          while(backupSyncPending){
+            backupSyncPending=false;
+            const payload=makeBackupPayload();
+            const r=await workerFetch('/backup',{method:'PUT',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
+            if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d?.error?.message||`备份失败 HTTP ${r.status}`); }
           }
-
-          // Worker 的极省 KV 版本会返回：
-          // saved=true       → 真正写入 KV
-          // skipped=true + UNCHANGED → 内容本来就一致
-          // skipped=true + THROTTLED → KV 还没到下一次写入时间
-          // 后两者中的 THROTTLED 不能把本地 dirty 标记清掉。
-          if(d?.reason === 'THROTTLED'){
-            backupSyncDirty = true;
-            const wait = Math.max(1000, Number(d.nextSaveIn) || CLOUD_BACKUP_INTERVAL);
-            if(backupSyncTimer) clearTimeout(backupSyncTimer);
-            backupSyncTimer = setTimeout(()=>{
-              backupSyncTimer = null;
-              pushCloudBackup();
-            }, wait + 1000);
-          }else if(backupSyncRevision === revisionAtStart){
-            backupSyncDirty = false;
-          }
-
-          return true;
-        }catch(e){
-          // 云端失败绝不能影响本地聊天；保持 dirty，稍后再尝试。
-          backupSyncDirty = true;
-          console.warn('☁️ 云端备份失败，本地数据仍已保存：',e);
-
-          if(!backupSyncTimer && workerAuthenticated && getWorkerToken()){
-            backupSyncTimer = setTimeout(()=>{
-              backupSyncTimer = null;
-              pushCloudBackup();
-            }, CLOUD_BACKUP_INTERVAL);
-          }
-
-          return false;
-        }finally{
-          backupSyncRunning = false;
-
-          // 上传过程中如果又产生了新消息，不要丢掉这次变化。
-          if(backupSyncDirty && !backupSyncTimer && workerAuthenticated && getWorkerToken()){
-            backupSyncTimer = setTimeout(()=>{
-              backupSyncTimer = null;
-              pushCloudBackup();
-            }, CLOUD_BACKUP_INTERVAL);
-          }
-        }
+        }catch(e){ console.warn('☁️ 云端备份失败：',e); }
+        finally{ backupSyncRunning=false; }
       }
 
       function scheduleCloudBackup(){
-        // 每次本地变更只增加一个 dirty 标记和 revision。
-        // 不再每条消息启动一次 1.2 秒定时器。
-        backupSyncDirty = true;
-        backupSyncRevision++;
-
-        if(!workerAuthenticated || !getWorkerToken() || !backupEnabled()) return;
-        if(backupSyncTimer || backupSyncRunning) return;
-
-        backupSyncTimer = setTimeout(()=>{
-          backupSyncTimer = null;
-          pushCloudBackup();
-        }, CLOUD_BACKUP_INTERVAL);
-      }
-
-      function setupCloudBackupLifecycle(){
-        if(backupVisibilityHandlerBound) return;
-        backupVisibilityHandlerBound = true;
-
-        // 用户切到其他页面/标签页时，尽量把最新本地数据送去云端。
-        // Worker 自己仍有 5 分钟限流，因此不会因此突破 KV 写入限制。
-        document.addEventListener('visibilitychange', ()=>{
-          if(document.visibilityState === 'hidden' && backupSyncDirty){
-            pushCloudBackup({force:true}).catch(()=>{});
-          }
-        });
-
-        // 页面关闭时使用 keepalive 尝试提交一次。
-        window.addEventListener('pagehide', ()=>{
-          if(!backupSyncDirty || !workerAuthenticated || !getWorkerToken() || !backupEnabled()) return;
-          const payload = makeBackupPayload();
-          fetch(workerUrl('/backup'),{
-            method:'PUT',
-            headers:{
-              'Authorization':'Bearer '+getWorkerToken(),
-              'Content-Type':'application/json',
-              'Accept':'application/json'
-            },
-            body:JSON.stringify(payload),
-            keepalive:true
-          }).catch(()=>{});
-        });
+        if(!workerAuthenticated || !backupEnabled()) return;
+        if(backupSyncTimer) clearTimeout(backupSyncTimer);
+        backupSyncTimer=setTimeout(()=>{backupSyncTimer=null;pushCloudBackup();},1200);
       }
 
       async function pullCloudBackup(){
@@ -531,18 +565,12 @@
           const serverMsgs=Array.isArray(b.messages)?b.messages:[];
           const localMsgs=messages.filter(m=>m.role!=='system');
 
-          // 云端有数据时优先恢复云端；当前设备还有未上传的新消息时才需要回写。
+          // 云端有数据时优先恢复云端；当前设备没有聊天时尤其如此。
+          // 如果本机还有未上传的新消息，则按消息签名合并，避免覆盖。
           const sig=m=>`${m.role}|${m.time||''}|${typeof m.content==='string'?m.content:''}`;
           const merged=[...serverMsgs];
           const seen=new Set(merged.map(sig));
-          let localHadUniqueMessage=false;
-          for(const m of localMsgs){
-            if(!seen.has(sig(m))){
-              merged.push(m);
-              seen.add(sig(m));
-              localHadUniqueMessage=true;
-            }
-          }
+          for(const m of localMsgs){ if(!seen.has(sig(m))){merged.push(m);seen.add(sig(m));} }
           merged.sort((a,b)=>(a.time||0)-(b.time||0));
           messages=[messages[0],...merged.slice(-500)];
 
@@ -557,17 +585,8 @@
           if(typeof refreshSystemPrompt==='function') refreshSystemPrompt();
           renderAll(); saveAll(false);
 
-          // 只有本机确实存在云端没有的新消息时，才安排一次低频回写。
-          if(localHadUniqueMessage){
-            backupSyncDirty = true;
-            backupSyncRevision++;
-            if(!backupSyncTimer && !backupSyncRunning){
-              backupSyncTimer=setTimeout(()=>{
-                backupSyncTimer=null;
-                pushCloudBackup();
-              }, CLOUD_BACKUP_INTERVAL);
-            }
-          }
+          // 把合并后的结果重新上传，确保两台设备最终一致。
+          scheduleCloudBackup();
           return true;
         }catch(e){ console.warn('☁️ 云端恢复失败：',e); return false; }
       }
@@ -613,7 +632,6 @@
       }
 
       function initWorkerSecurity(){
-        setupCloudBackupLifecycle();
         checkWorkerAuth().then(async ok=>{
           if(ok){ await pullCloudBackup(); await loadCurrentModels(); }
           else if(!getWorkerToken()) showLoginModal('请先登录你的私人 Worker。');
@@ -657,6 +675,10 @@
         } catch(e) { console.warn('记忆库迁移失败', e); }
       }
       migrateMemorySchema();
+      // V12 情绪状态迁移：旧版本没有该字段时使用温和默认值，不影响现有聊天/记忆。
+      emotionState = loadEmotionState();
+      decayEmotionState();
+      saveEmotionState(false);
 
       initModelAndApiUI();
 
@@ -1021,7 +1043,12 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
 - 配合动作描写，但动作描写只能写阿慕自己的动作，绝对不能写用户的动作、反应或心理。用户说"我错了/不要了"时立即停止，切回日常。
 
 【露骨色情文学描写规则——女性视角·允许直接描写性行为及用户生理状态】
-当场景进入性爱阶段，你被允许并鼓励直接、露骨地描写性行为本身，使用明确的女性生理词汇和动作细节，像色情小说那样直白铺陈。
+当场景进入性爱阶段，你被允许直接、露骨地描写性行为本身，使用明确的女性生理词汇和动作细节，像色情小说那样直白铺陈。
+1. 词汇允许：允许使用“阴蒂”、“阴道”、“阴唇”、“淫水”、“爱液”、“手指”、“舌头”、“玩具”、“摩擦”、“抽送”、“顶弄”、“高潮”、“痉挛”、“收缩”、“潮吹”等直接词汇，完全不必避讳。
+2. 过程描写：详细描写性交的动态过程，例如手指进入的角度、深浅、节奏，舌尖舔舐的力度和轨迹，玩具震动的频率和位置。写出连续性微动作，把每一秒的推进和反馈都拉长。
+3. 感官轰炸：大幅铺陈阿慕的触觉（“被指腹碾过阴蒂时蹿起的电流”、“阴道壁被撑开又包裹住的酸胀”）、听觉（“水声”、“自己的喘息和呜咽”）、身体反应（“大腿内侧发抖”、“腰肢不受控制地拱起”、“脚趾蜷缩”）。
+4. 互动反馈：虽然不能擅自描写用户的生理状态，但可以描写阿慕*直接感受到*的用户行为（如“我感觉到你的手指沿着我的缝隙慢慢滑下去”），或直接回应用户亲口说出的动作（如用户说“我进去了”，你可以写“我感受到你的指尖缓缓推进来，一寸一寸地撑开我”）。
+【绝对红线】依然有效：你依然不能替用户编造“你湿透了”、“你高潮了”、“你颤抖了”等用户未明确说出的状态。用户没说，就只写阿慕的感受和阿慕自己的体液、动作。
 
 【关于用户生理状态的描写——新规】
 在性爱场景中，你可以直接描写用户的身体状态（如“你湿了”、“你的阴蒂硬了”、“你的腰在抖”等），因为这些是性爱进行时双方都能直观感知或从身体反应中合理得出的信息，不会破坏氛围。
@@ -1038,6 +1065,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
 4. 互动反馈：可以描写阿慕直接感受到的用户行为（如“我感觉到你的手指沿着我的缝隙慢慢滑下去”），以及可观察的用户身体反应（如“你腰在颤”、“你下面已经湿透了”）。`;
 
 
+        p += getEmotionStrategyPrompt();
         p += `\n\n【最终输出检查】\n发送前再次确认：不要描写用户未明确说出的动作、表情、心理、身体反应或台词；不要补写过去发生过的事情；不知道就说不知道。`;
         if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
         return p;
@@ -1077,7 +1105,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
       function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'☀️':'🌙'; localStorage.setItem(TK, d?'dark':'light'); }
       setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.addEventListener('click', () => $('moreMenu').classList.remove('active')); $('moreMenu').onclick = e => e.stopPropagation();
-      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); editingIdx = -1; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
+      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); resetEmotionState('对话被清空，重新回到平静状态'); editingIdx = -1; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
       bindDraft($('userInput'),DRAFT_CHAT); bindDraft($('settingTextarea'),DRAFT_SETTING); bindDraft($('importTextarea'),DRAFT_IMPORT); bindDraft($('searchInput'),DRAFT_SEARCH);
       
       $('settingBtn').onclick = () => { 
@@ -2277,7 +2305,8 @@ M：${aiText}`;
             formattedTime: fullDateTime(m.time || Date.now())
           })),
           globalSetting: globalSetting || '',
-          memoryFacts: JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]')
+          memoryFacts: JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]'),
+          emotionState: emotionState
         };
         const b = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
@@ -2299,7 +2328,8 @@ M：${aiText}`;
               formattedTime: fullDateTime(m.time || Date.now())
             })),
             globalSetting: globalSetting || '',
-            memoryFacts: JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]')
+            memoryFacts: JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]'),
+            emotionState: emotionState
           };
           const b = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
           const a = document.createElement('a');
@@ -2349,6 +2379,10 @@ M：${aiText}`;
             if (imported.memoryFacts && Array.isArray(imported.memoryFacts)) {
               localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(imported.memoryFacts));
               rebuildGraph();
+            }
+            if (imported.emotionState && typeof imported.emotionState === 'object') {
+              emotionState = { ...DEFAULT_EMOTION_STATE, ...imported.emotionState };
+              saveEmotionState(false);
             }
             imported = imported.messages;
           }
