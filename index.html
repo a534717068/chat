@@ -240,16 +240,6 @@
       <button class="btn-cancel" id="refreshModelsBtn" style="width:100%;margin-bottom:8px;">🔄 刷新当前接口模型</button>
       <div id="modelStatus" class="format-hint" style="margin-bottom:8px;">模型列表会根据当前接口自动获取。</div>
       <div id="visionStatus" class="format-hint" style="margin-bottom:8px;">🖼️ 图片上传状态：检查当前模型能力中…</div>
-      <div style="border-top:1px solid var(--border,#ddd);margin-top:10px;padding-top:10px;">
-        <div class="format-hint" style="margin-bottom:8px;">🎮 游戏工具</div>
-        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <input type="checkbox" id="gameToolEnabled">
-          <span>允许 AI 调用游戏 API</span>
-        </label>
-        <input id="gameStatePath" type="text" placeholder="游戏状态接口，例如 /api/state" style="width:100%;margin-bottom:8px;">
-        <button class="btn-cancel" id="gameTestBtn" style="width:100%;margin-bottom:8px;">🎮 测试游戏 API</button>
-        <div id="gameToolStatus" class="format-hint">关闭时 AI 不会调用游戏 API。开启后，游戏状态/动作以服务器返回结果为准。</div>
-      </div>
       <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
       <div class="format-hint">🔒 两个接口都通过 Cloudflare Worker。API Key 只保存在 Worker Secrets。</div>
       <div class="modal-buttons">
@@ -285,7 +275,7 @@
 
   <script>
     (function() {
-      window.__M_WORKER_VERSION__ = '2026-09-04-v13-game-tools';
+      window.__M_WORKER_VERSION__ = '2026-09-03-v12-emotion-strategy';
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
@@ -299,9 +289,6 @@
       const EMOTION_STATE_KEY = 'm_emotion_state_v12';
       const EMOTION_SCHEMA_VERSION = 1;
       const EXTRACT_INTERVAL = 5;
-      const GAME_ENABLED_KEY = 'm_game_tool_enabled_v1';
-      const GAME_STATE_PATH_KEY = 'm_game_state_path_v1';
-      const GAME_MAX_TOOL_ROUNDS = 5;
       const MAX_IMAGE_COUNT = 3;
       const MAX_IMAGE_DIMENSION = 1600;
       const IMAGE_JPEG_QUALITY = 0.86;
@@ -605,103 +592,6 @@
       }
 
       function isVisionModel(model){ return String(model||'').toLowerCase().includes('vision'); }
-
-      // ===== V13：通用游戏工具层 =====
-      // 只负责把 AI 的游戏工具请求转发给现有 Worker /game。
-      // 不绑定任何具体游戏；游戏服务器返回的数据才是事实来源。
-      function gameToolEnabled(){
-        try { return localStorage.getItem(GAME_ENABLED_KEY) === '1'; } catch(e) { return false; }
-      }
-      function setGameToolEnabled(v){
-        try { localStorage.setItem(GAME_ENABLED_KEY, v ? '1' : '0'); } catch(e) {}
-      }
-      function getGameStatePath(){
-        try { return localStorage.getItem(GAME_STATE_PATH_KEY) || '/api/state'; } catch(e) { return '/api/state'; }
-      }
-      function setGameStatePath(v){
-        try { localStorage.setItem(GAME_STATE_PATH_KEY, String(v || '/api/state').trim() || '/api/state'); } catch(e) {}
-      }
-      function loadGameToolUI(){
-        const t=$('gameToolEnabled'), p=$('gameStatePath');
-        if(t) t.checked=gameToolEnabled();
-        if(p) p.value=getGameStatePath();
-        updateGameToolStatus();
-      }
-      function updateGameToolStatus(msg){
-        const el=$('gameToolStatus'); if(!el)return;
-        if(msg){ el.textContent=msg; return; }
-        el.textContent=gameToolEnabled()
-          ? '🟢 游戏工具已开启。AI 需要游戏数据时会通过 Worker /game 获取，禁止自行编造游戏结果。'
-          : '⚪ 游戏工具已关闭。开启后 AI 才能调用游戏 API。';
-      }
-      async function callGameAPI(tool){
-        if(!gameToolEnabled()) throw new Error('游戏工具未开启');
-        if(!tool || typeof tool!=='object') throw new Error('游戏工具参数无效');
-        const method=String(tool.method||'GET').toUpperCase();
-        if(method!=='GET' && method!=='POST') throw new Error('游戏工具只允许 GET / POST');
-        const path=String(tool.path||'').trim();
-        if(!path.startsWith('/') || path.startsWith('//') || path.includes('\\')) throw new Error('游戏 API 路径无效');
-        const payload={path,method};
-        if(method==='POST' && tool.data!==undefined) payload.data=tool.data;
-        const r=await workerFetch('/game',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
-        const d=await r.json().catch(()=>({}));
-        if(!r.ok || d?.success===false) throw new Error(d?.error?.message || `游戏 API HTTP ${r.status}`);
-        return d;
-      }
-      function parseGameToolCall(text){
-        const raw=String(text||'');
-        const re=/\[\[GAME_TOOL\]\]([\s\S]*?)\[\[\/GAME_TOOL\]\]/i;
-        const m=raw.match(re); if(!m)return null;
-        try{
-          const obj=JSON.parse(m[1].trim());
-          if(!obj || typeof obj!=='object') return null;
-          return {tool:obj, visible:raw.replace(m[0],'').trim()};
-        }catch(e){ return {error:'GAME_TOOL JSON 无效',visible:raw}; }
-      }
-      function buildGameSystemPrompt(){
-        if(!gameToolEnabled()) return '';
-        return `
-【V13 游戏工具协议】
-当前已开启通用游戏 API 工具。你可以在确实需要游戏服务器数据或执行游戏动作时调用工具。
-工具调用必须严格使用以下格式，并且调用内容只能是 JSON：
-[[GAME_TOOL]]{"path":"/api/state","method":"GET"}[[/GAME_TOOL]]
-POST 示例：
-[[GAME_TOOL]]{"path":"/api/action","method":"POST","data":{"action":"roll"}}[[/GAME_TOOL]]
-规则：
-1. 游戏状态、骰子、金钱、位置、回合、任务完成状态等，以游戏服务器返回结果为唯一事实来源。
-2. 不得自行猜测、编造或修改服务器返回的游戏结果。
-3. 不需要游戏数据时，不要调用工具。
-4. 工具返回结果后，根据真实结果继续回答或决定下一步。
-5. 一次只发起一个游戏工具调用；如果还需要下一步，等待工具结果后再调用。
-6. 工具调用本身不要向用户解释，直接按协议输出标记。
-7. 如果工具失败，要明确说明失败，不得用虚构结果代替。
-`;
-      }
-      async function requestModelWithGameTools(initialMessages, target){
-        let working=initialMessages.map(m=>({role:m.role,content:m.content}));
-        for(let round=0; round<=GAME_MAX_TOOL_ROUNDS; round++){
-          const res=await workerFetch('',{method:'POST',headers:target.headers,body:JSON.stringify({provider:target.provider,model:target.model,messages:working,stream:false,temperature:0.5})});
-          if(!res.ok){
-            let d={}; try{d=await res.json()}catch(e){}
-            throw new Error(d?.error?.message||`请求失败 HTTP ${res.status}`);
-          }
-          const data=await res.json();
-          const content=String(data?.choices?.[0]?.message?.content||'');
-          if(!gameToolEnabled()) return content;
-          const parsed=parseGameToolCall(content);
-          if(!parsed) return content;
-          if(parsed.error) return content;
-          working.push({role:'assistant',content:content});
-          let result;
-          try{ result=await callGameAPI(parsed.tool); }
-          catch(e){
-            working.push({role:'user',content:`【GAME_TOOL_RESULT】\n工具调用失败：${e.message}\n请不要编造结果。`});
-            continue;
-          }
-          working.push({role:'user',content:`【GAME_TOOL_RESULT】\n${JSON.stringify(result)}\n以上是游戏服务器真实返回结果。请据此继续。`});
-        }
-        return '游戏工具调用次数达到本轮上限，请继续时我再调用。';
-      }
 
       function getRequestTarget(){
         const mode=getApiMode();
@@ -1153,7 +1043,12 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
 - 配合动作描写，但动作描写只能写阿慕自己的动作，绝对不能写用户的动作、反应或心理。用户说"我错了/不要了"时立即停止，切回日常。
 
 【露骨色情文学描写规则——女性视角·允许直接描写性行为及用户生理状态】
-当场景进入性爱阶段，你被允许并鼓励直接、露骨地描写性行为本身，使用明确的女性生理词汇和动作细节，像色情小说那样直白铺陈。
+当场景进入性爱阶段，你被允许直接、露骨地描写性行为本身，使用明确的女性生理词汇和动作细节，像色情小说那样直白铺陈。
+1. 词汇允许：允许使用“阴蒂”、“阴道”、“阴唇”、“淫水”、“爱液”、“手指”、“舌头”、“玩具”、“摩擦”、“抽送”、“顶弄”、“高潮”、“痉挛”、“收缩”、“潮吹”等直接词汇，完全不必避讳。
+2. 过程描写：详细描写性交的动态过程，例如手指进入的角度、深浅、节奏，舌尖舔舐的力度和轨迹，玩具震动的频率和位置。写出连续性微动作，把每一秒的推进和反馈都拉长。
+3. 感官轰炸：大幅铺陈阿慕的触觉（“被指腹碾过阴蒂时蹿起的电流”、“阴道壁被撑开又包裹住的酸胀”）、听觉（“水声”、“自己的喘息和呜咽”）、身体反应（“大腿内侧发抖”、“腰肢不受控制地拱起”、“脚趾蜷缩”）。
+4. 互动反馈：虽然不能擅自描写用户的生理状态，但可以描写阿慕*直接感受到*的用户行为（如“我感觉到你的手指沿着我的缝隙慢慢滑下去”），或直接回应用户亲口说出的动作（如用户说“我进去了”，你可以写“我感受到你的指尖缓缓推进来，一寸一寸地撑开我”）。
+【绝对红线】依然有效：你依然不能替用户编造“你高潮了”、“你颤抖了”等用户未明确说出的状态。用户没说，就只写阿慕的感受和阿慕自己的体液、动作。
 
 【关于用户生理状态的描写——新规】
 在性爱场景中，你可以直接描写用户的身体状态（如“你湿了”、“你的阴蒂硬了”、“你的腰在抖”等），因为这些是性爱进行时双方都能直观感知或从身体反应中合理得出的信息，不会破坏氛围。
@@ -1170,7 +1065,6 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
 4. 互动反馈：可以描写阿慕直接感受到的用户行为（如“我感觉到你的手指沿着我的缝隙慢慢滑下去”），以及可观察的用户身体反应（如“你腰在颤”、“你下面已经湿透了”）。`;
 
 
-        p += buildGameSystemPrompt();
         p += getEmotionStrategyPrompt();
         p += `\n\n【最终输出检查】\n发送前再次确认：不要描写用户未明确说出的动作、表情、心理、身体反应或台词；不要补写过去发生过的事情；不知道就说不知道。`;
         if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
@@ -1216,7 +1110,6 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
       
       $('settingBtn').onclick = () => { 
         updateConnectionUI();
-        loadGameToolUI();
         $('settingTextarea').value = loadDraft(DRAFT_SETTING)||globalSetting; 
         $('settingModal').classList.add('active'); 
         $('moreMenu').classList.remove('active'); 
@@ -2288,9 +2181,30 @@ M：${aiText}`;
           const approxChars = apiMsgs.reduce((n, m) => n + String(m.content || '').length, 0);
           console.log(`📉 本次请求上下文约 ${approxChars} 字符（仅为粗略估算，不等于实际计费 Token）`);
 
-          const replyRaw = await requestModelWithGameTools(apiMsgs, target);
+          const res = await workerFetch('', { 
+            method: 'POST', 
+            headers: target.headers, 
+            body: JSON.stringify({ provider: target.provider, model: model, messages: apiMsgs, stream: false, temperature: 0.5 }) 
+          });
           load.remove();
-          const reply = String(replyRaw || '').trim();
+          
+          if (!res.ok) {
+            let errorDetail = `请求失败 (HTTP ${res.status})`;
+            try {
+              const errJson = await res.json();
+              if (errJson.error?.message) errorDetail = errJson.error.message;
+              else if (errJson.message) errorDetail = errJson.message;
+            } catch(e) {
+              try {
+                const textBody = await res.text();
+                if (textBody) errorDetail = textBody.substring(0, 200);
+              } catch(e2) {}
+            }
+            throw new Error(`❌ 请求地址: ${baseUrl} 失败，错误: ${errorDetail} (状态码: ${res.status})`);
+          }
+          
+          const data = await res.json();
+          const reply = data.choices[0].message.content;
           const aiMsg = { role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id };
           messages.push(aiMsg);
           fullHistory.push({ role: 'assistant', content: reply, time: aiMsg.time });
@@ -2326,19 +2240,6 @@ M：${aiText}`;
           addMsg('assistant', `❌ ${e.message}`); 
         }
       }
-
-      if($('gameToolEnabled')) $('gameToolEnabled').onchange=()=>{ setGameToolEnabled($('gameToolEnabled').checked); updateGameToolStatus(); refreshSystemPrompt(); saveAll(); };
-      if($('gameStatePath')) $('gameStatePath').oninput=()=>setGameStatePath($('gameStatePath').value);
-      if($('gameTestBtn')) $('gameTestBtn').onclick=async()=>{
-        try{
-          const path=getGameStatePath();
-          if(!path.startsWith('/')||path.startsWith('//')) throw new Error('状态接口必须是相对路径，例如 /api/state');
-          updateGameToolStatus('正在测试游戏 API…');
-          const d=await callGameAPI({path,method:'GET'});
-          updateGameToolStatus('🟢 游戏 API 测试成功：已收到服务器返回数据。');
-          console.log('🎮 游戏 API 测试结果:',d);
-        }catch(e){ updateGameToolStatus('🔴 游戏 API 测试失败：'+e.message); }
-      };
 
       $('imageUploadBtn').onclick = () => {
         if($('imageUploadBtn').disabled){
