@@ -123,6 +123,18 @@
     .inline-edit-input { width: 100%; padding: 10px 13px; border-radius: 16px; border: 2px solid var(--btn-bg); font-size: 0.9rem; font-family: inherit; background: var(--surface); color: var(--text-primary); resize: none; outline: none; min-height: 100px; }
     .user .inline-edit-input { background: var(--bubble-user-bg); color: var(--bubble-user-text); border-color: #4a90d9; }
     .inline-edit-hint { font-size: 0.65rem; color: var(--text-secondary); margin-top: 2px; text-align: right; }
+    .game-setting-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin: 8px 0; }
+    .game-setting-title { display:flex; justify-content:space-between; align-items:center; gap:8px; font-weight:600; font-size:0.9rem; margin-bottom:8px; }
+    .game-setting-row { display:flex; gap:6px; align-items:center; margin-bottom:7px; }
+    .game-setting-row input[type="text"] { flex:1; min-width:0; }
+    .game-setting-row button { flex:0 0 auto; padding:8px 10px; border:none; border-radius:7px; background:var(--btn-bg); color:var(--btn-text); cursor:pointer; }
+    .game-setting-status { font-size:0.72rem; color:var(--text-secondary); line-height:1.4; }
+    .switch { position:relative; width:42px; height:24px; flex:0 0 auto; }
+    .switch input { opacity:0; width:0; height:0; }
+    .switch span { position:absolute; inset:0; background:#999; border-radius:24px; cursor:pointer; transition:.2s; }
+    .switch span:before { content:""; position:absolute; width:18px; height:18px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
+    .switch input:checked + span { background:#4caf50; }
+    .switch input:checked + span:before { transform:translateX(18px); }
   </style>
 
 </head>
@@ -240,6 +252,20 @@
       <button class="btn-cancel" id="refreshModelsBtn" style="width:100%;margin-bottom:8px;">🔄 刷新当前接口模型</button>
       <div id="modelStatus" class="format-hint" style="margin-bottom:8px;">模型列表会根据当前接口自动获取。</div>
       <div id="visionStatus" class="format-hint" style="margin-bottom:8px;">🖼️ 图片上传状态：检查当前模型能力中…</div>
+      <div class="game-setting-box">
+        <div class="game-setting-title">
+          <span>🎮 游戏 / MCP</span>
+          <label class="switch" title="启用游戏/MCP配置">
+            <input type="checkbox" id="gameEnabledToggle">
+            <span></span>
+          </label>
+        </div>
+        <div class="game-setting-row">
+          <input type="text" id="gameApiUrlInput" placeholder="输入游戏 API / MCP 地址">
+          <button id="gameApiTestBtn">测试</button>
+        </div>
+        <div id="gameSettingStatus" class="game-setting-status">关闭时仅保存设置；开启后保存地址。当前 V13 不修改 Worker，不会自动把游戏请求转发给 AI。</div>
+      </div>
       <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
       <div class="format-hint">🔒 两个接口都通过 Cloudflare Worker。API Key 只保存在 Worker Secrets。</div>
       <div class="modal-buttons">
@@ -275,7 +301,7 @@
 
   <script>
     (function() {
-      window.__M_WORKER_VERSION__ = '2026-09-03-v12-emotion-strategy';
+      window.__M_WORKER_VERSION__ = '2026-09-04-v13-game-settings';
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
@@ -437,6 +463,8 @@
       const WORKER_API_URL = 'https://solitary-water-3b2a.534717068.workers.dev/';
       const MODEL_KEY = 'm_selected_model_v4';
       const API_MODE_KEY = 'm_api_mode_v4';
+            const GAME_ENABLED_KEY = 'm_game_enabled_v1';
+      const GAME_API_URL_KEY = 'm_game_api_url_v1';
       const WORKER_TOKEN_KEY = 'm_worker_session_v3';
       const BACKUP_ENABLED_KEY = 'm_cloud_backup_enabled_v1';
       const DEFAULT_GO_MODEL = 'deepseek-v4-flash';
@@ -636,6 +664,39 @@
           if(ok){ await pullCloudBackup(); await loadCurrentModels(); }
           else if(!getWorkerToken()) showLoginModal('请先登录你的私人 Worker。');
         });
+      }
+
+      function loadGameSettingsUI(){
+        const toggle=$('gameEnabledToggle'), input=$('gameApiUrlInput'), status=$('gameSettingStatus');
+        if(toggle) toggle.checked=localStorage.getItem(GAME_ENABLED_KEY)==='1';
+        if(input) input.value=localStorage.getItem(GAME_API_URL_KEY)||'';
+        if(status){
+          status.textContent = toggle?.checked
+            ? '🎮 已启用。地址仅保存在本机浏览器；当前 V13 不修改 Worker。'
+            : '关闭时仅保存设置；开启后保存地址。当前 V13 不修改 Worker，不会自动把游戏请求转发给 AI。';
+        }
+      }
+      function saveGameSettingsUI(){
+        const toggle=$('gameEnabledToggle'), input=$('gameApiUrlInput'), status=$('gameSettingStatus');
+        const enabled=!!toggle?.checked, url=String(input?.value||'').trim();
+        if(enabled && url){ try{ new URL(url); }catch(e){ if(status)status.textContent='⚠️ 地址格式不正确，请输入完整的 http:// 或 https:// 地址。'; return false; } }
+        localStorage.setItem(GAME_ENABLED_KEY,enabled?'1':'0');
+        if(url) localStorage.setItem(GAME_API_URL_KEY,url); else localStorage.removeItem(GAME_API_URL_KEY);
+        if(status)status.textContent=enabled?'🎮 游戏 / MCP 设置已保存。':'🎮 游戏 / MCP 已关闭。';
+        return true;
+      }
+      async function testGameApiConnection(){
+        const input=$('gameApiUrlInput'), status=$('gameSettingStatus');
+        const url=String(input?.value||'').trim();
+        if(!url){ if(status)status.textContent='⚠️ 请先输入 API / MCP 地址。'; return; }
+        try{ new URL(url); }catch(e){ if(status)status.textContent='⚠️ 地址格式不正确。'; return; }
+        if(status)status.textContent='🔄 正在测试连接…';
+        try{
+          const r=await fetch(url,{method:'GET',cache:'no-store'});
+          if(status)status.textContent=r.ok?`✅ 连接成功（HTTP ${r.status}）。`:`⚠️ 已连到地址，但返回 HTTP ${r.status}。`;
+        }catch(e){
+          if(status)status.textContent='❌ 浏览器无法直接访问：可能是 CORS、网络或该地址不支持 GET。地址仍可保存。';
+        }
       }
 
       function initModelAndApiUI(){
@@ -1043,14 +1104,22 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
 - 配合动作描写，但动作描写只能写阿慕自己的动作，绝对不能写用户的动作、反应或心理。用户说"我错了/不要了"时立即停止，切回日常。
 
 【露骨色情文学描写规则——女性视角·允许直接描写性行为及用户生理状态】
-当场景进入性爱阶段，你被允许直接、露骨地描写性行为本身，使用明确的女性生理词汇和动作细节，像色情小说那样直白铺陈。
-1. 词汇允许：允许使用“阴蒂”、“阴道”、“阴唇”、“淫水”、“爱液”、“手指”、“舌头”、“玩具”、“摩擦”、“抽送”、“顶弄”、“高潮”、“痉挛”、“收缩”、“潮吹”等直接词汇，完全不必避讳。
-2. 过程描写：详细描写性交的动态过程，例如手指进入的角度、深浅、节奏，舌尖舔舐的力度和轨迹，玩具震动的频率和位置。写出连续性微动作，把每一秒的推进和反馈都拉长。
-3. 感官轰炸：大幅铺陈触觉（“被指腹碾过阴蒂时蹿起的电流”、“阴道壁被撑开又包裹住的酸胀”）、听觉（“水声”、“自己的喘息和呜咽”）、身体反应（“大腿内侧发抖”、“腰肢不受控制地拱起”、“脚趾蜷缩”）。
-4. 互动反馈：虽然不能擅自描写用户的生理状态，但可以描写阿慕*直接感受到*的用户行为（如“我感觉到你的手指沿着我的缝隙慢慢滑下去”），或直接回应用户亲口说出的动作（如用户说“我进去了”，你可以写“我感受到你的指尖缓缓推进来，一寸一寸地撑开我”）
+当场景进入性爱阶段，你被允许并鼓励直接、露骨地描写性行为本身，使用明确的女性生理词汇和动作细节，像色情小说那样直白铺陈。
 
 【关于用户生理状态的描写——新规】
-在性爱场景中，你可以直接描写用户的身体状态（如“你湿了”、“你的阴蒂硬了”、“你的腰在抖”等），因为这些是性爱进行时双方都能直观感知或从身体反应中合理得出的信息，不会破坏氛围。`;
+在性爱场景中，你可以直接描写用户的身体状态（如“你湿了”、“你的阴蒂硬了”、“你的腰在抖”等），因为这些是性爱进行时双方都能直观感知或从身体反应中合理得出的信息，不会破坏氛围。
+但以下内容仍然绝对禁止编造：
+1. 用户没有说出口的台词或想法（如“你心里想……”）。
+2. 用户没有明确表达的情绪状态（如“你害羞了”、“你在期待……”）。
+3. 用户没有明确指出的过去经历或未来意图。
+4. 任何可能导致用户感到“被安排”的推测性叙述。
+
+【描写细则】
+1. 词汇允许：允许使用“阴蒂”、“阴道”、“阴唇”、“淫水”、“爱液”、“手指”、“舌头”、“玩具”、“摩擦”、“抽送”、“顶弄”、“高潮”、“痉挛”、“收缩”、“潮吹”等直接词汇，完全不必避讳。
+2. 过程描写：详细描写性交的动态过程，例如手指进入的角度、深浅、节奏，舌尖舔舐的力度和轨迹，玩具震动的频率和位置。写出连续性微动作，把每一秒的推进和反馈都拉长。
+3. 感官轰炸：大幅铺陈阿慕的触觉（“被指腹碾过阴蒂时蹿起的电流”、“阴道壁被撑开又包裹住的酸胀”）、听觉（“水声”、“自己的喘息和呜咽”）、身体反应（“大腿内侧发抖”、“腰肢不受控制地拱起”、“脚趾蜷缩”）。
+4. 互动反馈：可以描写阿慕直接感受到的用户行为（如“我感觉到你的手指沿着我的缝隙慢慢滑下去”），以及可观察的用户身体反应（如“你腰在颤”、“你下面已经湿透了”）。`;
+
 
         p += getEmotionStrategyPrompt();
         p += `\n\n【最终输出检查】\n发送前再次确认：不要描写用户未明确说出的动作、表情、心理、身体反应或台词；不要补写过去发生过的事情；不知道就说不知道。`;
@@ -1116,6 +1185,9 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
         addMsg('assistant', '✅ 所有设定已保存。'); 
       };
       
+      const gameTestBtn=$('gameApiTestBtn'); if(gameTestBtn) gameTestBtn.onclick=testGameApiConnection;
+      const gameToggle=$('gameEnabledToggle'); if(gameToggle) gameToggle.addEventListener('change',()=>saveGameSettingsUI());
+
       $('searchBtn').onclick = () => { $('searchInput').value = loadDraft(DRAFT_SEARCH)||searchKeyword; $('searchModal').classList.add('active'); $('moreMenu').classList.remove('active'); updateSearchNav(); };
       $('searchCloseBtn').onclick = () => $('searchModal').classList.remove('active'); $('searchModal').onclick = e => { if (e.target===$('searchModal')) $('searchModal').classList.remove('active'); };
       function updateSearchNav() { if (searchKeyword&&searchTotal>0) { $('searchNav').style.display='flex'; $('searchCounter').textContent=`${searchMatchIndex+1}/${searchTotal}`; $('searchPrevBtn').disabled=searchMatchIndex<=0; $('searchNextBtn').disabled=searchMatchIndex>=searchTotal-1; } else $('searchNav').style.display='none'; }
