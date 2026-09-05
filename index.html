@@ -507,6 +507,167 @@
       const DEFAULT_GO_MODEL = 'deepseek-v4-flash';
       const DEFAULT_DS_MODEL = 'deepseek-v4-flash';
 
+      // ===== V12.5：MCP 客户端（通过 Worker Gateway 调用外部 MCP） =====
+      // MCP Server 不存入 KV；这里只保存 Gateway 地址和当前 MCP 会话。
+      const MCP_GATEWAY_URL = workerPath => workerUrl(workerPath);
+      const MCP_MONOPOLY_PATH = '/mcp/monopoly';
+      const MCP_PROTOCOL_VERSION = '2025-06-18';
+      const MCP_CLIENT_NAME = 'M-阿慕';
+      const MCP_CLIENT_VERSION = '12.5';
+      let mcpSessionId = '';
+      let mcpRequestId = 1000;
+      let mcpTools = [];
+      let mcpReady = false;
+
+      function nextMcpId(){ return ++mcpRequestId; }
+
+      async function parseMcpResponse(res){
+        const text = await res.text();
+        if(!text) return {};
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        if(ct.includes('text/event-stream')){
+          // Streamable HTTP 可能返回 SSE；把最后一个 data JSON 作为本次 RPC 结果。
+          const chunks = [];
+          for(const line of text.split(/\r?\n/)){
+            if(line.startsWith('data:')) chunks.push(line.slice(5).trim());
+          }
+          for(let i=chunks.length-1;i>=0;i--){
+            if(!chunks[i] || chunks[i]==='[DONE]') continue;
+            try{return JSON.parse(chunks[i]);}catch(e){}
+          }
+        }
+        try{return JSON.parse(text);}catch(e){
+          return {raw:text.slice(0,12000)};
+        }
+      }
+
+      async function mcpRpc(method, params={}, {allowRetry=true}={}){
+        const token=getWorkerToken();
+        if(!token) throw new Error('MCP 需要先登录 Worker。');
+        const headers={
+          'Content-Type':'application/json',
+          'Accept':'application/json, text/event-stream',
+          'MCP-Protocol-Version':MCP_PROTOCOL_VERSION,
+          'Authorization':'Bearer '+token
+        };
+        if(mcpSessionId) headers['Mcp-Session-Id']=mcpSessionId;
+        const body={jsonrpc:'2.0',id:nextMcpId(),method,params};
+        const res=await fetch(MCP_GATEWAY_URL(MCP_MONOPOLY_PATH),{
+          method:'POST',headers,body:JSON.stringify(body),cache:'no-store'
+        });
+        const newSession=res.headers.get('Mcp-Session-Id');
+        if(newSession) mcpSessionId=newSession;
+        const data=await parseMcpResponse(res);
+        if(!res.ok){
+          if((res.status===404 || res.status===400) && allowRetry && mcpSessionId){
+            mcpSessionId=''; mcpReady=false;
+          }
+          throw new Error(data?.error?.message || data?.message || `MCP HTTP ${res.status}`);
+        }
+        if(data?.error) throw new Error(data.error.message || 'MCP RPC 错误');
+        return data?.result ?? data;
+      }
+
+      async function mcpInitialize(){
+        if(mcpReady && mcpTools.length) return mcpTools;
+        if(!getWorkerToken()) throw new Error('请先登录 Worker，再使用大富翁 MCP。');
+        mcpSessionId='';
+        const init=await mcpRpc('initialize',{
+          protocolVersion:MCP_PROTOCOL_VERSION,
+          capabilities:{},
+          clientInfo:{name:MCP_CLIENT_NAME,version:MCP_CLIENT_VERSION}
+        },{allowRetry:false});
+        if(init?.protocolVersion) console.log('🎲 MCP 协议版本:',init.protocolVersion);
+        // initialized 是 notification，没有 id；Gateway 会原样转发。
+        await mcpRpc('notifications/initialized',{}, {allowRetry:false}).catch(e=>{
+          // 某些服务器会把 notification 当作普通 RPC 拒绝；这不影响继续 tools/list。
+          console.debug('MCP initialized notification:',e.message);
+        });
+        const list=await mcpRpc('tools/list',{});
+        mcpTools=Array.isArray(list?.tools)?list.tools:[];
+        mcpReady=true;
+        console.log('🎲 MCP 工具已加载:',mcpTools.map(t=>t.name));
+        return mcpTools;
+      }
+
+      function mcpToolName(name){
+        // 避免与模型自身工具同名，并保证后续可反向映射。
+        return 'mcp_monopoly_' + String(name||'').replace(/[^a-zA-Z0-9_]/g,'_');
+      }
+
+      function getMcpOpenAITools(tools){
+        return (tools||[]).map(t=>({
+          type:'function',
+          function:{
+            name:mcpToolName(t.name),
+            description:String(t.description||`大富翁 MCP 工具：${t.name}`),
+            parameters:(t.inputSchema && typeof t.inputSchema==='object') ? t.inputSchema : {type:'object',properties:{}}
+          }
+        }));
+      }
+
+      function findMcpToolByOpenAIName(name){
+        return mcpTools.find(t=>mcpToolName(t.name)===name) || null;
+      }
+
+      function stringifyToolResult(result){
+        try{return JSON.stringify(result);}catch(e){return String(result??'');}
+      }
+
+      async function callMcpToolFromModel(toolCall){
+        const fn=toolCall?.function || {};
+        const tool=findMcpToolByOpenAIName(fn.name);
+        if(!tool) throw new Error(`未知 MCP 工具：${fn.name}`);
+        let args={};
+        try{args=fn.arguments ? JSON.parse(fn.arguments) : {};}catch(e){
+          throw new Error(`MCP 工具参数不是有效 JSON：${fn.arguments}`);
+        }
+        console.log('🎲 MCP 调用:',tool.name,args);
+        const result=await mcpRpc('tools/call',{name:tool.name,arguments:args});
+        return result;
+      }
+
+      async function runChatWithMcp(initialMessages,target){
+        const tools=await mcpInitialize();
+        if(!tools.length) throw new Error('MCP 已连接，但没有返回任何工具。');
+        let convo=initialMessages.map(m=>({role:m.role,content:m.content}));
+        const toolDefs=getMcpOpenAITools(tools);
+        const maxRounds=8;
+        for(let round=0; round<maxRounds; round++){
+          const res=await workerFetch('',{
+            method:'POST',
+            headers:target.headers,
+            body:JSON.stringify({
+              provider:target.provider,
+              model:target.model,
+              messages:convo,
+              tools:toolDefs,
+              tool_choice:'auto',
+              stream:false,
+              temperature:0.5
+            })
+          });
+          const data=await res.json().catch(()=>({}));
+          if(!res.ok) throw new Error(data?.error?.message || `AI 请求失败 HTTP ${res.status}`);
+          const msg=data?.choices?.[0]?.message;
+          if(!msg) throw new Error('AI 返回中没有 message。');
+          if(Array.isArray(msg.tool_calls) && msg.tool_calls.length){
+            convo.push(msg);
+            for(const tc of msg.tool_calls){
+              try{
+                const result=await callMcpToolFromModel(tc);
+                convo.push({role:'tool',tool_call_id:tc.id,content:stringifyToolResult(result)});
+              }catch(e){
+                convo.push({role:'tool',tool_call_id:tc.id,content:JSON.stringify({error:e.message||String(e)})});
+              }
+            }
+            continue;
+          }
+          return String(msg.content||'').trim();
+        }
+        throw new Error('MCP 工具调用超过 8 轮，已停止，避免无限循环。');
+      }
+
       let workerAuthenticated = false;
       let backupSyncTimer = null;
       let backupSyncRunning = false;
@@ -2249,30 +2410,36 @@ M：${aiText}`;
           const approxChars = apiMsgs.reduce((n, m) => n + String(m.content || '').length, 0);
           console.log(`📉 本次请求上下文约 ${approxChars} 字符（仅为粗略估算，不等于实际计费 Token）`);
 
-          const res = await workerFetch('', { 
-            method: 'POST', 
-            headers: target.headers, 
-            body: JSON.stringify({ provider: target.provider, model: model, messages: apiMsgs, stream: false, temperature: 0.5 }) 
-          });
-          load.remove();
-          
-          if (!res.ok) {
-            let errorDetail = `请求失败 (HTTP ${res.status})`;
-            try {
-              const errJson = await res.json();
-              if (errJson.error?.message) errorDetail = errJson.error.message;
-              else if (errJson.message) errorDetail = errJson.message;
-            } catch(e) {
+          let reply = '';
+          try {
+            // 已登录 Worker 时，优先加载大富翁 MCP；如果 MCP 暂时不可用，普通聊天仍可继续。
+            if(getWorkerToken()) {
               try {
-                const textBody = await res.text();
-                if (textBody) errorDetail = textBody.substring(0, 200);
-              } catch(e2) {}
+                reply = await runChatWithMcp(apiMsgs, target);
+              } catch(mcpError) {
+                console.warn('🎲 MCP 暂时不可用，回退普通聊天：',mcpError);
+                const res = await workerFetch('', {
+                  method:'POST',
+                  headers:target.headers,
+                  body:JSON.stringify({provider:target.provider,model:model,messages:apiMsgs,stream:false,temperature:0.5})
+                });
+                const data=await res.json().catch(()=>({}));
+                if(!res.ok) throw new Error(data?.error?.message || `请求失败 HTTP ${res.status}`);
+                reply=String(data?.choices?.[0]?.message?.content||'').trim();
+              }
+            } else {
+              const res = await workerFetch('', {
+                method:'POST',
+                headers:target.headers,
+                body:JSON.stringify({provider:target.provider,model:model,messages:apiMsgs,stream:false,temperature:0.5})
+              });
+              const data=await res.json().catch(()=>({}));
+              if(!res.ok) throw new Error(data?.error?.message || `请求失败 HTTP ${res.status}`);
+              reply=String(data?.choices?.[0]?.message?.content||'').trim();
             }
-            throw new Error(`❌ 请求地址: ${baseUrl} 失败，错误: ${errorDetail} (状态码: ${res.status})`);
+          } finally {
+            load.remove();
           }
-          
-          const data = await res.json();
-          const reply = data.choices[0].message.content;
           const aiMsg = { role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id };
           messages.push(aiMsg);
           fullHistory.push({ role: 'assistant', content: reply, time: aiMsg.time });
