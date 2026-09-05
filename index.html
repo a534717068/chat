@@ -2391,4 +2391,123 @@ M：${aiText}`;
 
       (function auto() {
         const today = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-');
-        if (localStorage.getItem(AEK) === today) 
+        if (localStorage.getItem(AEK) === today) return;
+        const d = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system');
+        if (d.length) {
+          const exportData = {
+            messages: d.map(m => ({
+              role: m.role,
+              content: m.content,
+              time: m.time || Date.now(),
+              formattedTime: fullDateTime(m.time || Date.now())
+            })),
+            globalSetting: globalSetting || '',
+            memoryFacts: JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]'),
+            emotionState: emotionState
+          };
+          const b = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(b);
+          a.download = `chat-auto-${today}.json`;
+          a.click();
+          localStorage.setItem(AEK, today);
+        }
+      })();
+
+      $('importBtn').onclick = () => { $('importModal').classList.add('active'); };
+      $('importCancelBtn').onclick = () => $('importModal').classList.remove('active'); $('importModal').onclick = e => { if (e.target === $('importModal')) $('importModal').classList.remove('active'); };
+      $('importFileBtn').onclick = () => $('importFileInput').click(); $('importJsonFileBtn').onclick = () => $('importJsonFileInput').click();
+      $('importFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
+      $('importJsonFileInput').onchange = e => { if (e.target.files[0]) { const r = new FileReader(); r.onload = ev => $('importTextarea').value = ev.target.result; r.readAsText(e.target.files[0]); } };
+
+      function parseText(t) {
+        const lines = t.split('\n'), res = [];
+        const up = ['你:', '你：', '用户:', '用户：', '我:', '我：', '问:', '问：'];
+        const ap = ['M:', 'M：', '张莎:', '张莎：', '助手:', '助手：', 'assistant:', 'ai:', '答:', '答：'];
+        for (let l of lines) {
+          l = l.trim(); if (!l) continue;
+          let role = null, c = '';
+          const lower = l.toLowerCase();
+          for (let p of up) { if (lower.startsWith(p.toLowerCase())) { role = 'user'; c = l.slice(p.length).trim(); break; } }
+          if (!role) { for (let p of ap) { if (lower.startsWith(p.toLowerCase())) { role = 'assistant'; c = l.slice(p.length).trim(); break; } } }
+          if (role && c) { res.push({ role, content: c }); }
+          else if (!role && res.length > 0) { res[res.length - 1].content += ' ' + l; }
+        }
+        return res;
+      }
+
+      function parseAndImport(append = false) {
+        const raw = $('importTextarea').value.trim();
+        if (!raw) { alert('请粘贴内容'); return; }
+        let imported;
+        try {
+          imported = JSON.parse(raw);
+          if (!imported || typeof imported !== 'object') throw 0;
+          if (imported.messages && Array.isArray(imported.messages)) {
+            if (imported.globalSetting && typeof imported.globalSetting === 'string') {
+              globalSetting = imported.globalSetting;
+              localStorage.setItem(SETTING_KEY, globalSetting);
+              $('settingTextarea').value = globalSetting;
+              refreshSystemPrompt();
+            }
+            if (imported.memoryFacts && Array.isArray(imported.memoryFacts)) {
+              localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(imported.memoryFacts));
+              rebuildGraph();
+            }
+            if (imported.emotionState && typeof imported.emotionState === 'object') {
+              emotionState = { ...DEFAULT_EMOTION_STATE, ...imported.emotionState };
+              saveEmotionState(false);
+            }
+            imported = imported.messages;
+          }
+          if (!Array.isArray(imported)) throw 0;
+          imported = imported.filter(m => m && typeof m === 'object' && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string');
+        } catch(e) {
+          imported = parseText(raw);
+        }
+        if (!imported || !imported.length) { alert('无法解析'); return; }
+        const now = Date.now(), total = imported.length;
+        const newMessages = imported.map((m, i) => ({
+          role: m.role,
+          content: m.content,
+          id: nextId++,
+          time: m.time || (now - (total - i) * 5000),
+          parentId: null,
+          history: m.history || null,
+          historyIndex: m.historyIndex || 0
+        }));
+        for (let i = 0; i < newMessages.length; i++) { if (i > 0) newMessages[i].parentId = newMessages[i - 1].id; }
+        if (!append) {
+          const existingSignatures = new Set(
+            messages.filter(m => m.role !== 'system').map(m => `${m.role}|${m.content}|${m.time || ''}`)
+          );
+          const filtered = newMessages.filter(m => !existingSignatures.has(`${m.role}|${m.content}|${m.time || ''}`));
+          if (filtered.length === 0) {
+            alert('没有新消息，所有消息均已存在。');
+            $('importModal').classList.remove('active');
+            return;
+          }
+          messages = [messages[0], ...filtered];
+          fullHistory = filtered.map(m => ({ role: m.role, content: m.content, time: m.time }));
+        } else {
+          const lastMsg = messages[messages.length - 1];
+          if (lastMsg && lastMsg.role !== 'system') newMessages[0].parentId = lastMsg.id;
+          const existingSigs = new Set(
+            messages.filter(m => m.role !== 'system').map(m => `${m.role}|${m.content}|${m.time || ''}`)
+          );
+          const trulyNew = newMessages.filter(m => !existingSigs.has(`${m.role}|${m.content}|${m.time || ''}`));
+          messages.push(...trulyNew);
+          fullHistory.push(...trulyNew.map(m => ({ role: m.role, content: m.content, time: m.time })));
+        }
+        saveFullHistory(); renderAll(); saveAll(); saveDraft(DRAFT_IMPORT, '');
+        alert(`${append ? '追加' : '导入'}成功`);
+        $('importModal').classList.remove('active');
+      }
+      $('importConfirmBtn').onclick = () => parseAndImport(false);
+      $('importAppendBtn').onclick = () => parseAndImport(true);
+
+      renderAll(); if (messages.length <= 1) addMsg('assistant', '你好！我是M，精简人设已加载 🧠');
+    })();
+  </script>
+</body>
+</html>
