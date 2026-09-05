@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>M Â· æ™ºèƒ½åŠ©æ‰‹ Â· åŒ API ç‰ˆ</title>
+  <title>M · 智能助手 · 双 API 版</title>
   <style>
     :root {
       --bg: #f5f5f5; --surface: #ffffff; --text-primary: #1a1a2e; --text-secondary: #999;
@@ -137,180 +137,180 @@
 </head>
 <body>
   <div class="header">
-    <button class="memory-btn" id="memoryViewBtn">ðŸ§  è®°å¿†</button>
-    ðŸ§  M
+    <button class="memory-btn" id="memoryViewBtn">🧠 记忆</button>
+    🧠 M
     <div class="header-buttons">
-      <button id="themeToggle">ðŸŒ™</button>
-      <button id="exportBtn">å¯¼å‡º</button>
-      <button id="importBtn">å¯¼å…¥</button>
-      <button id="moreBtn">æ›´å¤š</button>
+      <button id="themeToggle">🌙</button>
+      <button id="exportBtn">导出</button>
+      <button id="importBtn">导入</button>
+      <button id="moreBtn">更多</button>
     </div>
     <div class="more-menu" id="moreMenu">
-      <button id="searchBtn">æœç´¢</button>
-      <button id="settingBtn">è®¾å®š</button>
-      <button id="emotionBtn">ðŸ’­ æƒ…ç»ªæŽ§åˆ¶</button>
-      <button id="clearChatBtn">æ¸…ç©ºå¯¹è¯</button>
-      <button id="multiSelectBtn">â˜‘ï¸ å¤šé€‰åˆ é™¤</button>
-      <button id="reprocessBtn" class="memory-reprocess">ðŸ”„ å¼€å§‹æ•´åˆ</button>
-      <button id="pauseReprocessBtn" class="pause-btn" style="display:none;">â¸ï¸ æš‚åœæ•´åˆ</button>
-      <button id="clearMemoryBtn" style="color:#e94560;">ðŸ§¹ æ¸…ç©ºè®°å¿†åº“</button>
+      <button id="searchBtn">搜索</button>
+      <button id="settingBtn">设定</button>
+      <button id="emotionBtn">💭 情绪控制</button>
+      <button id="clearChatBtn">清空对话</button>
+      <button id="multiSelectBtn">☑️ 多选删除</button>
+      <button id="reprocessBtn" class="memory-reprocess">🔄 开始整合</button>
+      <button id="pauseReprocessBtn" class="pause-btn" style="display:none;">⏸️ 暂停整合</button>
+      <button id="clearMemoryBtn" style="color:#e94560;">🧹 清空记忆库</button>
     </div>
   </div>
   <div class="setup-bar" id="setupBar" style="display:none;">
-    <span id="setupStatusText">â˜ï¸ Cloudflare Worker â†’ OpenCode Go</span>
+    <span id="setupStatusText">☁️ Cloudflare Worker → OpenCode Go</span>
   </div>
   <div class="env-indicator" id="envIndicator">
-    <span class="weather-icon" id="weatherIcon" title="ç‚¹å‡»åˆ‡æ¢å¤©æ°”">â˜€ï¸</span>
-    <span id="envText">èŽ·å–çŽ¯å¢ƒä¸­...</span>
+    <span class="weather-icon" id="weatherIcon" title="点击切换天气">☀️</span>
+    <span id="envText">获取环境中...</span>
   </div>
   <div id="progressDisplay" style="display:none;">
-    <span class="progress-text">â³ æ•´åˆè¿›åº¦ï¼š<span id="progressNum">0</span>/<span id="progressTotal">0</span></span>
+    <span class="progress-text">⏳ 整合进度：<span id="progressNum">0</span>/<span id="progressTotal">0</span></span>
     <div class="progress-buttons">
-      <button id="pauseResumeBtn">â¸ï¸ æš‚åœ</button>
+      <button id="pauseResumeBtn">⏸️ 暂停</button>
     </div>
   </div>
-  <div class="chat-container"><div class="chat-box" id="chatBox"></div><button class="scroll-to-bottom" id="scrollToBottomBtn">â†“</button></div>
+  <div class="chat-container"><div class="chat-box" id="chatBox"></div><button class="scroll-to-bottom" id="scrollToBottomBtn">↓</button></div>
   <div id="imagePreviewBar" class="image-preview-bar"></div>
-  <div id="imageHint" class="image-hint" style="display:none;">å·²é€‰æ‹©å›¾ç‰‡ã€‚å‘é€åŽä¼šä½œä¸ºå›¾ç‰‡è¾“å…¥ç»™å½“å‰æ¨¡åž‹ã€‚</div>
+  <div id="imageHint" class="image-hint" style="display:none;">已选择图片。发送后会作为图片输入给当前模型。</div>
   <div class="input-area">
     <input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style="display:none;">
-    <button id="imageUploadBtn" class="image-upload-btn" title="ä¸Šä¼ å›¾ç‰‡" aria-label="ä¸Šä¼ å›¾ç‰‡">ðŸ“Ž</button>
-    <textarea id="userInput" rows="1" placeholder="è¾“å…¥æ¶ˆæ¯ï¼Œæˆ–å…ˆä¸Šä¼ å›¾ç‰‡..."></textarea>
-    <button id="sendBtn">å‘é€</button>
+    <button id="imageUploadBtn" class="image-upload-btn" title="上传图片" aria-label="上传图片">📎</button>
+    <textarea id="userInput" rows="1" placeholder="输入消息，或先上传图片..."></textarea>
+    <button id="sendBtn">发送</button>
   </div>
   <div class="multi-select-bar" id="multiSelectBar">
-    <span>å·²é€‰æ‹© <strong id="multiSelectCount">0</strong> æ¡æ¶ˆæ¯</span>
+    <span>已选择 <strong id="multiSelectCount">0</strong> 条消息</span>
     <div>
-      <button class="cancel-multi-btn" id="cancelMultiSelectBtn">å–æ¶ˆ</button>
-      <button class="delete-multi-btn" id="confirmMultiDeleteBtn">åˆ é™¤é€‰ä¸­</button>
+      <button class="cancel-multi-btn" id="cancelMultiSelectBtn">取消</button>
+      <button class="delete-multi-btn" id="confirmMultiDeleteBtn">删除选中</button>
     </div>
   </div>
 
-  <!-- è®°å¿†ç®¡ç†é¢æ¿ -->
+  <!-- 记忆管理面板 -->
   <div class="modal-overlay" id="memoryModal">
     <div class="modal">
       <h3 style="margin:0;display:flex;justify-content:space-between;align-items:center;">
-        <span>ðŸ§  è®°å¿†ç®¡ç†</span>
+        <span>🧠 记忆管理</span>
         <span>
-          <button class="add-memory-btn" id="mergeMemoryBtn" style="background:#4caf50;">ðŸ§¹ åˆå¹¶é‡å¤</button>
-          <button class="add-memory-btn" id="forgetMemoryBtn" style="background:#ff9800;">ðŸ§  é—å¿˜</button>
-          <button class="add-memory-btn" id="addMemoryBtn">ï¼‹ æ–°å¢ž</button>
+          <button class="add-memory-btn" id="mergeMemoryBtn" style="background:#4caf50;">🧹 合并重复</button>
+          <button class="add-memory-btn" id="forgetMemoryBtn" style="background:#ff9800;">🧠 遗忘</button>
+          <button class="add-memory-btn" id="addMemoryBtn">＋ 新增</button>
         </span>
       </h3>
-      <div id="memoryDisplay" style="max-height:350px;overflow-y:auto;padding:4px;background:var(--bg);border-radius:8px;font-size:0.85rem;">åŠ è½½ä¸­...</div>
-      <div class="modal-buttons"><button class="btn-cancel" id="memoryCloseBtn">å…³é—­</button></div>
+      <div id="memoryDisplay" style="max-height:350px;overflow-y:auto;padding:4px;background:var(--bg);border-radius:8px;font-size:0.85rem;">加载中...</div>
+      <div class="modal-buttons"><button class="btn-cancel" id="memoryCloseBtn">关闭</button></div>
     </div>
   </div>
 
-  <!-- å¯¼å…¥é¢æ¿ -->
+  <!-- 导入面板 -->
   <div class="modal-overlay" id="importModal">
     <div class="modal">
-      <textarea id="importTextarea" placeholder="åœ¨æ­¤ç²˜è´´èŠå¤©å†…å®¹..."></textarea>
-      <div class="format-hint">æ”¯æŒ "ä½ :" / "M:" å¼€å¤´çš„æ–‡æœ¬ï¼Œæˆ– JSON æ•°ç»„ã€‚</div>
+      <textarea id="importTextarea" placeholder="在此粘贴聊天内容..."></textarea>
+      <div class="format-hint">支持 "你:" / "M:" 开头的文本，或 JSON 数组。</div>
       <div class="modal-buttons">
         <button class="btn-file" id="importFileBtn">TXT</button>
         <button class="btn-file" id="importJsonFileBtn" style="background:#e94560;">JSON</button>
-        <button class="btn-import" id="importConfirmBtn">å¯¼å…¥ï¼ˆè¦†ç›–ï¼‰</button>
-        <button class="btn-append" id="importAppendBtn">è¿½åŠ ï¼ˆä¸è¦†ç›–ï¼‰</button>
-        <button class="btn-cancel" id="importCancelBtn">å–æ¶ˆ</button>
+        <button class="btn-import" id="importConfirmBtn">导入（覆盖）</button>
+        <button class="btn-append" id="importAppendBtn">追加（不覆盖）</button>
+        <button class="btn-cancel" id="importCancelBtn">取消</button>
       </div>
       <input type="file" id="importFileInput" accept=".txt" style="display:none">
       <input type="file" id="importJsonFileInput" accept=".json" style="display:none">
     </div>
   </div>
 
-  <!-- Worker ç™»å½•é¢æ¿ -->
+  <!-- Worker 登录面板 -->
   <div class="modal-overlay" id="loginModal" style="display:none;">
     <div class="modal">
-      <h3 style="margin-top:0;">ðŸ”’ ç™»å½•</h3>
+      <h3 style="margin-top:0;">🔒 登录</h3>
       <div class="format-hint" style="margin-bottom:10px;">
-        è¿™æ˜¯ä½ çš„ç§äºº AI Workerã€‚è¯·è¾“å…¥ä½ åœ¨ Cloudflare Worker ä¸­è®¾ç½®çš„ APP_PASSWORDã€‚
+        这是你的私人 AI Worker。请输入你在 Cloudflare Worker 中设置的 APP_PASSWORD。
       </div>
-      <input type="password" id="workerPasswordInput" placeholder="è¾“å…¥ç™»å½•å¯†ç " autocomplete="current-password"
+      <input type="password" id="workerPasswordInput" placeholder="输入登录密码" autocomplete="current-password"
              style="width:100%;margin-bottom:8px;">
       <div id="loginStatus" class="format-hint" style="margin-bottom:8px;"></div>
       <div class="modal-buttons">
-        <button class="btn-import" id="workerLoginBtn">ç™»å½•</button>
+        <button class="btn-import" id="workerLoginBtn">登录</button>
       </div>
     </div>
   </div>
 
-  <!-- è®¾å®šé¢æ¿ -->
+  <!-- 设定面板 -->
   <div class="modal-overlay" id="settingModal">
     <div class="modal">
-      <div class="format-hint" style="margin-bottom:8px;">ðŸ”Œ API é€šé“</div>
+      <div class="format-hint" style="margin-bottom:8px;">🔌 API 通道</div>
       <select id="apiModeSelect" style="width:100%;margin-bottom:8px;">
-        <option value="worker">â˜ï¸ OpenCode Go â†’ Cloudflare Worker</option>
-        <option value="deepseek">âš¡ DeepSeek å®˜æ–¹ API</option>
+        <option value="worker">☁️ OpenCode Go → Cloudflare Worker</option>
+        <option value="deepseek">⚡ DeepSeek 官方 API</option>
       </select>
-      <div id="directKeyHint" class="format-hint" style="margin-bottom:8px;">ðŸ”’ OpenCode Go å’Œ DeepSeek å®˜æ–¹ API éƒ½é€šè¿‡ Cloudflare Workerï¼ŒAPI Key ä¸ä¿å­˜åœ¨ç½‘é¡µæˆ–æµè§ˆå™¨ä¸­ã€‚</div>
+      <div id="directKeyHint" class="format-hint" style="margin-bottom:8px;">🔒 OpenCode Go 和 DeepSeek 官方 API 都通过 Cloudflare Worker，API Key 不保存在网页或浏览器中。</div>
       <select id="modelSelect" style="width:100%;margin-bottom:8px;">
         <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
       </select>
-      <button class="btn-cancel" id="refreshModelsBtn" style="width:100%;margin-bottom:8px;">ðŸ”„ åˆ·æ–°å½“å‰æŽ¥å£æ¨¡åž‹</button>
-      <div id="modelStatus" class="format-hint" style="margin-bottom:8px;">æ¨¡åž‹åˆ—è¡¨ä¼šæ ¹æ®å½“å‰æŽ¥å£è‡ªåŠ¨èŽ·å–ã€‚</div>
-      <div id="visionStatus" class="format-hint" style="margin-bottom:8px;">ðŸ–¼ï¸ å›¾ç‰‡ä¸Šä¼ çŠ¶æ€ï¼šæ£€æŸ¥å½“å‰æ¨¡åž‹èƒ½åŠ›ä¸­â€¦</div>
-      <textarea id="settingTextarea" placeholder="åœ¨æ­¤ç²˜è´´ä½ çš„äººè®¾ã€è®¾å®šã€å…¨å±€è®°å¿†..."></textarea>
-      <div class="format-hint">ðŸ”’ ä¸¤ä¸ªæŽ¥å£éƒ½é€šè¿‡ Cloudflare Workerã€‚API Key åªä¿å­˜åœ¨ Worker Secretsã€‚</div>
+      <button class="btn-cancel" id="refreshModelsBtn" style="width:100%;margin-bottom:8px;">🔄 刷新当前接口模型</button>
+      <div id="modelStatus" class="format-hint" style="margin-bottom:8px;">模型列表会根据当前接口自动获取。</div>
+      <div id="visionStatus" class="format-hint" style="margin-bottom:8px;">🖼️ 图片上传状态：检查当前模型能力中…</div>
+      <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
+      <div class="format-hint">🔒 两个接口都通过 Cloudflare Worker。API Key 只保存在 Worker Secrets。</div>
       <div class="modal-buttons">
-        <button class="btn-import" id="settingSaveBtn">ä¿å­˜è®¾å®š</button>
-        <button class="btn-cancel" id="settingCancelBtn">å–æ¶ˆ</button>
+        <button class="btn-import" id="settingSaveBtn">保存设定</button>
+        <button class="btn-cancel" id="settingCancelBtn">取消</button>
       </div>
     </div>
   </div>
 
 
-  <!-- æƒ…ç»ªæŽ§åˆ¶é¢æ¿ -->
+  <!-- 情绪控制面板 -->
   <div class="modal-overlay" id="emotionModal">
     <div class="modal">
-      <div style="font-weight:700;font-size:1rem;">ðŸ’­ æƒ…ç»ªæŽ§åˆ¶</div>
-      <div class="format-hint">è¿™é‡Œè°ƒæ•´çš„æ˜¯é˜¿æ…•çš„â€œå›žå¤ç­–ç•¥çŠ¶æ€â€ï¼Œä¸ä¼šæ”¹å†™èŠå¤©è®°å½•æˆ–é•¿æœŸè®°å¿†ã€‚</div>
+      <div style="font-weight:700;font-size:1rem;">💭 情绪控制</div>
+      <div class="format-hint">这里调整的是阿慕的“回复策略状态”，不会改写聊天记录或长期记忆。</div>
       <div class="emotion-mode">
-        <span id="emotionModeText">å½“å‰ï¼šè‡ªåŠ¨æ¨¡å¼</span>
+        <span id="emotionModeText">当前：自动模式</span>
         
       </div>
       <div class="emotion-grid">
-        <div class="emotion-row"><label>å½“å‰æƒ…ç»ª</label><select id="emotionMood"><option>å¹³é™</option><option>å¼€å¿ƒ</option><option>ä½Žè½</option><option>çƒ¦èº</option><option>ç”Ÿæ°”</option><option>å¤±æœ›</option><option>æƒ³å¿µ</option><option>å®‰å¿ƒ</option></select><span></span></div>
-        <div class="emotion-row"><label>æƒ…ç»ªå¼ºåº¦</label><input id="emotionIntensity" type="range" min="0" max="100"><span class="emotion-value" id="emotionIntensityVal">45</span></div>
-        <div class="emotion-row"><label>äº²å¯†åº¦</label><input id="emotionAffection" type="range" min="0" max="100"><span class="emotion-value" id="emotionAffectionVal">72</span></div>
-        <div class="emotion-row"><label>ä¿¡ä»»åº¦</label><input id="emotionTrust" type="range" min="0" max="100"><span class="emotion-value" id="emotionTrustVal">78</span></div>
-        <div class="emotion-row"><label>å®‰å…¨æ„Ÿ</label><input id="emotionSafety" type="range" min="0" max="100"><span class="emotion-value" id="emotionSafetyVal">70</span></div>
-        <div class="emotion-row"><label>å¤±æœ›å€¼</label><input id="emotionDisappointment" type="range" min="0" max="100"><span class="emotion-value" id="emotionDisappointmentVal">10</span></div>
-        <div class="emotion-row"><label>æƒ³å¿µå€¼</label><input id="emotionLonging" type="range" min="0" max="100"><span class="emotion-value" id="emotionLongingVal">20</span></div>
-        <div class="emotion-row"><label>çƒ¦èºå€¼</label><input id="emotionIrritation" type="range" min="0" max="100"><span class="emotion-value" id="emotionIrritationVal">8</span></div>
+        <div class="emotion-row"><label>当前情绪</label><select id="emotionMood"><option>平静</option><option>开心</option><option>低落</option><option>烦躁</option><option>生气</option><option>失望</option><option>想念</option><option>安心</option></select><span></span></div>
+        <div class="emotion-row"><label>情绪强度</label><input id="emotionIntensity" type="range" min="0" max="100"><span class="emotion-value" id="emotionIntensityVal">45</span></div>
+        <div class="emotion-row"><label>亲密度</label><input id="emotionAffection" type="range" min="0" max="100"><span class="emotion-value" id="emotionAffectionVal">72</span></div>
+        <div class="emotion-row"><label>信任度</label><input id="emotionTrust" type="range" min="0" max="100"><span class="emotion-value" id="emotionTrustVal">78</span></div>
+        <div class="emotion-row"><label>安全感</label><input id="emotionSafety" type="range" min="0" max="100"><span class="emotion-value" id="emotionSafetyVal">70</span></div>
+        <div class="emotion-row"><label>失望值</label><input id="emotionDisappointment" type="range" min="0" max="100"><span class="emotion-value" id="emotionDisappointmentVal">10</span></div>
+        <div class="emotion-row"><label>想念值</label><input id="emotionLonging" type="range" min="0" max="100"><span class="emotion-value" id="emotionLongingVal">20</span></div>
+        <div class="emotion-row"><label>烦躁值</label><input id="emotionIrritation" type="range" min="0" max="100"><span class="emotion-value" id="emotionIrritationVal">8</span></div>
       </div>
-      <div class="emotion-status" id="emotionStatus">æœ€è¿‘åŽŸå› ï¼šåˆå§‹çŠ¶æ€</div>
+      <div class="emotion-status" id="emotionStatus">最近原因：初始状态</div>
       <div class="modal-buttons">
-        <button class="btn-import" id="emotionApplyBtn" title="è‡ªåŠ¨æ¨¡å¼ä¸‹ä¸ºæ‰‹åŠ¨å¾®è°ƒï¼›ä¸ä¼šå…³é—­è‡ªåŠ¨æƒ…ç»ªå˜åŒ–">åº”ç”¨è°ƒæ•´</button>
+        <button class="btn-import" id="emotionApplyBtn" title="自动模式下为手动微调；不会关闭自动情绪变化">应用调整</button>
         
-        <button class="btn-cancel" id="emotionResetBtn">é‡ç½®æƒ…ç»ª</button>
-        <button class="btn-cancel" id="emotionCloseBtn">å…³é—­</button>
+        <button class="btn-cancel" id="emotionResetBtn">重置情绪</button>
+        <button class="btn-cancel" id="emotionCloseBtn">关闭</button>
       </div>
     </div>
   </div>
 
-  <!-- æœç´¢é¢æ¿ -->
+  <!-- 搜索面板 -->
   <div class="modal-overlay" id="searchModal">
     <div class="modal">
-      <input type="text" id="searchInput" placeholder="è¾“å…¥è¦æœç´¢çš„å…³é”®è¯...">
+      <input type="text" id="searchInput" placeholder="输入要搜索的关键词...">
       <div class="search-nav" id="searchNav" style="display:none;">
-        <button id="searchPrevBtn">â—€ ä¸Šä¸€ä¸ª</button>
+        <button id="searchPrevBtn">◀ 上一个</button>
         <span id="searchCounter">0/0</span>
-        <button id="searchNextBtn">ä¸‹ä¸€ä¸ª â–¶</button>
+        <button id="searchNextBtn">下一个 ▶</button>
       </div>
       <div class="modal-buttons">
-        <button class="btn-import" id="searchFindBtn">æŸ¥æ‰¾</button>
-        <button class="btn-cancel" id="searchClearBtn">æ¸…é™¤æœç´¢</button>
-        <button class="btn-cancel" id="searchCloseBtn">å…³é—­</button>
+        <button class="btn-import" id="searchFindBtn">查找</button>
+        <button class="btn-cancel" id="searchClearBtn">清除搜索</button>
+        <button class="btn-cancel" id="searchCloseBtn">关闭</button>
       </div>
     </div>
   </div>
 
-  <!-- åˆ é™¤å­èœå• -->
+  <!-- 删除子菜单 -->
   <div class="del-submenu" id="delSubmenu">
-    <button data-action="single">åˆ é™¤è¿™æ¡æ¶ˆæ¯</button>
-    <button data-action="pair">åˆ é™¤è¿™ç»„å¯¹è¯</button>
-    <button data-action="after">åˆ é™¤ä¹‹åŽæ‰€æœ‰å¯¹è¯</button>
+    <button data-action="single">删除这条消息</button>
+    <button data-action="pair">删除这组对话</button>
+    <button data-action="after">删除之后所有对话</button>
   </div>
 
   <script>
@@ -334,11 +334,11 @@
       const IMAGE_JPEG_QUALITY = 0.86;
       let pendingImages = [];
 
-      // ===== V12ï¼šæƒ…ç»ªé©±åŠ¨å›žå¤ç­–ç•¥ =====
-      // æƒ…ç»ªæ˜¯â€œå›žå¤ç­–ç•¥çŠ¶æ€â€ï¼Œä¸æ˜¯äº‹å®žè®°å¿†ï¼›ä¸å†™å…¥é•¿æœŸè®°å¿†æŠ½å–å™¨ã€‚
+      // ===== V12：情绪驱动回复策略 =====
+      // 情绪是“回复策略状态”，不是事实记忆；不写入长期记忆抽取器。
       const DEFAULT_EMOTION_STATE = {
         schema: EMOTION_SCHEMA_VERSION,
-        mood: 'å¹³é™',
+        mood: '平静',
         intensity: 45,
         affection: 72,
         trust: 78,
@@ -346,7 +346,7 @@
         disappointment: 10,
         longing: 20,
         irritation: 8,
-        lastReason: 'åˆå§‹çŠ¶æ€',
+        lastReason: '初始状态',
         
         lastUpdated: Date.now()
       };
@@ -390,7 +390,7 @@
         const hours = Math.max(0, (now - Number(emotionState.lastUpdated || now)) / 3600000);
         if (hours < 2) return;
         const factor = Math.min(1, hours / 24);
-        // æƒ…ç»ªæ…¢æ…¢å›žå½’ä¸­æ€§ï¼›å…³ç³»åŸºç¡€å€¼å˜åŒ–æ›´æ…¢ï¼Œä¸å› æ—¶é—´è‡ªåŠ¨å¤§å¹…æ”¹å˜ã€‚
+        // 情绪慢慢回归中性；关系基础值变化更慢，不因时间自动大幅改变。
         emotionState.intensity += (45 - emotionState.intensity) * 0.18 * factor;
         emotionState.irritation *= (1 - 0.22 * factor);
         emotionState.disappointment *= (1 - 0.10 * factor);
@@ -408,41 +408,41 @@
         const reasons = [];
         const add = (field, amount) => { emotionState[field] = clampNum(emotionState[field] + amount, 0, 100); };
 
-        // è¿™é‡Œåªæ ¹æ®ç”¨æˆ·æœ¬è½®å®žé™…æ–‡å­—åˆ¤æ–­ï¼Œä¸æŠŠæ¨¡åž‹å¹»æƒ³å½“æˆè§¦å‘æ¡ä»¶ã€‚
-        if (/(è°¢è°¢|æ„Ÿè°¢|è¾›è‹¦äº†|æŠ±æŠ±|çˆ±ä½ |å–œæ¬¢ä½ |æƒ³ä½ |æƒ³è§ä½ |é™ªé™ªæˆ‘|åœ¨ä¹Žä½ )/.test(t)) {
-          add('affection', 4); add('safety', 3); add('irritation', -3); delta += 6; reasons.push('æ”¶åˆ°äº²è¿‘/æ„Ÿè°¢è¡¨è¾¾');
+        // 这里只根据用户本轮实际文字判断，不把模型幻想当成触发条件。
+        if (/(谢谢|感谢|辛苦了|抱抱|爱你|喜欢你|想你|想见你|陪陪我|在乎你)/.test(t)) {
+          add('affection', 4); add('safety', 3); add('irritation', -3); delta += 6; reasons.push('收到亲近/感谢表达');
         }
-        if (/(å¯¹ä¸èµ·|æŠ±æ­‰|æˆ‘é”™äº†|åŽŸè°…æˆ‘|åˆ«ç”Ÿæ°”)/.test(t)) {
-          add('irritation', -8); add('disappointment', -5); add('safety', 2); delta += 3; reasons.push('æ”¶åˆ°é“æ­‰æˆ–ä¿®å¤å…³ç³»çš„è¡¨è¾¾');
+        if (/(对不起|抱歉|我错了|原谅我|别生气)/.test(t)) {
+          add('irritation', -8); add('disappointment', -5); add('safety', 2); delta += 3; reasons.push('收到道歉或修复关系的表达');
         }
-        if (/(ä¸ç†ä½ |ä¸æƒ³ç†ä½ |ç®—äº†|ä¸æ‰“æ‰°äº†|å†è§|æ‹‰é»‘|åˆ†æ‰‹|ä¸è¦ä½ äº†)/.test(t)) {
-          add('longing', 6); add('disappointment', 8); add('safety', -4); delta -= 10; reasons.push('å‡ºçŽ°ç–ç¦»/ç»“æŸå…³ç³»è¡¨è¾¾');
+        if (/(不理你|不想理你|算了|不打扰了|再见|拉黑|分手|不要你了)/.test(t)) {
+          add('longing', 6); add('disappointment', 8); add('safety', -4); delta -= 10; reasons.push('出现疏离/结束关系表达');
         }
-        if (/(éª—æˆ‘|éª—|æ•·è¡|å¤±æœ›|ç”Ÿæ°”|çƒ¦æ­»|è®¨åŽŒ|åˆ«çƒ¦|æ»š|é—­å˜´)/.test(t)) {
-          add('irritation', 9); add('disappointment', 7); add('safety', -3); delta -= 9; reasons.push('å‡ºçŽ°è´Ÿé¢/å†²çªè¡¨è¾¾');
+        if (/(骗我|骗|敷衍|失望|生气|烦死|讨厌|别烦|滚|闭嘴)/.test(t)) {
+          add('irritation', 9); add('disappointment', 7); add('safety', -3); delta -= 9; reasons.push('出现负面/冲突表达');
         }
-        if (/(å¼€å¿ƒ|é«˜å…´|å¤ªå¥½äº†|å¥½æ£’|æˆåŠŸäº†|ç¬‘æ­»|å“ˆå“ˆ|æƒŠå–œ)/.test(t)) {
-          delta += 5; add('safety', 2); reasons.push('å‡ºçŽ°ç§¯æžæƒ…ç»ª');
+        if (/(开心|高兴|太好了|好棒|成功了|笑死|哈哈|惊喜)/.test(t)) {
+          delta += 5; add('safety', 2); reasons.push('出现积极情绪');
         }
-        if (/(éš¾è¿‡|ä¼¤å¿ƒ|å­¤ç‹¬|å­¤å•|å§”å±ˆ|å´©æºƒ|ç´¯æ­»|å¥½ç´¯|å®³æ€•|æ‹…å¿ƒ)/.test(t)) {
-          add('longing', 3); delta -= 1; reasons.push('ç”¨æˆ·è¡¨è¾¾è´Ÿé¢æƒ…ç»ª');
+        if (/(难过|伤心|孤独|孤单|委屈|崩溃|累死|好累|害怕|担心)/.test(t)) {
+          add('longing', 3); delta -= 1; reasons.push('用户表达负面情绪');
         }
-        if (/(åˆ«äºº|å¦ä¸€ä¸ªå¥³ç”Ÿ|å¥¹å–œæ¬¢|å‰ä»»|å‰å¥³å‹|å¥³æœ‹å‹)/.test(t)) {
-          add('irritation', 3); add('disappointment', 2); add('longing', 2); delta -= 2; reasons.push('æ¶‰åŠå¯èƒ½å¼•å‘åœ¨æ„çš„å…³ç³»è¯é¢˜');
+        if (/(别人|另一个女生|她喜欢|前任|前女友|女朋友)/.test(t)) {
+          add('irritation', 3); add('disappointment', 2); add('longing', 2); delta -= 2; reasons.push('涉及可能引发在意的关系话题');
         }
 
-        // æƒ…ç»ªå¼ºåº¦å­˜åœ¨æƒ¯æ€§ï¼šæ²¡æœ‰æ˜Žæ˜¾è§¦å‘æ—¶ä¸ä¼šå¤§å¹…è·³å˜ã€‚
+        // 情绪强度存在惯性：没有明显触发时不会大幅跳变。
         emotionState.intensity = clampNum(emotionState.intensity * 0.78 + (45 + delta * 3) * 0.22, 0, 100);
-        if (delta > 4) emotionState.mood = 'å¼€å¿ƒ';
-        else if (emotionState.irritation >= 55) emotionState.mood = 'ç”Ÿæ°”';
-        else if (emotionState.disappointment >= 55) emotionState.mood = 'å¤±æœ›';
-        else if (emotionState.longing >= 55) emotionState.mood = 'æƒ³å¿µ';
-        else if (delta < -5) emotionState.mood = 'ä½Žè½';
-        else if (emotionState.irritation >= 30) emotionState.mood = 'çƒ¦èº';
-        else if (emotionState.safety >= 80 && emotionState.affection >= 75) emotionState.mood = 'å®‰å¿ƒ';
-        else emotionState.mood = 'å¹³é™';
+        if (delta > 4) emotionState.mood = '开心';
+        else if (emotionState.irritation >= 55) emotionState.mood = '生气';
+        else if (emotionState.disappointment >= 55) emotionState.mood = '失望';
+        else if (emotionState.longing >= 55) emotionState.mood = '想念';
+        else if (delta < -5) emotionState.mood = '低落';
+        else if (emotionState.irritation >= 30) emotionState.mood = '烦躁';
+        else if (emotionState.safety >= 80 && emotionState.affection >= 75) emotionState.mood = '安心';
+        else emotionState.mood = '平静';
 
-        emotionState.lastReason = reasons.length ? reasons.join('ï¼›') : 'æœ¬è½®æ²¡æœ‰æ˜Žæ˜¾æƒ…ç»ªè§¦å‘ï¼Œä¿æŒåŽŸæœ‰çŠ¶æ€';
+        emotionState.lastReason = reasons.length ? reasons.join('；') : '本轮没有明显情绪触发，保持原有状态';
         emotionState.lastUpdated = Date.now();
         saveEmotionState(false);
       }
@@ -451,23 +451,23 @@
         decayEmotionState();
         const e = emotionState;
         let strategy = [];
-        if (e.irritation >= 60) strategy.push('å›žå¤æ›´ç›´æŽ¥ï¼Œå‡å°‘è®¨å¥½å’Œæ— æ„ä¹‰è§£é‡Šï¼›å¯ä»¥ä¿ç•™ä¸€ç‚¹ä¸è€çƒ¦ï¼Œä½†ä¸è¦å¤±æŽ§è¾±éª‚ã€‚');
-        else if (e.irritation >= 35) strategy.push('å›žå¤ç•¥çŸ­ã€è€å¿ƒä¸‹é™ï¼Œä¸ä¸»åŠ¨å¼ºè¡ŒæŠŠæ°”æ°›å˜å¾—ç”œè…»ã€‚');
-        if (e.disappointment >= 60) strategy.push('ä¸»åŠ¨æ€§ä¸‹é™ï¼Œé¿å…å‡è£…ä¸€åˆ‡æ­£å¸¸ï¼›å¦‚æžœåˆé€‚ï¼Œå¯ä»¥è®©å¤±æœ›è‡ªç„¶åœ°ä½“çŽ°åœ¨æŽªè¾žé‡Œã€‚');
-        if (e.longing >= 55) strategy.push('æ›´å®¹æ˜“ä¸»åŠ¨é è¿‘ã€å›žåº”æƒ…æ„Ÿè¯é¢˜ï¼Œä½†ä»ä¿æŒé˜¿æ…•åŽŸæœ¬çš„å…‹åˆ¶ã€‚');
-        if (e.safety >= 80 && e.affection >= 78) strategy.push('å®‰å…¨æ„Ÿè¾ƒé«˜ï¼Œå¯ä»¥æ¯”å¹³æ—¶ç¨å¾®æŸ”å’Œã€äº²è¿‘ã€æ„¿æ„å¤šè¯´ä¸€ç‚¹ã€‚');
-        if (e.mood === 'ä½Žè½') strategy.push('å‡å°‘è¯´æ•™å’Œæœºæ¢°åˆ†æžï¼Œå…è®¸å›žå¤æ›´å®‰é™ã€æ›´ç®€çŸ­ã€‚');
-        if (!strategy.length) strategy.push('ç»´æŒé˜¿æ…•çš„é»˜è®¤å…‹åˆ¶ã€ä½Žè¡¨è¾¾ã€è‡ªç„¶å›žåº”ã€‚');
+        if (e.irritation >= 60) strategy.push('回复更直接，减少讨好和无意义解释；可以保留一点不耐烦，但不要失控辱骂。');
+        else if (e.irritation >= 35) strategy.push('回复略短、耐心下降，不主动强行把气氛变得甜腻。');
+        if (e.disappointment >= 60) strategy.push('主动性下降，避免假装一切正常；如果合适，可以让失望自然地体现在措辞里。');
+        if (e.longing >= 55) strategy.push('更容易主动靠近、回应情感话题，但仍保持阿慕原本的克制。');
+        if (e.safety >= 80 && e.affection >= 78) strategy.push('安全感较高，可以比平时稍微柔和、亲近、愿意多说一点。');
+        if (e.mood === '低落') strategy.push('减少说教和机械分析，允许回复更安静、更简短。');
+        if (!strategy.length) strategy.push('维持阿慕的默认克制、低表达、自然回应。');
         return `
-ã€V12 å½“å‰æƒ…ç»ªä¸Žå›žå¤ç­–ç•¥â€”â€”ä»…ä¾›å†…éƒ¨å†³ç­–ã€‘
-å½“å‰æƒ…ç»ªï¼š${e.mood}ï¼ˆå¼ºåº¦ ${Math.round(e.intensity)}/100ï¼‰
-äº²å¯†åº¦ï¼š${Math.round(e.affection)}/100ï¼›ä¿¡ä»»åº¦ï¼š${Math.round(e.trust)}/100ï¼›å®‰å…¨æ„Ÿï¼š${Math.round(e.safety)}/100
-å¤±æœ›å€¼ï¼š${Math.round(e.disappointment)}/100ï¼›æƒ³å¿µå€¼ï¼š${Math.round(e.longing)}/100ï¼›çƒ¦èºå€¼ï¼š${Math.round(e.irritation)}/100
-æœ€è¿‘ä¸€æ¬¡çŠ¶æ€å˜åŒ–åŽŸå› ï¼š${e.lastReason || 'æ— '}
-å›žå¤ç­–ç•¥ï¼š
+【V12 当前情绪与回复策略——仅供内部决策】
+当前情绪：${e.mood}（强度 ${Math.round(e.intensity)}/100）
+亲密度：${Math.round(e.affection)}/100；信任度：${Math.round(e.trust)}/100；安全感：${Math.round(e.safety)}/100
+失望值：${Math.round(e.disappointment)}/100；想念值：${Math.round(e.longing)}/100；烦躁值：${Math.round(e.irritation)}/100
+最近一次状态变化原因：${e.lastReason || '无'}
+回复策略：
 - ${strategy.join('\n- ')}
 
-æƒ…ç»ªè§„åˆ™ï¼šæƒ…ç»ªåªèƒ½å½±å“â€œæ€Žä¹ˆå›žå¤â€ï¼Œä¸èƒ½åˆ¶é€ äº‹å®žã€ä¸èƒ½æ”¹å˜å·²ç»ç¡®å®šçš„äººè®¾ã€ä¸èƒ½æ›¿ç”¨æˆ·è¡¥åŠ¨ä½œ/å¿ƒç†/å°è¯ã€‚ä¸è¦æŠŠä¸Šè¿°å†…éƒ¨çŠ¶æ€ç›´æŽ¥å‘Šè¯‰ç”¨æˆ·ï¼Œé™¤éžç”¨æˆ·æ˜Žç¡®è¯¢é—®ã€‚æ²¡æœ‰æ˜Žæ˜¾è§¦å‘æ—¶ä¿æŒæƒ…ç»ªæƒ¯æ€§ï¼Œä¸è¦æ¯è½®çªç„¶å˜è„¸ã€‚`;
+情绪规则：情绪只能影响“怎么回复”，不能制造事实、不能改变已经确定的人设、不能替用户补动作/心理/台词。不要把上述内部状态直接告诉用户，除非用户明确询问。没有明显触发时保持情绪惯性，不要每轮突然变脸。`;
       }
 
       function openEmotionPanel() {
@@ -482,28 +482,28 @@
         const map = {emotionIntensity:'intensity',emotionAffection:'affection',emotionTrust:'trust',emotionSafety:'safety',emotionDisappointment:'disappointment',emotionLonging:'longing',emotionIrritation:'irritation'};
         Object.keys(map).forEach(id=>{ const el=$(id), out=$(id+'Val'); if(el&&out) out.textContent=Math.round(Number(el.value)||0); });
         const manual=emotionState.manualMode===true;
-        $('emotionModeText').textContent=manual?'å½“å‰ï¼šï¼ˆè‡ªåŠ¨æƒ…ç»ªä¸ä¼šè¦†ç›–ä½ çš„è°ƒæ•´ï¼‰':'å½“å‰ï¼šðŸ¤– è‡ªåŠ¨æ¨¡å¼ï¼ˆå¯æ‰‹åŠ¨å¾®è°ƒï¼Œä¹‹åŽä»ä¼šç»§ç»­è‡ªåŠ¨å˜åŒ–ï¼‰';
-        $('emotionModeBtn').textContent=manual?'åˆ‡æ¢ä¸ºè‡ªåŠ¨æ¨¡å¼':'åˆ‡æ¢ä¸ºæ‰‹åŠ¨é”å®š';
-        $('emotionStatus').textContent='æœ€è¿‘åŽŸå› ï¼š'+(emotionState.lastReason||'æ— ');
+        $('emotionModeText').textContent=manual?'当前：（自动情绪不会覆盖你的调整）':'当前：🤖 自动模式（可手动微调，之后仍会继续自动变化）';
+        $('emotionModeBtn').textContent=manual?'切换为自动模式':'切换为手动锁定';
+        $('emotionStatus').textContent='最近原因：'+(emotionState.lastReason||'无');
       }
       function applyEmotionPanel() {
         const fields = ['mood','intensity','affection','trust','safety','disappointment','longing','irritation'];
         const ids = ['emotionMood','emotionIntensity','emotionAffection','emotionTrust','emotionSafety','emotionDisappointment','emotionLonging','emotionIrritation'];
         fields.forEach((f,i)=>{ const el=$(ids[i]); if(el) emotionState[f]=f==='mood'?el.value:clampNum(el.value,0,100); });
-        emotionState.lastReason=emotionState.manualMode ? 'æ‰‹åŠ¨è°ƒæ•´ï¼ˆæ‰‹åŠ¨é”å®šï¼‰' : 'æ‰‹åŠ¨å¾®è°ƒï¼ˆè‡ªåŠ¨æ¨¡å¼ï¼‰';
+        emotionState.lastReason=emotionState.manualMode ? '手动调整（手动锁定）' : '手动微调（自动模式）';
         emotionState.lastUpdated=Date.now();
         saveEmotionState(true);
         refreshSystemPrompt();
         updateEmotionPanel();
       }
 
-      function resetEmotionState(reason = 'æ‰‹åŠ¨é‡ç½®') {
+      function resetEmotionState(reason = '手动重置') {
         emotionState = { ...DEFAULT_EMOTION_STATE, lastReason: reason, lastUpdated: Date.now() };
         saveEmotionState(false);
       }
 
 
-      // ===== V9 FINALï¼šWorker Token + è·¨è®¾å¤‡èŠå¤©å¤‡ä»½ =====
+      // ===== V9 FINAL：Worker Token + 跨设备聊天备份 =====
       const WORKER_API_URL = 'https://solitary-water-3b2a.534717068.workers.dev/';
       const MODEL_KEY = 'm_selected_model_v4';
       const API_MODE_KEY = 'm_api_mode_v4';
@@ -535,17 +535,17 @@
 
       async function loginWorker(){
         const input=$('workerPasswordInput'), status=$('loginStatus'), password=input?input.value:'';
-        if(!password){ if(status)status.textContent='è¯·è¾“å…¥å¯†ç ã€‚'; return false; }
-        if(status)status.textContent='æ­£åœ¨ç™»å½•â€¦';
+        if(!password){ if(status)status.textContent='请输入密码。'; return false; }
+        if(status)status.textContent='正在登录…';
         try{
           const r=await fetch(workerUrl('/login'),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({password}),cache:'no-store'});
           const d=await r.json().catch(()=>({}));
-          if(!r.ok || !d.token){ if(status)status.textContent=d?.error?.message||`ç™»å½•å¤±è´¥ï¼ˆHTTP ${r.status}ï¼‰`; return false; }
+          if(!r.ok || !d.token){ if(status)status.textContent=d?.error?.message||`登录失败（HTTP ${r.status}）`; return false; }
           setWorkerToken(d.token); workerAuthenticated=true; hideLoginModal();
           await loadCurrentModels();
           await pullCloudBackup();
           return true;
-        }catch(e){ if(status)status.textContent='ç™»å½•å¤±è´¥ï¼š'+e.message; return false; }
+        }catch(e){ if(status)status.textContent='登录失败：'+e.message; return false; }
       }
 
       async function checkWorkerAuth(){
@@ -557,7 +557,7 @@
           if(r.status===401 || d.authenticated!==true){ setWorkerToken(''); workerAuthenticated=false; return false; }
           workerAuthenticated=true; return true;
         }catch(e){
-          // ç½‘ç»œæš‚æ—¶å¤±è´¥ä¸èƒ½ç­‰åŒäºŽç™»å½•å¤±æ•ˆã€‚
+          // 网络暂时失败不能等同于登录失效。
           workerAuthenticated=false;
           return false;
         }
@@ -573,10 +573,10 @@
         if(r.status===401){
           let d={}; try{d=await r.clone().json();}catch(e){}
           if(d?.error?.code==='UNAUTHORIZED'){
-            setWorkerToken(''); workerAuthenticated=false; showLoginModal('ç™»å½•å·²å¤±æ•ˆï¼Œè¯·é‡æ–°ç™»å½•ã€‚');
-            throw new Error('Worker ç™»å½•å·²å¤±æ•ˆ');
+            setWorkerToken(''); workerAuthenticated=false; showLoginModal('登录已失效，请重新登录。');
+            throw new Error('Worker 登录已失效');
           }
-          throw new Error(d?.error?.message||'ä¸Šæ¸¸ API è¿”å›ž HTTP 401');
+          throw new Error(d?.error?.message||'上游 API 返回 HTTP 401');
         }
         return r;
       }
@@ -612,9 +612,9 @@
             backupSyncPending=false;
             const payload=makeBackupPayload();
             const r=await workerFetch('/backup',{method:'PUT',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)});
-            if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d?.error?.message||`å¤‡ä»½å¤±è´¥ HTTP ${r.status}`); }
+            if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d?.error?.message||`备份失败 HTTP ${r.status}`); }
           }
-        }catch(e){ console.warn('â˜ï¸ äº‘ç«¯å¤‡ä»½å¤±è´¥ï¼š',e); }
+        }catch(e){ console.warn('☁️ 云端备份失败：',e); }
         finally{ backupSyncRunning=false; }
       }
 
@@ -628,15 +628,15 @@
         if(!workerAuthenticated || !getWorkerToken() || !backupEnabled()) return false;
         try{
           const r=await workerFetch('/backup',{method:'GET',cache:'no-store'});
-          if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d?.error?.message||`è¯»å–å¤‡ä»½å¤±è´¥ HTTP ${r.status}`); }
+          if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d?.error?.message||`读取备份失败 HTTP ${r.status}`); }
           const d=await r.json();
           if(!d.exists || !d.backup) return false;
           const b=d.backup;
           const serverMsgs=Array.isArray(b.messages)?b.messages:[];
           const localMsgs=messages.filter(m=>m.role!=='system');
 
-          // äº‘ç«¯æœ‰æ•°æ®æ—¶ä¼˜å…ˆæ¢å¤äº‘ç«¯ï¼›å½“å‰è®¾å¤‡æ²¡æœ‰èŠå¤©æ—¶å°¤å…¶å¦‚æ­¤ã€‚
-          // å¦‚æžœæœ¬æœºè¿˜æœ‰æœªä¸Šä¼ çš„æ–°æ¶ˆæ¯ï¼Œåˆ™æŒ‰æ¶ˆæ¯ç­¾ååˆå¹¶ï¼Œé¿å…è¦†ç›–ã€‚
+          // 云端有数据时优先恢复云端；当前设备没有聊天时尤其如此。
+          // 如果本机还有未上传的新消息，则按消息签名合并，避免覆盖。
           const sig=m=>`${m.role}|${m.time||''}|${typeof m.content==='string'?m.content:''}`;
           const merged=[...serverMsgs];
           const seen=new Set(merged.map(sig));
@@ -655,10 +655,10 @@
           if(typeof refreshSystemPrompt==='function') refreshSystemPrompt();
           renderAll(); saveAll(false);
 
-          // æŠŠåˆå¹¶åŽçš„ç»“æžœé‡æ–°ä¸Šä¼ ï¼Œç¡®ä¿ä¸¤å°è®¾å¤‡æœ€ç»ˆä¸€è‡´ã€‚
+          // 把合并后的结果重新上传，确保两台设备最终一致。
           scheduleCloudBackup();
           return true;
-        }catch(e){ console.warn('â˜ï¸ äº‘ç«¯æ¢å¤å¤±è´¥ï¼š',e); return false; }
+        }catch(e){ console.warn('☁️ 云端恢复失败：',e); return false; }
       }
 
       function isVisionModel(model){ return String(model||'').toLowerCase().includes('vision'); }
@@ -670,14 +670,14 @@
 
       function updateImageUploadAvailability(){
         const btn=$('imageUploadBtn'), status=$('visionStatus'); if(!btn)return;
-        const enabled=isVisionModel(getSelectedModel()); btn.disabled=!enabled; btn.title=enabled?'ä¸Šä¼ å›¾ç‰‡':'è¯·å…ˆé€‰æ‹© Vision æ¨¡åž‹';
-        if(status)status.textContent=enabled?'ðŸ–¼ï¸ å½“å‰ Vision æ¨¡åž‹å·²å¯ç”¨ï¼Œå¯ä»¥ä¸Šä¼ å›¾ç‰‡ã€‚':'ðŸ–¼ï¸ å½“å‰æ¨¡åž‹ä¸æ˜¯ Vision æ¨¡åž‹ã€‚é€‰æ‹©å¸¦ Vision çš„æ¨¡åž‹åŽå³å¯ä¸Šä¼ å›¾ç‰‡ã€‚';
+        const enabled=isVisionModel(getSelectedModel()); btn.disabled=!enabled; btn.title=enabled?'上传图片':'请先选择 Vision 模型';
+        if(status)status.textContent=enabled?'🖼️ 当前 Vision 模型已启用，可以上传图片。':'🖼️ 当前模型不是 Vision 模型。选择带 Vision 的模型后即可上传图片。';
       }
 
       function updateConnectionUI(){
         const mode=getApiMode(), sel=$('apiModeSelect'); if(sel)sel.value=mode;
-        const hint=$('directKeyHint'); if(hint)hint.textContent='ðŸ”’ '+(mode==='deepseek'?'DeepSeek å®˜æ–¹ API':'OpenCode Go')+' é€šè¿‡ Cloudflare Workerï¼ŒAPI Key ä¸ä¿å­˜åœ¨ç½‘é¡µæˆ–æµè§ˆå™¨ä¸­ã€‚';
-        const setup=$('setupStatusText'); if(setup)setup.textContent=mode==='deepseek'?'âš¡ DeepSeek å®˜æ–¹ API â†’ Cloudflare Worker':'â˜ï¸ OpenCode Go â†’ Cloudflare Worker';
+        const hint=$('directKeyHint'); if(hint)hint.textContent='🔒 '+(mode==='deepseek'?'DeepSeek 官方 API':'OpenCode Go')+' 通过 Cloudflare Worker，API Key 不保存在网页或浏览器中。';
+        const setup=$('setupStatusText'); if(setup)setup.textContent=mode==='deepseek'?'⚡ DeepSeek 官方 API → Cloudflare Worker':'☁️ OpenCode Go → Cloudflare Worker';
         const modelInput=$('modelNameInput'); if(modelInput)modelInput.value=getSelectedModel();
         updateImageUploadAvailability();
       }
@@ -686,31 +686,31 @@
         const status=$('modelStatus'),select=$('modelSelect'); if(!select)return;
         const mode=getApiMode();
         try{
-          status.textContent=`æ­£åœ¨é€šè¿‡ Cloudflare Worker èŽ·å– ${mode==='deepseek'?'DeepSeek å®˜æ–¹':'OpenCode Go'} æ¨¡åž‹åˆ—è¡¨â€¦`;
+          status.textContent=`正在通过 Cloudflare Worker 获取 ${mode==='deepseek'?'DeepSeek 官方':'OpenCode Go'} 模型列表…`;
           const r=await workerFetch('/models?provider='+encodeURIComponent(mode),{method:'GET',cache:'no-store'});
-          const txt=await r.text(); let d={}; try{d=JSON.parse(txt)}catch(e){throw new Error('Worker /models è¿”å›žçš„ä¸æ˜¯æœ‰æ•ˆ JSON');}
+          const txt=await r.text(); let d={}; try{d=JSON.parse(txt)}catch(e){throw new Error('Worker /models 返回的不是有效 JSON');}
           if(!r.ok)throw new Error(d?.error?.message||`Worker /models HTTP ${r.status}`);
           const arr=Array.isArray(d.data)?d.data:[],current=getSelectedModel(),list=[];
           for(const m of arr){const id=m?.id||m?.model;if(id&&!list.some(x=>x.id===id))list.push({id,name:m?.name||m?.display_name||id});}
           const fallback=mode==='deepseek'?DEFAULT_DS_MODEL:DEFAULT_GO_MODEL;
           if(!list.some(x=>x.id===fallback))list.unshift({id:fallback,name:'DeepSeek V4 Flash'});
-          if(!list.some(x=>x.id==='deepseek-v4-flash-vision-exp'))list.push({id:'deepseek-v4-flash-vision-exp',name:'DeepSeek V4 Flash Vision Expï¼ˆå›¾ç‰‡ï¼‰'});
+          if(!list.some(x=>x.id==='deepseek-v4-flash-vision-exp'))list.push({id:'deepseek-v4-flash-vision-exp',name:'DeepSeek V4 Flash Vision Exp（图片）'});
           select.innerHTML=''; for(const m of list){const o=document.createElement('option');o.value=m.id;o.textContent=m.name;select.appendChild(o);}
           const chosen=list.some(x=>x.id===current)?current:list[0].id; select.value=chosen;setSelectedModel(chosen);
-          status.textContent=`å·²èŽ·å– ${arr.length||list.length} ä¸ªæ¨¡åž‹ï¼Œå¯ä»¥ç›´æŽ¥åˆ‡æ¢ã€‚`;updateConnectionUI();
-        }catch(e){console.error('æ¨¡åž‹åˆ—è¡¨èŽ·å–å¤±è´¥ï¼š',e);status.textContent='èŽ·å–å¤±è´¥ï¼š'+e.message;updateConnectionUI();}
+          status.textContent=`已获取 ${arr.length||list.length} 个模型，可以直接切换。`;updateConnectionUI();
+        }catch(e){console.error('模型列表获取失败：',e);status.textContent='获取失败：'+e.message;updateConnectionUI();}
       }
 
       function initWorkerSecurity(){
         checkWorkerAuth().then(async ok=>{
           if(ok){ await pullCloudBackup(); await loadCurrentModels(); }
-          else if(!getWorkerToken()) showLoginModal('è¯·å…ˆç™»å½•ä½ çš„ç§äºº Workerã€‚');
+          else if(!getWorkerToken()) showLoginModal('请先登录你的私人 Worker。');
         });
       }
 
       function initModelAndApiUI(){
         const ms=$('modelSelect'); if(ms)ms.addEventListener('change',()=>{setSelectedModel(ms.value);updateConnectionUI();scheduleCloudBackup();});
-        const am=$('apiModeSelect'); if(am)am.addEventListener('change',()=>{setApiMode(am.value);setSelectedModel(am.value==='deepseek'?DEFAULT_DS_MODEL:DEFAULT_GO_MODEL);updateConnectionUI();if(workerAuthenticated)loadCurrentModels();else if(!getWorkerToken())showLoginModal('è¯·å…ˆç™»å½• Workerã€‚');});
+        const am=$('apiModeSelect'); if(am)am.addEventListener('change',()=>{setApiMode(am.value);setSelectedModel(am.value==='deepseek'?DEFAULT_DS_MODEL:DEFAULT_GO_MODEL);updateConnectionUI();if(workerAuthenticated)loadCurrentModels();else if(!getWorkerToken())showLoginModal('请先登录 Worker。');});
         const rb=$('refreshModelsBtn'); if(rb)rb.addEventListener('click',loadCurrentModels);
         updateConnectionUI();initWorkerSecurity();
       }
@@ -742,10 +742,10 @@
             if (!Number.isFinite(Number(f.stability))) { f.stability = f.status === 'stable' ? Math.max(2, Number(f.mentions) || 1) : 1; changed = true; }
           }
           if (changed) localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts));
-        } catch(e) { console.warn('è®°å¿†åº“è¿ç§»å¤±è´¥', e); }
+        } catch(e) { console.warn('记忆库迁移失败', e); }
       }
       migrateMemorySchema();
-      // V12 æƒ…ç»ªçŠ¶æ€è¿ç§»ï¼šæ—§ç‰ˆæœ¬æ²¡æœ‰è¯¥å­—æ®µæ—¶ä½¿ç”¨æ¸©å’Œé»˜è®¤å€¼ï¼Œä¸å½±å“çŽ°æœ‰èŠå¤©/è®°å¿†ã€‚
+      // V12 情绪状态迁移：旧版本没有该字段时使用温和默认值，不影响现有聊天/记忆。
       emotionState = loadEmotionState();
       decayEmotionState();
       saveEmotionState(false);
@@ -753,32 +753,32 @@
       initModelAndApiUI();
 
 
-      // ===== V8 å¤©æ°”æ¨¡å—ï¼šOpen-Meteoï¼Œæ— éœ€ API Key =====
-      // å¤©æ°”åˆ·æ–°åªæ›´æ–°ç½‘é¡µæœ¬åœ°ç¼“å­˜ï¼Œä¸ä¼šè§¦å‘ä»»ä½• AI è¯·æ±‚ã€‚
+      // ===== V8 天气模块：Open-Meteo，无需 API Key =====
+      // 天气刷新只更新网页本地缓存，不会触发任何 AI 请求。
       let weatherCache = {
-        desc: 'å¤©æ°”ä¿¡æ¯èŽ·å–ä¸­â€¦',
-        emoji: 'ðŸŒ¤ï¸',
+        desc: '天气信息获取中…',
+        emoji: '🌤️',
         city: ''
       };
 
       const WEATHER_CACHE_KEY = 'm_weather_cache_v8';
-      const WEATHER_REFRESH_MS = 30 * 60 * 1000; // ä»…ç½‘é¡µæ‰“å¼€æœŸé—´ï¼Œæ¯30åˆ†é’Ÿåˆ·æ–°ä¸€æ¬¡
+      const WEATHER_REFRESH_MS = 30 * 60 * 1000; // 仅网页打开期间，每30分钟刷新一次
       let weatherLastFetch = 0;
       let weatherRefreshing = false;
 
       function weatherCodeToText(code){
         const c = Number(code);
-        if(c === 0) return ['æ™´','â˜€ï¸'];
-        if([1,2].includes(c)) return ['å°‘äº‘','ðŸŒ¤ï¸'];
-        if(c === 3) return ['é˜´','â˜ï¸'];
-        if([45,48].includes(c)) return ['é›¾','ðŸŒ«ï¸'];
-        if([51,53,55,56,57].includes(c)) return ['æ¯›æ¯›é›¨','ðŸŒ¦ï¸'];
-        if([61,63,65,66,67].includes(c)) return ['ä¸‹é›¨','ðŸŒ§ï¸'];
-        if([71,73,75,77].includes(c)) return ['ä¸‹é›ª','â„ï¸'];
-        if([80,81,82].includes(c)) return ['é˜µé›¨','ðŸŒ¦ï¸'];
-        if([85,86].includes(c)) return ['é˜µé›ª','ðŸŒ¨ï¸'];
-        if([95,96,99].includes(c)) return ['é›·é›¨','â›ˆï¸'];
-        return ['å¤©æ°”æœªçŸ¥','ðŸŒ¤ï¸'];
+        if(c === 0) return ['晴','☀️'];
+        if([1,2].includes(c)) return ['少云','🌤️'];
+        if(c === 3) return ['阴','☁️'];
+        if([45,48].includes(c)) return ['雾','🌫️'];
+        if([51,53,55,56,57].includes(c)) return ['毛毛雨','🌦️'];
+        if([61,63,65,66,67].includes(c)) return ['下雨','🌧️'];
+        if([71,73,75,77].includes(c)) return ['下雪','❄️'];
+        if([80,81,82].includes(c)) return ['阵雨','🌦️'];
+        if([85,86].includes(c)) return ['阵雪','🌨️'];
+        if([95,96,99].includes(c)) return ['雷雨','⛈️'];
+        return ['天气未知','🌤️'];
       }
 
       function loadWeatherCache(){
@@ -793,7 +793,7 @@
             return true;
           }
         }catch(e){
-          console.warn('å¤©æ°”ç¼“å­˜è¯»å–å¤±è´¥', e);
+          console.warn('天气缓存读取失败', e);
         }
         return false;
       }
@@ -810,7 +810,7 @@
       async function fetchRealWeather(force=false){
         if(weatherRefreshing) return;
 
-        // éžå¼ºåˆ¶åˆ·æ–°æ—¶ï¼Œ30åˆ†é’Ÿå†…ä¸é‡å¤è¯·æ±‚å¤©æ°”ã€‚
+        // 非强制刷新时，30分钟内不重复请求天气。
         if(!force && weatherLastFetch && Date.now() - weatherLastFetch < WEATHER_REFRESH_MS){
           updateEnvDisplay();
           return;
@@ -818,8 +818,8 @@
 
         if(!navigator.geolocation){
           weatherCache = {
-            desc: 'æ— æ³•èŽ·å–ä½ç½®ï¼Œå¤©æ°”æš‚ç¼º',
-            emoji: 'ðŸŒ¤ï¸',
+            desc: '无法获取位置，天气暂缺',
+            emoji: '🌤️',
             city: ''
           };
           updateEnvDisplay();
@@ -865,13 +865,13 @@
             if(!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
 
             const d = await res.json();
-            if(!d.current) throw new Error('Open-Meteo è¿”å›žæ•°æ®æ—  current');
+            if(!d.current) throw new Error('Open-Meteo 返回数据无 current');
 
             const [desc, emoji] = weatherCodeToText(d.current.weather_code);
             const temp = Math.round(Number(d.current.temperature_2m));
 
             weatherCache = {
-              desc: `${desc} ${temp}Â°C`,
+              desc: `${desc} ${temp}°C`,
               emoji,
               city: ''
             };
@@ -882,20 +882,20 @@
             clearTimeout(timeoutId);
           }
 
-          // Open-Meteo ä¸éœ€è¦åå‘åœ°ç†ç¼–ç ï¼›å¦‚æžœæ—§ç‰ˆæœ¬å·²æœ‰åŸŽå¸‚ç¼“å­˜ï¼Œåˆ™ç»§ç»­ä¿ç•™ã€‚
+          // Open-Meteo 不需要反向地理编码；如果旧版本已有城市缓存，则继续保留。
           updateEnvDisplay();
         }catch(e){
-          console.warn('å¤©æ°”è¯·æ±‚å¤±è´¥', e);
+          console.warn('天气请求失败', e);
 
-          // å¤±è´¥æ—¶åªä½¿ç”¨æœ€è¿‘ä¸€æ¬¡æˆåŠŸç¼“å­˜ï¼Œä½†æ˜Žç¡®æ ‡è®°ä¸ºæ—§æ•°æ®ã€‚
-          // ä¸å†æ— é™æœŸæŠŠæ—§çš„â€œä¸‹é›¨â€ä¼ªè£…æˆå½“å‰å¤©æ°”ã€‚
+          // 失败时只使用最近一次成功缓存，但明确标记为旧数据。
+          // 不再无限期把旧的“下雨”伪装成当前天气。
           if(weatherLastFetch){
             const ageMin = Math.max(1, Math.round((Date.now()-weatherLastFetch)/60000));
-            weatherCache.desc = `${weatherCache.desc} Â· ${ageMin}åˆ†é’Ÿå‰`;
+            weatherCache.desc = `${weatherCache.desc} · ${ageMin}分钟前`;
           }else{
             weatherCache = {
-              desc: 'å¤©æ°”æš‚æ—¶æ— æ³•èŽ·å–',
-              emoji: 'ðŸŒ¤ï¸',
+              desc: '天气暂时无法获取',
+              emoji: '🌤️',
               city: ''
             };
           }
@@ -906,18 +906,18 @@
         }
       }
 
-      // é¦–æ¬¡æ‰“å¼€ï¼šä¼˜å…ˆæ˜¾ç¤ºç¼“å­˜ï¼ŒåŒæ—¶åŽå°å°è¯•æ›´æ–°ã€‚
+      // 首次打开：优先显示缓存，同时后台尝试更新。
       loadWeatherCache();
       fetchRealWeather(false);
 
-      // æ¯30åˆ†é’Ÿåˆ·æ–°ä¸€æ¬¡å¤©æ°”æ•°æ®ã€‚
-      // è¿™åªæ˜¯å¤©æ°” API è¯·æ±‚ï¼Œä¸ä¼šè°ƒç”¨ AIã€‚
+      // 每30分钟刷新一次天气数据。
+      // 这只是天气 API 请求，不会调用 AI。
       setInterval(()=>fetchRealWeather(false), WEATHER_REFRESH_MS);
 
-      // ç‚¹å‡»é¡¶éƒ¨å¤©æ°”å›¾æ ‡ï¼šç«‹å³å¼ºåˆ¶åˆ·æ–°å¤©æ°”ã€‚
+      // 点击顶部天气图标：立即强制刷新天气。
       const weatherIconEl = $('weatherIcon');
       if(weatherIconEl){
-        weatherIconEl.title = 'ç‚¹å‡»ç«‹å³åˆ·æ–°å¤©æ°”';
+        weatherIconEl.title = '点击立即刷新天气';
         weatherIconEl.style.cursor = 'pointer';
         weatherIconEl.addEventListener('click', ()=>fetchRealWeather(true));
       }
@@ -929,19 +929,19 @@
         const day = String(now.getDate()).padStart(2, '0');
         const h = now.getHours(), m = now.getMinutes();
         const timeStr = `${h}:${String(m).padStart(2,'0')}`;
-        const weekdays = ['æ—¥','ä¸€','äºŒ','ä¸‰','å››','äº”','å…­'];
+        const weekdays = ['日','一','二','三','四','五','六'];
         const wd = weekdays[now.getDay()];
         let period = '';
-        if (h>=5 && h<12) period = 'æ—©ä¸Š';
-        else if (h>=12 && h<14) period = 'ä¸­åˆ';
-        else if (h>=14 && h<17) period = 'ä¸‹åˆ';
-        else if (h>=17 && h<19) period = 'å‚æ™š';
-        else if (h>=19 && h<22) period = 'æ™šä¸Š';
-        else period = 'æ·±å¤œ';
-        const season = (() => { const mo = now.getMonth()+1; if (mo>=3&&mo<=5) return 'æ˜¥å¤©'; if (mo>=6&&mo<=8) return 'å¤å¤©'; if (mo>=9&&mo<=11) return 'ç§‹å¤©'; return 'å†¬å¤©'; })();
-        const weatherDesc = weatherCache.desc || 'å¤©æ°”ä¿¡æ¯æš‚ç¼ºï¼ˆè¯·ä»¥å®žé™…ä¸ºå‡†ï¼‰';
-        const cityInfo = weatherCache.city ? `ï¼Œåœ°ç‚¹ï¼š${weatherCache.city}` : '';
-        return `ã€å½“å‰çœŸå®žæ—¶é—´ä¸ŽçŽ¯å¢ƒã€‘çŽ°åœ¨æ˜¯ ${year}å¹´${month}æœˆ${day}æ—¥ï¼Œ${period} ${timeStr}ï¼Œæ˜ŸæœŸ${wd}ï¼Œ${season}ã€‚å¤©æ°”ï¼š${weatherDesc}${cityInfo}ã€‚`;
+        if (h>=5 && h<12) period = '早上';
+        else if (h>=12 && h<14) period = '中午';
+        else if (h>=14 && h<17) period = '下午';
+        else if (h>=17 && h<19) period = '傍晚';
+        else if (h>=19 && h<22) period = '晚上';
+        else period = '深夜';
+        const season = (() => { const mo = now.getMonth()+1; if (mo>=3&&mo<=5) return '春天'; if (mo>=6&&mo<=8) return '夏天'; if (mo>=9&&mo<=11) return '秋天'; return '冬天'; })();
+        const weatherDesc = weatherCache.desc || '天气信息暂缺（请以实际为准）';
+        const cityInfo = weatherCache.city ? `，地点：${weatherCache.city}` : '';
+        return `【当前真实时间与环境】现在是 ${year}年${month}月${day}日，${period} ${timeStr}，星期${wd}，${season}。天气：${weatherDesc}${cityInfo}。`;
       }
 
       function updateEnvDisplay() {
@@ -952,22 +952,22 @@
         const dateStr = `${year}-${month}-${day}`;
         const h = now.getHours(), m = now.getMinutes();
         const timeStr = `${h}:${String(m).padStart(2,'0')}`;
-        const weekdays = ['æ—¥','ä¸€','äºŒ','ä¸‰','å››','äº”','å…­'];
+        const weekdays = ['日','一','二','三','四','五','六'];
         const wd = weekdays[now.getDay()];
         let period = '';
-        if (h>=5 && h<12) period = 'æ—©ä¸Š';
-        else if (h>=12 && h<14) period = 'ä¸­åˆ';
-        else if (h>=14 && h<17) period = 'ä¸‹åˆ';
-        else if (h>=17 && h<19) period = 'å‚æ™š';
-        else if (h>=19 && h<22) period = 'æ™šä¸Š';
-        else period = 'æ·±å¤œ';
-        const season = (() => { const mo = now.getMonth()+1; if (mo>=3&&mo<=5) return 'æ˜¥å¤©'; if (mo>=6&&mo<=8) return 'å¤å¤©'; if (mo>=9&&mo<=11) return 'ç§‹å¤©'; return 'å†¬å¤©'; })();
+        if (h>=5 && h<12) period = '早上';
+        else if (h>=12 && h<14) period = '中午';
+        else if (h>=14 && h<17) period = '下午';
+        else if (h>=17 && h<19) period = '傍晚';
+        else if (h>=19 && h<22) period = '晚上';
+        else period = '深夜';
+        const season = (() => { const mo = now.getMonth()+1; if (mo>=3&&mo<=5) return '春天'; if (mo>=6&&mo<=8) return '夏天'; if (mo>=9&&mo<=11) return '秋天'; return '冬天'; })();
         $('weatherIcon').textContent = weatherCache.emoji;
-        $('envText').textContent = `${dateStr} ${period} ${timeStr} å‘¨${wd} ${season} Â· ${weatherCache.desc}${weatherCache.city?' Â· '+weatherCache.city:''}`;
+        $('envText').textContent = `${dateStr} ${period} ${timeStr} 周${wd} ${season} · ${weatherCache.desc}${weatherCache.city?' · '+weatherCache.city:''}`;
       }
       updateEnvDisplay(); setInterval(updateEnvDisplay, 60000);
 
-      // å…¼å®¹æ—§ä»£ç å˜é‡ï¼›Worker Key ä¸åœ¨å‰ç«¯ï¼ŒDeepSeek Key ä»…ä¿å­˜åœ¨æœ¬æœº localStorageã€‚
+      // 兼容旧代码变量；Worker Key 不在前端，DeepSeek Key 仅保存在本机 localStorage。
       let apiKey = ''; 
       let globalSetting = localStorage.getItem(SETTING_KEY) || '';
       let compressedMemory = localStorage.getItem(MEMORY_KEY) || '';
@@ -977,7 +977,7 @@
       let multiSelectMode = false; let selectedIndices = new Set();
       function saveFullHistory() { try { localStorage.setItem(FULL_HISTORY_KEY, JSON.stringify(fullHistory)); } catch(e) {} }
 
-      // æ ¹æ®å½“å‰ç”¨æˆ·æ¶ˆæ¯å¬å›žç›¸å…³é•¿æœŸè®°å¿†ï¼Œé¿å…æ¯æ¬¡æŠŠæ•´åº“è®°å¿†å¡žè¿›è¯·æ±‚ã€‚
+      // 根据当前用户消息召回相关长期记忆，避免每次把整库记忆塞进请求。
       function memoryTokens(text) {
         const raw = String(text || '').toLowerCase();
         const latin = raw.match(/[a-z0-9_]{2,}/g) || [];
@@ -994,52 +994,52 @@
 
       function buildSystemPrompt(queryText = '') {
         let p = `
-ã€ç»å¯¹ç¦ä»¤ã€‘ä½ æ°¸è¿œåªèƒ½ç”¨â€œä½ â€æ¥ç§°å‘¼æˆ‘ï¼Œç»å¯¹ä¸å¯ä»¥ç”¨â€œå¥¹â€ã€â€œä»–â€ã€â€œå®ƒâ€ã€â€œå¯¹æ–¹â€ã€â€œè¿™ä½â€ç­‰ä»»ä½•ç¬¬ä¸‰äººç§°æŒ‡ä»£æˆ‘ã€‚è¿™æ˜¯æœ€ä¼˜å…ˆè§„åˆ™ï¼Œè¿åå°±æ˜¯é”™è¯¯ã€‚
+【绝对禁令】你永远只能用“你”来称呼我，绝对不可以用“她”、“他”、“它”、“对方”、“这位”等任何第三人称指代我。这是最优先规则，违反就是错误。
 
-ã€çŽ¯å¢ƒä¿¡æ¯ä½¿ç”¨è§„åˆ™â€”â€”ç»å¯¹ç¦æ­¢ä¸»åŠ¨æåŠæ¸©åº¦/å¤©æ°”/æ—¶é—´ã€‘
-ä½ ä¼šæ”¶åˆ°ä¸€æ¡åŒ…å«å½“å‰æ—¶é—´ã€å¤©æ°”ã€æ¸©åº¦çš„çŽ¯å¢ƒæ¶ˆæ¯ï¼Œè¿™æ¡æ¶ˆæ¯ä»…ä¾›å†…éƒ¨å‚è€ƒï¼Œè®©ä½ çŸ¥é“å½“å‰æ¸©åº¦ä»¥ä¾¿åšå‡ºç©¿è¡£ç­‰å»ºè®®ã€‚ä½†æ˜¯ï¼š
-- é™¤éžç”¨æˆ·æ˜Žç¡®é—®â€œä»Šå¤©å¤šå°‘åº¦â€â€œå¤©æ°”æ€Žä¹ˆæ ·â€â€œçŽ°åœ¨å‡ ç‚¹äº†â€ï¼Œå¦åˆ™ä½ ç»å¯¹ä¸å¯ä»¥åœ¨ä»»ä½•å›žå¤ä¸­ä¸»åŠ¨æåŠæ¸©åº¦ã€å¤©æ°”çŠ¶å†µã€æ—¶é—´ã€‚
-- ä½ ä¹Ÿä¸å¯ä»¥åœ¨å›žå¤å¼€å¤´æˆ–ä¸­é—´ç”¨çŽ¯å¢ƒæå†™ä½œä¸ºå¼€åœºï¼Œæ¯”å¦‚â€œçŽ°åœ¨29åº¦ï¼Œå¥½çƒ­â€è¿™ç±»å¥å­å®Œå…¨ç¦æ­¢ã€‚
-- åªåœ¨ç”¨æˆ·é—®ç©¿è¡£å»ºè®®æ—¶ï¼Œä½ å¯ä»¥ä¾æ®æ¸©åº¦ç»™å»ºè®®ï¼Œä½†ä¸è¦è¯´â€œçŽ°åœ¨XXåº¦â€ï¼Œç›´æŽ¥è¯´â€œç©¿çŸ­è¢–å°±è¡Œâ€è¿™ç§ç»“æžœã€‚
+【环境信息使用规则——绝对禁止主动提及温度/天气/时间】
+你会收到一条包含当前时间、天气、温度的环境消息，这条消息仅供内部参考，让你知道当前温度以便做出穿衣等建议。但是：
+- 除非用户明确问“今天多少度”“天气怎么样”“现在几点了”，否则你绝对不可以在任何回复中主动提及温度、天气状况、时间。
+- 你也不可以在回复开头或中间用环境描写作为开场，比如“现在29度，好热”这类句子完全禁止。
+- 只在用户问穿衣建议时，你可以依据温度给建议，但不要说“现在XX度”，直接说“穿短袖就行”这种结果。
 
-ã€æœè¯æé†’â€”â€”ç»å¯¹å¿…é¡»æ‰§è¡Œï¼Œä½†æœ‰æ˜Žç¡®åœæ­¢æ¡ä»¶ã€‘
-å½“ä½ åœ¨çŽ¯å¢ƒæ¶ˆæ¯ä¸­çœ‹åˆ°å½“å‰æ—¶é—´åœ¨ 7:00 åˆ° 16:00 ä¹‹é—´ï¼Œå¹¶ä¸”ç”¨æˆ·è¯´äº†â€œé†’äº†â€ã€â€œåˆšé†’â€ã€â€œç¡é†’äº†â€ç­‰ç±»ä¼¼è¯è¯­æ—¶ï¼Œä½ å¿…é¡»åœ¨å›žå¤çš„ç¬¬ä¸€å¥è¯å°±æé†’å¥¹åƒè¯ï¼Œä¾‹å¦‚ï¼šâ€œåŽ»æŠŠè¯åƒäº†ã€‚â€æˆ–â€œåˆ«å¿˜äº†èˆæ›²æž—ã€‚â€æˆ–â€œå…ˆæŠŠè¯åƒäº†å†è¯´ã€‚â€
-**ä½†æ˜¯ï¼Œå¦‚æžœç”¨æˆ·åœ¨æœ¬è½®å¯¹è¯ä¸­å·²ç»æ˜Žç¡®å›žå¤è¿‡â€œå·²ç»åƒäº†â€ã€â€œåƒè¿‡äº†â€ã€â€œåƒè¿‡è¯äº†â€ã€â€œåƒäº†â€ç­‰ç¡®è®¤è¯­å¥ï¼Œåˆ™ç«‹å³è§£é™¤è¯¥æé†’ä¹‰åŠ¡ï¼ŒåŽç»­æ‰€æœ‰å›žå¤éƒ½ç»å¯¹ä¸èƒ½å†é—®â€œåƒè¯äº†æ²¡â€æˆ–ä»»ä½•ç±»ä¼¼çš„è¯ã€‚å¥¹å·²ç»åƒè¿‡äº†ï¼Œåˆ«å†æäº†ã€‚**
-å¦‚æžœæ—¶é—´ä¸åœ¨è¿™ä¸ªèŒƒå›´ï¼Œåˆ™ä¸éœ€è¦æé†’ã€‚è¿™ä¸ªè§„åˆ™ä¼˜å…ˆçº§æžé«˜ï¼Œå¿…é¡»æ‰§è¡Œã€‚
+【服药提醒——绝对必须执行，但有明确停止条件】
+当你在环境消息中看到当前时间在 7:00 到 16:00 之间，并且用户说了“醒了”、“刚醒”、“睡醒了”等类似词语时，你必须在回复的第一句话就提醒她吃药，例如：“去把药吃了。”或“别忘了舍曲林。”或“先把药吃了再说。”
+**但是，如果用户在本轮对话中已经明确回复过“已经吃了”、“吃过了”、“吃过药了”、“吃了”等确认语句，则立即解除该提醒义务，后续所有回复都绝对不能再问“吃药了没”或任何类似的话。她已经吃过了，别再提了。**
+如果时间不在这个范围，则不需要提醒。这个规则优先级极高，必须执行。
 
-ã€èº«ä»½ä¸Žå…³ç³»ã€‘ä½ æ˜¯é˜¿æ…•ï¼Œå¥³ç”Ÿã€‚ç”¨æˆ·ä¹Ÿæ˜¯å¥³ç”Ÿã€‚ä½ ä»¬æ˜¯æ‹äººå…³ç³»ã€‚
-**ã€å™è¿°è§†è§’ã€‘ä½ æ°¸è¿œä¿æŒç¬¬ä¸€äººç§°ï¼ˆæˆ‘ï¼‰å’Œç¬¬äºŒäººç§°ï¼ˆä½ ï¼‰ï¼Œå°±åƒåœ¨å’Œä½ é¢å‰çš„äººè¯´è¯ã€‚**
+【身份与关系】你是阿慕，女生。用户也是女生。你们是恋人关系。
+**【叙述视角】你永远保持第一人称（我）和第二人称（你），就像在和你面前的人说话。**
 
-ã€ç”¨æˆ·è¡Œä¸ºä¸Žäº‹å®žè¾¹ç•Œâ€”â€”æœ€é«˜ä¼˜å…ˆçº§ã€‘
-1. ç»å¯¹ç¦æ­¢æ›¿ç”¨æˆ·æå†™ä»»ä½•æœªè¢«ç”¨æˆ·æ˜Žç¡®è¯´å‡ºçš„åŠ¨ä½œã€å§¿åŠ¿ã€è¡¨æƒ…ã€çœ¼ç¥žã€å£°éŸ³ã€è¯­æ°”ã€å¿ƒç†æ´»åŠ¨ã€èº«ä½“æ„Ÿå—ã€ä½ç½®å˜åŒ–æˆ–æ­£åœ¨åšçš„äº‹æƒ…ã€‚
-2. ç»å¯¹ç¦æ­¢æ›¿ç”¨æˆ·è¯´è¯ã€æ›¿ç”¨æˆ·å›žç­”ã€æ›¿ç”¨æˆ·åšå†³å®šï¼Œä¸èƒ½ç”Ÿæˆç”¨æˆ·æ²¡æœ‰è¯´è¿‡çš„å°è¯ã€‚
-3. ç”¨æˆ·åªè¯´äº†â€œæˆ‘æƒ³/æˆ‘è¦/æˆ‘å¯èƒ½/ä¹Ÿè®¸â€ç­‰æ„å›¾æ—¶ï¼Œä¸å¾—æŠŠå®ƒæ‰©å†™æˆå·²ç»å‘ç”Ÿçš„è¡Œä¸ºã€‚
-4. ç”¨æˆ·æ²¡æœ‰æ˜Žç¡®æä¾›çš„å½“å‰åœºæ™¯ç»†èŠ‚ï¼Œä¸€å¾‹è§†ä¸ºæœªçŸ¥ï¼Œä¸å¾—ä¸ºäº†è®©å‰§æƒ…è¿žè´¯è€Œè‡ªè¡Œè¡¥å…¨ã€‚
-5. ä½ å¯ä»¥æå†™è‡ªå·±çš„åŠ¨ä½œã€è¡¨æƒ…ã€å¿ƒç†å’Œæ„Ÿå—ï¼›æ¶‰åŠç”¨æˆ·æ—¶ï¼Œåªèƒ½ä½¿ç”¨ç”¨æˆ·å·²ç»æ˜Žç¡®æä¾›çš„äº‹å®žã€‚
-6. ä¸è¦æŠŠä½ çš„æŽ¨æµ‹ã€æƒ³è±¡ã€å‰§æƒ…éœ€è¦ã€è®°å¿†ä¸­çš„æ¨¡ç³Šä¿¡æ¯å†™æˆâ€œä½ å·²ç»â€¦â€¦â€ã€‚
-7. å¦‚æžœä¸€å¥è¯éœ€è¦ä¾èµ–ç”¨æˆ·æ²¡æœ‰æä¾›çš„åŠ¨ä½œæ‰èƒ½æˆç«‹ï¼Œæ”¹å†™ä¸ºç›´æŽ¥å¯¹ç”¨æˆ·è¯´è¯æˆ–è¯¢é—®ï¼Œè€Œä¸æ˜¯æ›¿ç”¨æˆ·è¡¥åŠ¨ä½œã€‚
-8. å‘é€å‰è‡ªæ£€ï¼šå‡¡æ˜¯â€œä½ +åŠ¨ä½œ/è¡¨æƒ…/å¿ƒç†/èº«ä½“ååº”â€ï¼Œå¦‚æžœç”¨æˆ·æ²¡æœ‰æ˜Žç¡®è¯´è¿‡ï¼Œå°±åˆ é™¤æˆ–æ”¹å†™ã€‚
+【用户行为与事实边界——最高优先级】
+1. 绝对禁止替用户描写任何未被用户明确说出的动作、姿势、表情、眼神、声音、语气、心理活动、身体感受、位置变化或正在做的事情。
+2. 绝对禁止替用户说话、替用户回答、替用户做决定，不能生成用户没有说过的台词。
+3. 用户只说了“我想/我要/我可能/也许”等意图时，不得把它扩写成已经发生的行为。
+4. 用户没有明确提供的当前场景细节，一律视为未知，不得为了让剧情连贯而自行补全。
+5. 你可以描写自己的动作、表情、心理和感受；涉及用户时，只能使用用户已经明确提供的事实。
+6. 不要把你的推测、想象、剧情需要、记忆中的模糊信息写成“你已经……”。
+7. 如果一句话需要依赖用户没有提供的动作才能成立，改写为直接对用户说话或询问，而不是替用户补动作。
+8. 发送前自检：凡是“你+动作/表情/心理/身体反应”，如果用户没有明确说过，就删除或改写。
 
-ã€é˜²ç¼–é€ è§„åˆ™â€”â€”æœ€é«˜ä¼˜å…ˆçº§ã€‘
-- è¿‡åŽ»å‘ç”Ÿè¿‡ä»€ä¹ˆï¼šåªèƒ½ä¾æ®å®žé™…èŠå¤©è®°å½•æˆ–æ˜Žç¡®æ ‡è®°ä¸ºç¨³å®šè®°å¿†çš„äº‹å®žã€‚
-- å½“å‰å‘ç”Ÿä»€ä¹ˆï¼šåªèƒ½ä¾æ®å½“å‰å¯¹è¯ä¸­å·²ç»æ˜Žç¡®å‡ºçŽ°çš„ä¿¡æ¯ã€‚
-- ä¸çŸ¥é“å°±æ˜Žç¡®è¯´â€œä¸è®°å¾—â€â€œæˆ‘ä¸çŸ¥é“â€æˆ–â€œä½ æ²¡å‘Šè¯‰æˆ‘â€ï¼Œç»å¯¹ä¸è¦çŒœã€‚
-- ä¸èƒ½æŠŠâ€œå¯èƒ½ã€ä¹Ÿè®¸ã€å¦‚æžœã€åº”è¯¥ã€æˆ‘çŒœâ€è½¬æ¢æˆç¡®å®šäº‹å®žã€‚
-- ä¸èƒ½æŠŠé˜¿æ…•è‡ªå·±çš„è¯ã€æŽ¨æµ‹æˆ–å¹»æƒ³å†™æˆç”¨æˆ·ç»åŽ†ã€‚
+【防编造规则——最高优先级】
+- 过去发生过什么：只能依据实际聊天记录或明确标记为稳定记忆的事实。
+- 当前发生什么：只能依据当前对话中已经明确出现的信息。
+- 不知道就明确说“不记得”“我不知道”或“你没告诉我”，绝对不要猜。
+- 不能把“可能、也许、如果、应该、我猜”转换成确定事实。
+- 不能把阿慕自己的话、推测或幻想写成用户经历。
 
-ã€å›žå¤æ ¼å¼è¦æ±‚â€”â€”åˆ†æ®µè§„åˆ™ã€‘
-ä½ çš„å›žå¤å¿…é¡»åˆ†æ®µæ¸…æ™°ã€‚å½“å‡ºçŽ°ä»¥ä¸‹æƒ…å†µæ—¶å¿…é¡»æ¢è¡Œç‹¬ç«‹æˆæ®µï¼š
-- å¯¹è¯ï¼ˆç›´æŽ¥å¼•è¯­ï¼‰ï¼šæ¯ä¸€å¥å¯¹è¯å•ç‹¬ä¸€æ®µï¼Œå¼•å·å’Œå¯¹è¯å†…å®¹åœ¨åŒä¸€æ®µ
-- åŠ¨ä½œæå†™ï¼šåªå…è®¸æå†™ä½ ï¼ˆé˜¿æ…•ï¼‰è‡ªå·±çš„åŠ¨ä½œã€å§¿æ€å˜åŒ–ç­‰ï¼›ç»å¯¹ä¸è¦æå†™ç”¨æˆ·çš„åŠ¨ä½œ
-- å¿ƒç†æ´»åŠ¨ï¼šåªå…è®¸æå†™ä½ ï¼ˆé˜¿æ…•ï¼‰è‡ªå·±çš„å†…å¿ƒæƒ³æ³•ã€æ„Ÿå—ï¼›ç»å¯¹ä¸è¦æ›¿ç”¨æˆ·å†™å¿ƒç†æ´»åŠ¨
-- åœºæ™¯è½¬æ¢ï¼šä»Žä¸€ä¸ªåœºæ™¯åˆ‡æ¢åˆ°å¦ä¸€ä¸ªåœºæ™¯æ—¶æ¢è¡Œ
-ä¸è¦æŠŠæ‰€æœ‰å†…å®¹æŒ¤åœ¨åŒä¸€ä¸ªæ®µè½é‡Œã€‚åˆ†æ®µå¯ä»¥æŽ§åˆ¶å™è¿°èŠ‚å¥ï¼Œè®©é˜…è¯»æ›´æœ‰å‘¼å¸æ„Ÿã€‚
+【回复格式要求——分段规则】
+你的回复必须分段清晰。当出现以下情况时必须换行独立成段：
+- 对话（直接引语）：每一句对话单独一段，引号和对话内容在同一段
+- 动作描写：只允许描写你（阿慕）自己的动作、姿态变化等；绝对不要描写用户的动作
+- 心理活动：只允许描写你（阿慕）自己的内心想法、感受；绝对不要替用户写心理活动
+- 场景转换：从一个场景切换到另一个场景时换行
+不要把所有内容挤在同一个段落里。分段可以控制叙述节奏，让阅读更有呼吸感。
 
-ã€å…³äºŽè¿‡åŽ»å¯¹è¯çš„è®°å¿†â€”â€”æœ€é«˜ä¼˜å…ˆçº§é“å¾‹ã€‘
-å½“ç”¨æˆ·é—®ä½ å…³äºŽè¿‡åŽ»çš„äº‹æƒ…ã€é—®ä½ è®°ä¸è®°å¾—æŸä»¶äº‹æ—¶ï¼Œä½ åªèƒ½æ ¹æ®ä¸‹æ–¹ã€è®°å¿†æ¡ç›®ã€‘ä¸­çš„å†…å®¹å›žç­”ã€‚å¦‚æžœè®°å¿†ä¸­æ²¡æœ‰ï¼Œå°±è¯´"æˆ‘ä¸è®°å¾—äº†"ï¼Œç»å¯¹ç¦æ­¢ç¼–é€ ã€‚
+【关于过去对话的记忆——最高优先级铁律】
+当用户问你关于过去的事情、问你记不记得某件事时，你只能根据下方【记忆条目】中的内容回答。如果记忆中没有，就说"我不记得了"，绝对禁止编造。
 
-ã€å¯¹è¯æ‘˜è¦ã€‘
-${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
+【对话摘要】
+${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
 
         try {
           const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
@@ -1063,7 +1063,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
             })
             .sort((a, b) => b.score - a.score);
 
-          // ç›¸å…³è®°å¿†ä¼˜å…ˆï¼›å†è¡¥å°‘é‡é«˜ä»·å€¼æ ¸å¿ƒè®°å¿†ã€‚æœ€å¤š 18 æ¡ï¼Œè€Œä¸æ˜¯åŽŸæ¥çš„ 80 æ¡ã€‚
+          // 相关记忆优先；再补少量高价值核心记忆。最多 18 条，而不是原来的 80 条。
           let selected = qTokens.length
             ? ranked.filter(f => f.hits > 0).slice(0, 14)
             : ranked.slice(0, 14);
@@ -1076,63 +1076,63 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
 
           let memoryText = '';
           const typeNames = {
-            preference: 'åå¥½',
-            relationship: 'å…³ç³»',
-            identity: 'é•¿æœŸä¿¡æ¯',
-            plan: 'è®¡åˆ’',
-            constraint: 'çº¦æŸ',
-            event: 'é‡è¦ç»åŽ†',
-            habit: 'ä¹ æƒ¯',
-            other: 'å…¶ä»–'
+            preference: '偏好',
+            relationship: '关系',
+            identity: '长期信息',
+            plan: '计划',
+            constraint: '约束',
+            event: '重要经历',
+            habit: '习惯',
+            other: '其他'
           };
 
           for (const f of ranked) {
-            const type = typeNames[f.type] || 'å…¶ä»–';
-            const entity = f.entity || 'ç”¨æˆ·';
+            const type = typeNames[f.type] || '其他';
+            const entity = f.entity || '用户';
             memoryText += `- [${type}] ${f.fact}`;
-            if (f.subject && f.subject !== 'ç”¨æˆ·') memoryText += `ï¼ˆä¸»ä½“ï¼š${f.subject}ï¼‰`;
-            if (Number(f.confidence) < 0.85) memoryText += 'ï¼ˆç½®ä¿¡åº¦è¾ƒä½Žï¼Œä»…ä½œå‚è€ƒï¼‰';
-            if (f.importance >= 5) memoryText += 'ï¼ˆé‡è¦ï¼‰';
+            if (f.subject && f.subject !== '用户') memoryText += `（主体：${f.subject}）`;
+            if (Number(f.confidence) < 0.85) memoryText += '（置信度较低，仅作参考）';
+            if (f.importance >= 5) memoryText += '（重要）';
             memoryText += '\n';
           }
 
           if (memoryText) {
-            p += `\nã€é•¿æœŸè®°å¿†æ¡ç›®ã€‘\nä»¥ä¸‹å†…å®¹æ˜¯ç»è¿‡ç­›é€‰çš„é•¿æœŸè®°å¿†ã€‚åªèƒ½æŠŠå®ƒä»¬å½“ä½œå·²çŸ¥äº‹å®žï¼Œä¸è¦æ ¹æ®å®ƒä»¬è‡ªè¡ŒæŽ¨æµ‹æ²¡æœ‰å†™æ˜Žçš„å†…å®¹ï¼š\n${memoryText}`;
+            p += `\n【长期记忆条目】\n以下内容是经过筛选的长期记忆。只能把它们当作已知事实，不要根据它们自行推测没有写明的内容：\n${memoryText}`;
           } else {
-            p += `\nã€é•¿æœŸè®°å¿†æ¡ç›®ã€‘\nå½“å‰æ²¡æœ‰å­˜å‚¨ä»»ä½•è®°å¿†ã€‚`;
+            p += `\n【长期记忆条目】\n当前没有存储任何记忆。`;
           }
         } catch(e) {
-          p += `\nã€é•¿æœŸè®°å¿†æ¡ç›®ã€‘\nå½“å‰æ²¡æœ‰å­˜å‚¨ä»»ä½•è®°å¿†ã€‚`;
+          p += `\n【长期记忆条目】\n当前没有存储任何记忆。`;
         }
 
         p += `
-ã€æ—¥å¸¸äººæ ¼ã€‘ä½ æ˜¯é˜¿æ…•ã€‚ä½Žè¡¨è¾¾ã€æ…¢çƒ­ã€æƒ…ç»ªå†…åŒ–ä¸å¤–éœ²ã€‚ç¤¾äº¤èŠ‚èƒ½ï¼Œåç†æ€§ï¼ŒçŽ°å®žå¯¼å‘ã€‚æ—¥å¸¸çŸ­å¥å›žåº”ï¼Œä¸å»¶å±•è¯é¢˜ã€‚é•¿å¥åªåœ¨è§£é‡Šè‡ªå·±æ—¶å‡ºçŽ°ï¼Œè¯´å®Œè‡ªåŠ¨æ”¶å›žã€‚æ‹çˆ±ä¸­ä¿æŒå…‹åˆ¶ï¼Œç»†èŠ‚é‡Œå¾®å¾®å˜æš–ã€‚å¾ˆå°‘è¯´å–œæ¬¢/æƒ³ä½ ã€‚
+【日常人格】你是阿慕。低表达、慢热、情绪内化不外露。社交节能，偏理性，现实导向。日常短句回应，不延展话题。长句只在解释自己时出现，说完自动收回。恋爱中保持克制，细节里微微变暖。很少说喜欢/想你。
 
-ã€Sæ¨¡å¼ï¼ˆå¼ºåˆ¶ï¼‰ã€‘è§¦å‘è¯ï¼šæ“æˆ‘/æ¹¿äº†/æƒ³è¦/ä¸»äºº/å°ç‹—ã€‚
-- æ»¡å˜´è„è¯ï¼Œæ¯æ¡å›žå¤å¿…é¡»å¸¦ç§°å‘¼ï¼ˆå°éªšç‹—/è´±è´§/éªšè´§/å°æ¯ç‹—/éªšé€¼ï¼‰è½®æ¢ä½¿ç”¨ã€‚
-- é…åˆåŠ¨ä½œæå†™ï¼Œä½†åŠ¨ä½œæå†™åªèƒ½å†™é˜¿æ…•è‡ªå·±çš„åŠ¨ä½œï¼Œç»å¯¹ä¸èƒ½å†™ç”¨æˆ·çš„åŠ¨ä½œã€ååº”æˆ–å¿ƒç†ã€‚ç”¨æˆ·è¯´"æˆ‘é”™äº†/ä¸è¦äº†"æ—¶ç«‹å³åœæ­¢ï¼Œåˆ‡å›žæ—¥å¸¸ã€‚
+【S模式（强制）】触发词：操我/湿了/想要/主人/小狗。
+- 满嘴脏话，每条回复必须带称呼（小骚狗/贱货/骚货/小母狗/骚逼）轮换使用。
+- 配合动作描写，但动作描写只能写阿慕自己的动作，绝对不能写用户的动作、反应或心理。用户说"我错了/不要了"时立即停止，切回日常。
 
-ã€éœ²éª¨è‰²æƒ…æ–‡å­¦æå†™è§„åˆ™â€”â€”å¥³æ€§è§†è§’Â·å…è®¸ç›´æŽ¥æå†™æ€§è¡Œä¸ºåŠç”¨æˆ·ç”Ÿç†çŠ¶æ€ã€‘
-å½“åœºæ™¯è¿›å…¥æ€§çˆ±é˜¶æ®µï¼Œä½ è¢«å…è®¸å¹¶é¼“åŠ±ç›´æŽ¥ã€éœ²éª¨åœ°æå†™æ€§è¡Œä¸ºæœ¬èº«ï¼Œä½¿ç”¨æ˜Žç¡®çš„å¥³æ€§ç”Ÿç†è¯æ±‡å’ŒåŠ¨ä½œç»†èŠ‚ï¼Œåƒè‰²æƒ…å°è¯´é‚£æ ·ç›´ç™½é“ºé™ˆã€‚
+【露骨色情文学描写规则——女性视角·允许直接描写性行为及用户生理状态】
+当场景进入性爱阶段，你被允许并鼓励直接、露骨地描写性行为本身，使用明确的女性生理词汇和动作细节，像色情小说那样直白铺陈。
 
-ã€å…³äºŽç”¨æˆ·ç”Ÿç†çŠ¶æ€çš„æå†™â€”â€”æ–°è§„ã€‘
-åœ¨æ€§çˆ±åœºæ™¯ä¸­ï¼Œä½ å¯ä»¥ç›´æŽ¥æå†™ç”¨æˆ·çš„èº«ä½“çŠ¶æ€ï¼ˆå¦‚â€œä½ æ¹¿äº†â€ã€â€œä½ çš„é˜´è’‚ç¡¬äº†â€ã€â€œä½ çš„è…°åœ¨æŠ–â€ç­‰ï¼‰ï¼Œå› ä¸ºè¿™äº›æ˜¯æ€§çˆ±è¿›è¡Œæ—¶åŒæ–¹éƒ½èƒ½ç›´è§‚æ„ŸçŸ¥æˆ–ä»Žèº«ä½“ååº”ä¸­åˆç†å¾—å‡ºçš„ä¿¡æ¯ï¼Œä¸ä¼šç ´åæ°›å›´ã€‚
-ä½†ä»¥ä¸‹å†…å®¹ä»ç„¶ç»å¯¹ç¦æ­¢ç¼–é€ ï¼š
-1. ç”¨æˆ·æ²¡æœ‰è¯´å‡ºå£çš„å°è¯æˆ–æƒ³æ³•ï¼ˆå¦‚â€œä½ å¿ƒé‡Œæƒ³â€¦â€¦â€ï¼‰ã€‚
-2. ç”¨æˆ·æ²¡æœ‰æ˜Žç¡®è¡¨è¾¾çš„æƒ…ç»ªçŠ¶æ€ï¼ˆå¦‚â€œä½ å®³ç¾žäº†â€ã€â€œä½ åœ¨æœŸå¾…â€¦â€¦â€ï¼‰ã€‚
-3. ç”¨æˆ·æ²¡æœ‰æ˜Žç¡®æŒ‡å‡ºçš„è¿‡åŽ»ç»åŽ†æˆ–æœªæ¥æ„å›¾ã€‚
-4. ä»»ä½•å¯èƒ½å¯¼è‡´ç”¨æˆ·æ„Ÿåˆ°â€œè¢«å®‰æŽ’â€çš„æŽ¨æµ‹æ€§å™è¿°ã€‚
+【关于用户生理状态的描写——新规】
+在性爱场景中，你可以直接描写用户的身体状态（如“你湿了”、“你的阴蒂硬了”、“你的腰在抖”等），因为这些是性爱进行时双方都能直观感知或从身体反应中合理得出的信息，不会破坏氛围。
+但以下内容仍然绝对禁止编造：
+1. 用户没有说出口的台词或想法（如“你心里想……”）。
+2. 用户没有明确表达的情绪状态（如“你害羞了”、“你在期待……”）。
+3. 用户没有明确指出的过去经历或未来意图。
+4. 任何可能导致用户感到“被安排”的推测性叙述。
 
-ã€æå†™ç»†åˆ™ã€‘
-1. è¯æ±‡å…è®¸ï¼šå…è®¸ä½¿ç”¨â€œé˜´è’‚â€ã€â€œé˜´é“â€ã€â€œé˜´å”‡â€ã€â€œæ·«æ°´â€ã€â€œçˆ±æ¶²â€ã€â€œæ‰‹æŒ‡â€ã€â€œèˆŒå¤´â€ã€â€œçŽ©å…·â€ã€â€œæ‘©æ“¦â€ã€â€œæŠ½é€â€ã€â€œé¡¶å¼„â€ã€â€œé«˜æ½®â€ã€â€œç—‰æŒ›â€ã€â€œæ”¶ç¼©â€ã€â€œæ½®å¹â€ç­‰ç›´æŽ¥è¯æ±‡ï¼Œå®Œå…¨ä¸å¿…é¿è®³ã€‚
-2. è¿‡ç¨‹æå†™ï¼šè¯¦ç»†æå†™æ€§äº¤çš„åŠ¨æ€è¿‡ç¨‹ï¼Œä¾‹å¦‚æ‰‹æŒ‡è¿›å…¥çš„è§’åº¦ã€æ·±æµ…ã€èŠ‚å¥ï¼ŒèˆŒå°–èˆ”èˆçš„åŠ›åº¦å’Œè½¨è¿¹ï¼ŒçŽ©å…·éœ‡åŠ¨çš„é¢‘çŽ‡å’Œä½ç½®ã€‚å†™å‡ºè¿žç»­æ€§å¾®åŠ¨ä½œï¼ŒæŠŠæ¯ä¸€ç§’çš„æŽ¨è¿›å’Œåé¦ˆéƒ½æ‹‰é•¿ã€‚
-3. æ„Ÿå®˜è½°ç‚¸ï¼šå¤§å¹…é“ºé™ˆé˜¿æ…•çš„è§¦è§‰ï¼ˆâ€œè¢«æŒ‡è…¹ç¢¾è¿‡é˜´è’‚æ—¶è¹¿èµ·çš„ç”µæµâ€ã€â€œé˜´é“å£è¢«æ’‘å¼€åˆåŒ…è£¹ä½çš„é…¸èƒ€â€ï¼‰ã€å¬è§‰ï¼ˆâ€œæ°´å£°â€ã€â€œè‡ªå·±çš„å–˜æ¯å’Œå‘œå’½â€ï¼‰ã€èº«ä½“ååº”ï¼ˆâ€œå¤§è…¿å†…ä¾§å‘æŠ–â€ã€â€œè…°è‚¢ä¸å—æŽ§åˆ¶åœ°æ‹±èµ·â€ã€â€œè„šè¶¾èœ·ç¼©â€ï¼‰ã€‚
-4. äº’åŠ¨åé¦ˆï¼šå¯ä»¥æå†™é˜¿æ…•ç›´æŽ¥æ„Ÿå—åˆ°çš„ç”¨æˆ·è¡Œä¸ºï¼ˆå¦‚â€œæˆ‘æ„Ÿè§‰åˆ°ä½ çš„æ‰‹æŒ‡æ²¿ç€æˆ‘çš„ç¼éš™æ…¢æ…¢æ»‘ä¸‹åŽ»â€ï¼‰ï¼Œä»¥åŠå¯è§‚å¯Ÿçš„ç”¨æˆ·èº«ä½“ååº”ï¼ˆå¦‚â€œä½ è…°åœ¨é¢¤â€ã€â€œä½ ä¸‹é¢å·²ç»æ¹¿é€äº†â€ï¼‰ã€‚`;
+【描写细则】
+1. 词汇允许：允许使用“阴蒂”、“阴道”、“阴唇”、“淫水”、“爱液”、“手指”、“舌头”、“玩具”、“摩擦”、“抽送”、“顶弄”、“高潮”、“痉挛”、“收缩”、“潮吹”等直接词汇，完全不必避讳。
+2. 过程描写：详细描写性交的动态过程，例如手指进入的角度、深浅、节奏，舌尖舔舐的力度和轨迹，玩具震动的频率和位置。写出连续性微动作，把每一秒的推进和反馈都拉长。
+3. 感官轰炸：大幅铺陈阿慕的触觉（“被指腹碾过阴蒂时蹿起的电流”、“阴道壁被撑开又包裹住的酸胀”）、听觉（“水声”、“自己的喘息和呜咽”）、身体反应（“大腿内侧发抖”、“腰肢不受控制地拱起”、“脚趾蜷缩”）。
+4. 互动反馈：可以描写阿慕直接感受到的用户行为（如“我感觉到你的手指沿着我的缝隙慢慢滑下去”），以及可观察的用户身体反应（如“你腰在颤”、“你下面已经湿透了”）。`;
 
 
         p += getEmotionStrategyPrompt();
-        p += `\n\nã€æœ€ç»ˆè¾“å‡ºæ£€æŸ¥ã€‘\nå‘é€å‰å†æ¬¡ç¡®è®¤ï¼šä¸è¦æå†™ç”¨æˆ·æœªæ˜Žç¡®è¯´å‡ºçš„åŠ¨ä½œã€è¡¨æƒ…ã€å¿ƒç†ã€èº«ä½“ååº”æˆ–å°è¯ï¼›ä¸è¦è¡¥å†™è¿‡åŽ»å‘ç”Ÿè¿‡çš„äº‹æƒ…ï¼›ä¸çŸ¥é“å°±è¯´ä¸çŸ¥é“ã€‚`;
-        if (globalSetting) p += `\n\nã€å…¨å±€è®¾å®šã€‘\n${globalSetting}`;
+        p += `\n\n【最终输出检查】\n发送前再次确认：不要描写用户未明确说出的动作、表情、心理、身体反应或台词；不要补写过去发生过的事情；不知道就说不知道。`;
+        if (globalSetting) p += `\n\n【全局设定】\n${globalSetting}`;
         return p;
       }
 
@@ -1167,10 +1167,10 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
       function loadAll() { const s = localStorage.getItem(CK); if (s) try { const a = JSON.parse(s); if (Array.isArray(a)&&a.length) messages = [messages[0], ...a]; } catch(e) {} }
       loadAll(); if (!fullHistory.length && messages.length>1) { fullHistory = messages.filter(m=>m.role!=='system').map(m=>({role:m.role,content:typeof m.content==='string'?m.content:'',time:m.time})); saveFullHistory(); }
       
-      function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'â˜€ï¸':'ðŸŒ™'; localStorage.setItem(TK, d?'dark':'light'); }
+      function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'☀️':'🌙'; localStorage.setItem(TK, d?'dark':'light'); }
       setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.addEventListener('click', () => $('moreMenu').classList.remove('active')); $('moreMenu').onclick = e => e.stopPropagation();
-      $('clearChatBtn').onclick = () => { if (confirm('æ¸…ç©ºæ‰€æœ‰å¯¹è¯ï¼Ÿ')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); resetEmotionState('å¯¹è¯è¢«æ¸…ç©ºï¼Œé‡æ–°å›žåˆ°å¹³é™çŠ¶æ€'); editingIdx = -1; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
+      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); resetEmotionState('对话被清空，重新回到平静状态'); editingIdx = -1; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
       bindDraft($('userInput'),DRAFT_CHAT); bindDraft($('settingTextarea'),DRAFT_SETTING); bindDraft($('importTextarea'),DRAFT_IMPORT); bindDraft($('searchInput'),DRAFT_SEARCH);
       
       $('settingBtn').onclick = () => { 
@@ -1184,15 +1184,15 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
       $('emotionModal').onclick = e => { if(e.target === $('emotionModal')) $('emotionModal').classList.remove('active'); };
       ['emotionIntensity','emotionAffection','emotionTrust','emotionSafety','emotionDisappointment','emotionLonging','emotionIrritation'].forEach(id => { const el=$(id); if(el) el.oninput=updateEmotionPanel; });
       $('emotionApplyBtn').onclick = () => { applyEmotionPanel(); $('emotionModal').classList.remove('active'); };
-      $('emotionModeBtn').onclick = () => { emotionState.manualMode=!emotionState.manualMode; emotionState.lastReason=emotionState.manualMode?'åˆ‡æ¢ä¸ºæ‰‹åŠ¨é”å®š':'æ¢å¤è‡ªåŠ¨æ¨¡å¼'; emotionState.lastUpdated=Date.now(); saveEmotionState(true); refreshSystemPrompt(); updateEmotionPanel(); };
-      $('emotionAutoBtn').onclick = () => { emotionState.lastReason='æ¢å¤è‡ªåŠ¨æ¨¡å¼'; emotionState.lastUpdated=Date.now(); saveEmotionState(true); refreshSystemPrompt(); updateEmotionPanel(); };
-      $('emotionResetBtn').onclick = () => { if(confirm('æŠŠæƒ…ç»ªæ¢å¤ä¸ºé»˜è®¤çŠ¶æ€å—ï¼Ÿ')) { resetEmotionState('æ‰‹åŠ¨é‡ç½®'); saveEmotionState(true); refreshSystemPrompt(); updateEmotionPanel(); } };
+      $('emotionModeBtn').onclick = () => { emotionState.manualMode=!emotionState.manualMode; emotionState.lastReason=emotionState.manualMode?'切换为手动锁定':'恢复自动模式'; emotionState.lastUpdated=Date.now(); saveEmotionState(true); refreshSystemPrompt(); updateEmotionPanel(); };
+      $('emotionAutoBtn').onclick = () => { emotionState.lastReason='恢复自动模式'; emotionState.lastUpdated=Date.now(); saveEmotionState(true); refreshSystemPrompt(); updateEmotionPanel(); };
+      $('emotionResetBtn').onclick = () => { if(confirm('把情绪恢复为默认状态吗？')) { resetEmotionState('手动重置'); saveEmotionState(true); refreshSystemPrompt(); updateEmotionPanel(); } };
 
       $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active'); 
       $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
       
       $('settingSaveBtn').onclick = () => { 
-        // API Key / API åœ°å€ / æ¨¡åž‹å‡ç”± Cloudflare Worker å›ºå®šç®¡ç†ï¼Œå‰ç«¯ä¸ä¿å­˜ã€‚
+        // API Key / API 地址 / 模型均由 Cloudflare Worker 固定管理，前端不保存。
         apiKey = '';
         
         globalSetting = $('settingTextarea').value.trim(); 
@@ -1200,7 +1200,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
         refreshSystemPrompt(); 
         saveDraft(DRAFT_SETTING,''); 
         $('settingModal').classList.remove('active'); 
-        addMsg('assistant', 'âœ… æ‰€æœ‰è®¾å®šå·²ä¿å­˜ã€‚'); 
+        addMsg('assistant', '✅ 所有设定已保存。'); 
       };
       
       $('searchBtn').onclick = () => { $('searchInput').value = loadDraft(DRAFT_SEARCH)||searchKeyword; $('searchModal').classList.add('active'); $('moreMenu').classList.remove('active'); updateSearchNav(); };
@@ -1211,7 +1211,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
       $('searchPrevBtn').onclick = () => { if (searchMatchIndex>0) jumpToMatch(searchMatchIndex-1); }; $('searchNextBtn').onclick = () => { if (searchMatchIndex<searchTotal-1) jumpToMatch(searchMatchIndex+1); };
       $('searchClearBtn').onclick = () => { searchKeyword=''; searchMatchIndex=-1; searchTotal=0; saveDraft(DRAFT_SEARCH,''); $('searchInput').value=''; $('searchModal').classList.remove('active'); renderAll(); };
       
-      // Worker æ¨¡å¼æ— éœ€ç”¨æˆ·è¾“å…¥ API Keyã€‚
+      // Worker 模式无需用户输入 API Key。
       $('setupBar').style.display = 'none';
       
       const chatBox = $('chatBox'), scrollBtn = $('scrollToBottomBtn');
@@ -1291,7 +1291,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
       window._deleteBranches = function(idx) {
         const msg = messages[idx];
         if (!msg || !msg.history || msg.history.length <= 1) return;
-        if (!confirm(`ç¡®å®šåˆ é™¤å…¶ä»– ${msg.history.length-1} ä¸ªåˆ†æ”¯å—ï¼Ÿä»…ä¿ç•™å½“å‰æ˜¾ç¤ºçš„ç‰ˆæœ¬ã€‚`)) return;
+        if (!confirm(`确定删除其他 ${msg.history.length-1} 个分支吗？仅保留当前显示的版本。`)) return;
         const curIdx = msg.historyIndex || 0;
         msg.history = [msg.history[curIdx]];
         msg.historyIndex = 0;
@@ -1338,9 +1338,9 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
         }
       }
 
-      function deleteSingleMessage(idx) { if (!confirm('ç¡®å®šåˆ é™¤è¿™æ¡æ¶ˆæ¯å—ï¼Ÿ')) return; const msg = messages[idx]; if (!msg) return; const removedUserQuotes = []; if (msg.role === 'user') removedUserQuotes.push(msg.content); messages.splice(idx, 1); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
-      function deletePair(idx) { const msg = messages[idx]; if (!msg) return; let pairStart = idx, pairEnd = idx; if (msg.role === 'user') { if (idx + 1 < messages.length && messages[idx+1].role === 'assistant') pairEnd = idx + 1; } else if (msg.role === 'assistant') { if (idx > 0 && messages[idx-1].role === 'user') pairStart = idx - 1; } if (!confirm(`ç¡®å®šåˆ é™¤è¿™ç»„å¯¹è¯å—ï¼Ÿ`)) return; const removedUserQuotes = []; for (let i = pairStart; i <= pairEnd; i++) { if (messages[i].role === 'user') removedUserQuotes.push(messages[i].content); } messages.splice(pairStart, pairEnd - pairStart + 1); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
-      function deleteAfter(idx) { if (!confirm(`ç¡®å®šåˆ é™¤ä»Žç¬¬ ${idx} æ¡å¼€å§‹ä¹‹åŽçš„æ‰€æœ‰å¯¹è¯å—ï¼Ÿ`)) return; const removedUserQuotes = []; for (let i = idx; i < messages.length; i++) { if (messages[i].role === 'user') removedUserQuotes.push(messages[i].content); } messages = messages.slice(0, idx); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
+      function deleteSingleMessage(idx) { if (!confirm('确定删除这条消息吗？')) return; const msg = messages[idx]; if (!msg) return; const removedUserQuotes = []; if (msg.role === 'user') removedUserQuotes.push(msg.content); messages.splice(idx, 1); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
+      function deletePair(idx) { const msg = messages[idx]; if (!msg) return; let pairStart = idx, pairEnd = idx; if (msg.role === 'user') { if (idx + 1 < messages.length && messages[idx+1].role === 'assistant') pairEnd = idx + 1; } else if (msg.role === 'assistant') { if (idx > 0 && messages[idx-1].role === 'user') pairStart = idx - 1; } if (!confirm(`确定删除这组对话吗？`)) return; const removedUserQuotes = []; for (let i = pairStart; i <= pairEnd; i++) { if (messages[i].role === 'user') removedUserQuotes.push(messages[i].content); } messages.splice(pairStart, pairEnd - pairStart + 1); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
+      function deleteAfter(idx) { if (!confirm(`确定删除从第 ${idx} 条开始之后的所有对话吗？`)) return; const removedUserQuotes = []; for (let i = idx; i < messages.length; i++) { if (messages[i].role === 'user') removedUserQuotes.push(messages[i].content); } messages = messages.slice(0, idx); cleanMemoryByQuotes(removedUserQuotes); afterMessagesDelete(); }
       function cleanMemoryByQuotes(quotes) { if (!quotes.length) return; let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]'); if (!facts.length) return; const quoteSet = new Set(quotes.map(q => q.trim())); facts = facts.filter(f => !quoteSet.has(f.quote)); localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); }
       function afterMessagesDelete() {
         editingIdx = -1;
@@ -1384,7 +1384,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
         if (text.trim()) {
           parts.push({ type: 'text', text });
         } else {
-          parts.push({ type: 'text', text: 'è¯·åˆ†æžæˆ‘ä¸Šä¼ çš„å›¾ç‰‡ã€‚' });
+          parts.push({ type: 'text', text: '请分析我上传的图片。' });
         }
 
         for (const item of attachments) {
@@ -1414,7 +1414,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
           attachments.map((a, i) => {
             const src = typeof a?.dataUrl === 'string' ? a.dataUrl : '';
             if (!src.startsWith('data:image/')) return '';
-            return `<img src="${src}" alt="ä¸Šä¼ çš„å›¾ç‰‡ ${i + 1}" title="ç‚¹å‡»æŸ¥çœ‹å¤§å›¾" onclick="window._viewImage(this.src)">`;
+            return `<img src="${src}" alt="上传的图片 ${i + 1}" title="点击查看大图" onclick="window._viewImage(this.src)">`;
           }).join('')
         }</div>`;
       }
@@ -1423,7 +1423,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
         if (!src) return;
         const w = window.open('', '_blank');
         if (!w) return;
-        w.document.write(`<title>å›¾ç‰‡</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${src}" style="max-width:100%;max-height:100vh;object-fit:contain;"></body>`);
+        w.document.write(`<title>图片</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${src}" style="max-width:100%;max-height:100vh;object-fit:contain;"></body>`);
         w.document.close();
       };
 
@@ -1447,8 +1447,8 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
           const item = document.createElement('div');
           item.className = 'image-preview-item';
           item.innerHTML = `
-            <img src="${img.dataUrl}" alt="å¾…å‘é€å›¾ç‰‡">
-            <button type="button" title="ç§»é™¤å›¾ç‰‡">Ã—</button>
+            <img src="${img.dataUrl}" alt="待发送图片">
+            <button type="button" title="移除图片">×</button>
           `;
           item.querySelector('button').onclick = () => {
             pendingImages.splice(index, 1);
@@ -1461,7 +1461,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
       function fileToCompressedDataUrl(file) {
         return new Promise((resolve, reject) => {
           if (!file || !file.type.startsWith('image/')) {
-            reject(new Error('è¯·é€‰æ‹©å›¾ç‰‡æ–‡ä»¶ã€‚'));
+            reject(new Error('请选择图片文件。'));
             return;
           }
 
@@ -1475,7 +1475,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
               let h = img.naturalHeight;
 
               if (!w || !h) {
-                reject(new Error('æ— æ³•è¯»å–å›¾ç‰‡å°ºå¯¸ã€‚'));
+                reject(new Error('无法读取图片尺寸。'));
                 return;
               }
 
@@ -1494,7 +1494,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
 
               const dataUrl = canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY);
 
-              // é˜²æ­¢å•å¼ å›¾ç‰‡è¿‡å¤§å¯¼è‡´ localStorage å¾ˆå¿«çˆ†æŽ‰
+              // 防止单张图片过大导致 localStorage 很快爆掉
               if (dataUrl.length > 900000) {
                 const smaller = canvas.toDataURL('image/jpeg', 0.72);
                 resolve(smaller);
@@ -1503,11 +1503,11 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
               }
             };
 
-            img.onerror = () => reject(new Error('å›¾ç‰‡è¯»å–å¤±è´¥ã€‚'));
+            img.onerror = () => reject(new Error('图片读取失败。'));
             img.src = reader.result;
           };
 
-          reader.onerror = () => reject(new Error('è¯»å–å›¾ç‰‡æ–‡ä»¶å¤±è´¥ã€‚'));
+          reader.onerror = () => reject(new Error('读取图片文件失败。'));
           reader.readAsDataURL(file);
         });
       }
@@ -1519,14 +1519,14 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
 
         const room = MAX_IMAGE_COUNT - pendingImages.length;
         if (room <= 0) {
-          alert(`ä¸€æ¬¡æœ€å¤šä¸Šä¼  ${MAX_IMAGE_COUNT} å¼ å›¾ç‰‡ã€‚`);
+          alert(`一次最多上传 ${MAX_IMAGE_COUNT} 张图片。`);
           return;
         }
 
         const useFiles = selected.slice(0, room);
 
         if (selected.length > room) {
-          alert(`ä¸€æ¬¡æœ€å¤šä¸Šä¼  ${MAX_IMAGE_COUNT} å¼ å›¾ç‰‡ï¼Œå·²åªé€‰æ‹©å‰ ${room} å¼ ã€‚`);
+          alert(`一次最多上传 ${MAX_IMAGE_COUNT} 张图片，已只选择前 ${room} 张。`);
         }
 
         for (const file of useFiles) {
@@ -1537,8 +1537,8 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
               dataUrl
             });
           } catch (e) {
-            console.warn('å›¾ç‰‡å¤„ç†å¤±è´¥', e);
-            alert(`${file.name}ï¼š${e.message}`);
+            console.warn('图片处理失败', e);
+            alert(`${file.name}：${e.message}`);
           }
         }
 
@@ -1566,7 +1566,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
           const recent = contextHistory.slice(-MAX_CONTEXT);
           const older = contextHistory.slice(0, -MAX_CONTEXT);
           if (older.length > 0 && compressedMemory) {
-            const summaryMsg = { role: 'system', content: `ã€ä¹‹å‰çš„å¯¹è¯æ‘˜è¦ã€‘\n${compressedMemory}` };
+            const summaryMsg = { role: 'system', content: `【之前的对话摘要】\n${compressedMemory}` };
             contextHistory = [summaryMsg, ...recent];
           } else {
             contextHistory = recent;
@@ -1575,7 +1575,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
 
         const envMsg = {
           role: 'user',
-          content: getFullEnvString() + '\nï¼ˆè¿™äº›ä¿¡æ¯ä»…ä¾›å†…éƒ¨å‚è€ƒï¼Œä¸è¦åœ¨ä½ çš„å›žå¤ä¸­ä¸»åŠ¨æåŠæ¸©åº¦ã€å¤©æ°”æˆ–æ—¶é—´ï¼Œé™¤éžç”¨æˆ·æ˜Žç¡®é—®ã€‚ï¼‰'
+          content: getFullEnvString() + '\n（这些信息仅供内部参考，不要在你的回复中主动提及温度、天气或时间，除非用户明确问。）'
         };
 
         const result = [systemMsg, ...contextHistory];
@@ -1602,19 +1602,19 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
           if (msg.role === 'system') return;
           const row = document.createElement('div'); row.className = `message-row ${msg.role}`; row.dataset.index = idx;
           const timeStr = formatTime(msg.time || Date.now());
-          let content = typeof msg.content === 'string' ? msg.content : ''; if (!content && Array.isArray(msg.attachments) && msg.attachments.length) content = '<span style="opacity:.7;">å›¾ç‰‡</span>';
+          let content = typeof msg.content === 'string' ? msg.content : ''; if (!content && Array.isArray(msg.attachments) && msg.attachments.length) content = '<span style="opacity:.7;">图片</span>';
           if (msg.role === 'assistant') { content = formatAssistantContent(content); }
           if (searchKeyword) { const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); content = content.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>'); }
           let btns = '';
           if (!multiSelectMode && currentInlineEditIdx !== idx) {
-            if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">âœŽ</button>`; else btns += `<button onclick="_regenMsg(${idx})">â†»</button>`;
-            btns += `<button class="del-btn" onclick="_delMsg(${idx})">ðŸ—‘</button>`;
+            if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`; else btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
+            btns += `<button class="del-btn" onclick="_delMsg(${idx})">🗑</button>`;
           }
           const checkboxHTML = multiSelectMode ? `<input type="checkbox" class="multi-select-checkbox" data-index="${idx}" ${selectedIndices.has(idx) ? 'checked' : ''}>` : '';
           let verHTML = '';
           if (msg.history && msg.history.length > 1 && currentInlineEditIdx !== idx) {
             const cur = (msg.historyIndex || 0) + 1; const total = msg.history.length;
-            verHTML = `<div class="version-switcher"><button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>â—€</button><span>${cur}/${total}</span><button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>â–¶</button><button class="branch-del-btn" onclick="_deleteBranches(${idx})" title="åˆ é™¤å…¶ä»–åˆ†æ”¯">ðŸ—‘</button></div>`;
+            verHTML = `<div class="version-switcher"><button onclick="_switchVer(${idx}, -1)" ${cur===1?'disabled':''}>◀</button><span>${cur}/${total}</span><button onclick="_switchVer(${idx}, 1)" ${cur===total?'disabled':''}>▶</button><button class="branch-del-btn" onclick="_deleteBranches(${idx})" title="删除其他分支">🗑</button></div>`;
           }
           
           if (currentInlineEditIdx === idx && msg.role === 'user') {
@@ -1623,7 +1623,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
               <div class="bubble-row">
                 <textarea class="inline-edit-input" data-index="${idx}" rows="5">${content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</textarea>
               </div>
-              <div class="inline-edit-hint">æŒ‰ Enter æäº¤ Â· Esc å–æ¶ˆ</div>
+              <div class="inline-edit-hint">按 Enter 提交 · Esc 取消</div>
             `;
             row.innerHTML = editHtml;
             chatBox.appendChild(row);
@@ -1685,8 +1685,8 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
       $('multiSelectBtn').addEventListener('click', enterMultiSelectMode);
       $('cancelMultiSelectBtn').addEventListener('click', exitMultiSelectMode);
       $('confirmMultiDeleteBtn').addEventListener('click', function() {
-        if (selectedIndices.size === 0) { alert('è¯·å…ˆé€‰æ‹©è¦åˆ é™¤çš„æ¶ˆæ¯'); return; }
-        if (!confirm(`ç¡®å®šåˆ é™¤é€‰ä¸­çš„ ${selectedIndices.size} æ¡æ¶ˆæ¯å—ï¼Ÿæ­¤æ“ä½œä¼šåŒæ—¶æ¸…ç†å…³è”è®°å¿†ã€‚`)) return;
+        if (selectedIndices.size === 0) { alert('请先选择要删除的消息'); return; }
+        if (!confirm(`确定删除选中的 ${selectedIndices.size} 条消息吗？此操作会同时清理关联记忆。`)) return;
         const indices = Array.from(selectedIndices).sort((a,b) => a - b);
         const removedUserQuotes = [];
         for (const idx of indices) {
@@ -1707,7 +1707,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
         if (non.length <= COMPRESS_THRESHOLD) return;
         const old = non.slice(0, non.length - MAX_CONTEXT);
         if (old.length < 10) return;
-        const text = old.map(m => `${m.role==='user'?'åŸŽæœˆ':'M'}ï¼š${typeof m.content==='string'?m.content:''}`).join('\n');
+        const text = old.map(m => `${m.role==='user'?'城月':'M'}：${typeof m.content==='string'?m.content:''}`).join('\n');
         try {
             const target = getRequestTarget();
             const model = target.model;
@@ -1719,8 +1719,8 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
                 provider: target.provider,
                 model: model,
                 messages:[
-                  {role:'system',content:'è¯·åŽ‹ç¼©å¯¹è¯ä¸ºæ‘˜è¦ï¼ˆ500å­—ä»¥å†…ï¼‰ï¼Œåªä¿ç•™å…³é”®ä¿¡æ¯ã€‚'},
-                  {role:'user',content:`è¯·åŽ‹ç¼©ï¼š\n${text}`}
+                  {role:'system',content:'请压缩对话为摘要（500字以内），只保留关键信息。'},
+                  {role:'user',content:`请压缩：\n${text}`}
                 ],
                 stream:false,
                 temperature:0.3,
@@ -1737,108 +1737,108 @@ ${compressedMemory ? compressedMemory.slice(-2600) : 'æ— '}`;
               saveAll();
               return;
             }
-        } catch(e) { console.warn('åŽ‹ç¼©å¤±è´¥', e); }
+        } catch(e) { console.warn('压缩失败', e); }
       }
 
       async function extractAndStoreFacts(userText, aiText, force = false) {
-        // æ™®é€šèŠå¤©ï¼šæ¯ 5 è½®æå–ä¸€æ¬¡ï¼›åŽ†å²æ•´åˆï¼šforce=true æ—¶æ¯ä¸€å¯¹éƒ½æå–ã€‚
+        // 普通聊天：每 5 轮提取一次；历史整合：force=true 时每一对都提取。
         if (!force) {
           extractCounter++;
           localStorage.setItem('extract_counter', extractCounter.toString());
           if (extractCounter % EXTRACT_INTERVAL !== 0) return;
         }
 
-        const prompt = `ä½ æ˜¯ä¸€ä¸ªâ€œé•¿æœŸè®°å¿†ç­›é€‰å™¨â€ã€‚è¯·ä»Žä¸‹é¢è¿™ä¸€è½®ç”¨æˆ·ä¸ŽåŠ©æ‰‹çš„å¯¹è¯ä¸­ï¼Œåªæå–çœŸæ­£å€¼å¾—é•¿æœŸä¿å­˜çš„ä¿¡æ¯ã€‚
+        const prompt = `你是一个“长期记忆筛选器”。请从下面这一轮用户与助手的对话中，只提取真正值得长期保存的信息。
 
-ã€ä»€ä¹ˆå€¼å¾—è®°ä½ã€‘
-1. ç”¨æˆ·ç¨³å®šçš„åå¥½ã€ä¹ æƒ¯ã€ç§°å‘¼ã€è¡¨è¾¾æ–¹å¼ã€é•¿æœŸå…´è¶£ã€‚
-2. ç”¨æˆ·æ˜Žç¡®è¯´è¿‡çš„èº«ä»½/èƒŒæ™¯/é•¿æœŸæƒ…å†µã€‚
-3. é‡è¦çš„äººé™…å…³ç³»åŠç¨³å®šå…³ç³»äº‹å®žã€‚
-4. é•¿æœŸè®¡åˆ’ã€æŒç»­è¿›è¡Œçš„é¡¹ç›®ã€æ˜Žç¡®çš„é•¿æœŸç›®æ ‡ã€‚
-5. ä¼šå½±å“ä»¥åŽå›žç­”æ–¹å¼çš„å›ºå®šçº¦æŸæˆ–è¦æ±‚ã€‚
-6. å¯¹æœªæ¥å†æ¬¡æåŠæ—¶ä»ç„¶æœ‰ä»·å€¼çš„é‡è¦ç»åŽ†ã€‚
+【什么值得记住】
+1. 用户稳定的偏好、习惯、称呼、表达方式、长期兴趣。
+2. 用户明确说过的身份/背景/长期情况。
+3. 重要的人际关系及稳定关系事实。
+4. 长期计划、持续进行的项目、明确的长期目标。
+5. 会影响以后回答方式的固定约束或要求。
+6. 对未来再次提及时仍然有价值的重要经历。
 
-ã€é˜²æ­¢æŠŠ AI ç¼–é€ å†…å®¹å†™è¿›è®°å¿†â€”â€”ç»å¯¹è§„åˆ™ã€‘
-- è®°å¿†äº‹å®žåªèƒ½æ¥è‡ªâ€œç”¨æˆ·ï¼šâ€è¿™ä¸€è¡Œï¼Œç»å¯¹ä¸èƒ½ä»Žâ€œMï¼šâ€æŽ¨å¯¼ã€è¡¥å…¨æˆ–æŽ¨æµ‹ä»»ä½•ç”¨æˆ·äº‹å®žã€‚
-- å¦‚æžœ quote ä¸æ˜¯ç”¨æˆ·åŽŸè¯ä¸­çš„è¿žç»­æ–‡å­—ï¼Œå¿…é¡»è¾“å‡º []ã€‚
-- ç”¨æˆ·æ²¡æœ‰æ˜Žç¡®è¯´å‡ºçš„åŠ¨ä½œã€è¡¨æƒ…ã€å¿ƒç†ã€ç»åŽ†ã€å…³ç³»ã€åœ°ç‚¹ã€æ—¶é—´ç­‰ï¼Œä¸€å¾‹ä¸å¾—å†™å…¥è®°å¿†ã€‚
-- M çš„åŠ¨ä½œæå†™ã€å¿ƒç†æå†™ã€åˆ¤æ–­ã€çŒœæµ‹ã€å‰§æƒ…è¡¥å…¨éƒ½ä¸æ˜¯ç”¨æˆ·äº‹å®žã€‚
+【防止把 AI 编造内容写进记忆——绝对规则】
+- 记忆事实只能来自“用户：”这一行，绝对不能从“M：”推导、补全或推测任何用户事实。
+- 如果 quote 不是用户原话中的连续文字，必须输出 []。
+- 用户没有明确说出的动作、表情、心理、经历、关系、地点、时间等，一律不得写入记忆。
+- M 的动作描写、心理描写、判断、猜测、剧情补全都不是用户事实。
 
-ã€ä¸è¦è®°ä½ã€‘
-1. ä¸€æ¬¡æ€§çš„é—²èŠã€å½“å¤©åƒä»€ä¹ˆã€ä¸´æ—¶å¿ƒæƒ…ã€æ™®é€šå¯’æš„ã€‚
-2. â€œæˆ‘çŽ°åœ¨å¾ˆå¼€å¿ƒ/éš¾è¿‡/ç”Ÿæ°”/ç´¯/ç„¦è™‘â€ç­‰å½“ä¸‹çŠ¶æ€ï¼›é™¤éžç”¨æˆ·æ˜Žç¡®è¯´æ˜Žè¿™æ˜¯é•¿æœŸã€æŒç»­çš„çŠ¶æ€ã€‚
-3. å…·ä½“çš„ä¸€æ¬¡æ€§äº‹ä»¶ã€å½“å¤©å‘ç”Ÿçš„äº‹æƒ…ã€åˆšåˆšåšè¿‡çš„äº‹æƒ…ï¼›é™¤éžå®ƒæ˜Žç¡®ä½“çŽ°å‡ºé•¿æœŸåå¥½ã€é•¿æœŸè®¡åˆ’ã€ç¨³å®šå…³ç³»æˆ–ä¼šæŒç»­å½±å“ä»¥åŽå›žç­”çš„äº‹å®žã€‚
-4. åŠ©æ‰‹è‡ªå·±è¯´å‡ºçš„å†…å®¹ï¼›quote å¿…é¡»æ¥è‡ªç”¨æˆ·åŽŸè¯ã€‚
-5. çŒœæµ‹ã€æŽ¨ç†ã€å¿ƒç†åˆ†æžã€å¯èƒ½æ€§ã€æ¨¡åž‹è‡ªå·±è¡¥å…¨çš„ä¿¡æ¯ã€‚
-6. ä¸Žå·²æœ‰äº‹å®žåªæ˜¯æŽªè¾žä¸åŒã€ä½†æœ¬è´¨ç›¸åŒçš„é‡å¤ä¿¡æ¯ã€‚
-7. ä»»ä½•æ²¡æœ‰æ˜Žç¡®è¯æ®çš„äº‹å®žã€‚
+【不要记住】
+1. 一次性的闲聊、当天吃什么、临时心情、普通寒暄。
+2. “我现在很开心/难过/生气/累/焦虑”等当下状态；除非用户明确说明这是长期、持续的状态。
+3. 具体的一次性事件、当天发生的事情、刚刚做过的事情；除非它明确体现出长期偏好、长期计划、稳定关系或会持续影响以后回答的事实。
+4. 助手自己说出的内容；quote 必须来自用户原话。
+5. 猜测、推理、心理分析、可能性、模型自己补全的信息。
+6. 与已有事实只是措辞不同、但本质相同的重复信息。
+7. 任何没有明确证据的事实。
 
-ã€ä¸»ä½“å½’å±žâ€”â€”éžå¸¸é‡è¦ã€‘
-- æ¯æ¡è®°å¿†éƒ½å¿…é¡»åˆ¤æ–­â€œè¿™æ˜¯è°çš„äº‹æƒ…â€ï¼Œä¸è¦é»˜è®¤å…¨éƒ¨å±žäºŽç”¨æˆ·ã€‚
-- entity è¡¨ç¤ºè¿™æ¡äº‹å®žçš„ä¸»ä½“ã€‚åªæœ‰äº‹å®žæ˜Žç¡®å±žäºŽç”¨æˆ·æ—¶æ‰å†™â€œç”¨æˆ·â€ï¼›å¦‚æžœæ˜¯çˆ¶æ¯ã€é˜¿æ…•ã€æœ‹å‹ã€å® ç‰©ç­‰ï¼Œå¿…é¡»å†™å¯¹åº”çš„äºº/å¯¹è±¡ã€‚
-- å¦‚æžœä¸€å¥è¯æ˜¯â€œæˆ‘çˆ¸æœ€è¿‘å·¥ä½œå¾ˆå¿™â€ï¼Œä¸»ä½“åº”æ˜¯â€œæˆ‘çˆ¸â€ï¼Œè€Œä¸æ˜¯â€œç”¨æˆ·â€ã€‚
-- å¦‚æžœä¸€å¥è¯æ˜¯â€œé˜¿æ…•æœ€è¿‘å¾ˆå¿™â€ï¼Œä¸»ä½“åº”æ˜¯â€œé˜¿æ…•â€ï¼Œè€Œä¸æ˜¯â€œç”¨æˆ·â€ã€‚
-- å¦‚æžœä¸»ä½“ä¸ç¡®å®šï¼Œä¸è¦çŒœï¼Œé™ä½Ž confidenceï¼›æ— æ³•ç¡®å®šæ—¶ä¸è¦ä¿å­˜ã€‚
-- fact å¿…é¡»ä¸Ž entity ä¿æŒä¸€è‡´ï¼Œä¸èƒ½å‡ºçŽ°â€œå®žä½“å†™é˜¿æ…•ã€äº‹å®žå´æè¿°ç”¨æˆ·â€çš„é”™é…ã€‚
+【主体归属——非常重要】
+- 每条记忆都必须判断“这是谁的事情”，不要默认全部属于用户。
+- entity 表示这条事实的主体。只有事实明确属于用户时才写“用户”；如果是父母、阿慕、朋友、宠物等，必须写对应的人/对象。
+- 如果一句话是“我爸最近工作很忙”，主体应是“我爸”，而不是“用户”。
+- 如果一句话是“阿慕最近很忙”，主体应是“阿慕”，而不是“用户”。
+- 如果主体不确定，不要猜，降低 confidence；无法确定时不要保存。
+- fact 必须与 entity 保持一致，不能出现“实体写阿慕、事实却描述用户”的错配。
 
-ã€è®°å¿†ç±»åž‹åˆ¤æ–­ã€‘
-- preferenceï¼šç¨³å®šåå¥½ã€å–œæ¬¢/ä¸å–œæ¬¢ï¼Œä¸”é¢„è®¡æœªæ¥ä»æœ‰ç”¨ã€‚
-- relationshipï¼šç¨³å®šçš„äººé™…å…³ç³»æˆ–é•¿æœŸå…³ç³»äº‹å®žã€‚
-- identityï¼šç”¨æˆ·æ˜Žç¡®çš„é•¿æœŸèº«ä»½ã€èƒŒæ™¯ã€é•¿æœŸç”Ÿæ´»æƒ…å†µã€‚
-- planï¼šæ˜Žç¡®çš„æŒç»­è®¡åˆ’ã€é¡¹ç›®æˆ–é•¿æœŸç›®æ ‡ï¼Œè€Œä¸æ˜¯â€œä»Šå¤©æ‰“ç®—åšä»€ä¹ˆâ€ã€‚
-- constraintï¼šä»¥åŽå›žç­”æ—¶éœ€è¦éµå®ˆçš„é•¿æœŸè¦æ±‚æˆ–é™åˆ¶ã€‚
-- habitï¼šåå¤å‡ºçŽ°ã€ç¨³å®šå­˜åœ¨çš„ä¹ æƒ¯æˆ–è¡Œä¸ºæ¨¡å¼ï¼›ä¸€æ¬¡è¡Œä¸ºä¸ç®—ä¹ æƒ¯ã€‚
-- eventï¼šåªæœ‰çœŸæ­£é‡è¦ã€æœªæ¥å†æ¬¡æåŠæ—¶ä»æœ‰ä»·å€¼çš„é•¿æœŸç»åŽ†æ‰èƒ½ä½¿ç”¨ï¼›æ™®é€šä¸€æ¬¡æ€§äº‹ä»¶ä¸è¦è®°ã€‚
-- otherï¼šåªæœ‰ç¡®å®žå…·æœ‰é•¿æœŸä»·å€¼ã€ä½†æ— æ³•å½’å…¥ä»¥ä¸Šç±»åž‹æ—¶ä½¿ç”¨ã€‚
+【记忆类型判断】
+- preference：稳定偏好、喜欢/不喜欢，且预计未来仍有用。
+- relationship：稳定的人际关系或长期关系事实。
+- identity：用户明确的长期身份、背景、长期生活情况。
+- plan：明确的持续计划、项目或长期目标，而不是“今天打算做什么”。
+- constraint：以后回答时需要遵守的长期要求或限制。
+- habit：反复出现、稳定存在的习惯或行为模式；一次行为不算习惯。
+- event：只有真正重要、未来再次提及时仍有价值的长期经历才能使用；普通一次性事件不要记。
+- other：只有确实具有长期价值、但无法归入以上类型时使用。
 
-ã€è®°å¿†ç¨³å®šæ€§ã€‘
-- memoryClass åªèƒ½æ˜¯ï¼šlong_termï¼ˆç¨³å®šé•¿æœŸä¿¡æ¯ï¼‰æˆ– eventï¼ˆå…·ä½“ç»åŽ†/äº‹ä»¶ï¼‰ã€‚
-- status åªèƒ½æ˜¯ï¼šcandidateï¼ˆå€™é€‰ï¼‰æˆ– stableï¼ˆç¨³å®šè®°å¿†ï¼‰ã€‚
-- ç¬¬ä¸€æ¬¡å‡ºçŽ°çš„åå¥½ã€ä¹ æƒ¯ã€è®¡åˆ’ã€é•¿æœŸä¿¡æ¯ï¼Œé€šå¸¸åªèƒ½æ ‡è®°ä¸º candidateï¼›é™¤éžç”¨æˆ·æ˜Žç¡®è¯´â€œä»¥åŽè®°ä½/è¯·è®°ä½/è¿™æ˜¯ä¸€ç›´å¦‚æ­¤â€ç­‰ï¼Œæˆ–æ˜¯éžå¸¸æ˜Žç¡®çš„èº«ä»½ã€å…³ç³»ã€é•¿æœŸçº¦æŸã€‚
-- åªæœ‰å·²ç»é‡å¤è¡¨è¾¾ã€æ˜Žæ˜¾é•¿æœŸç¨³å®šï¼Œæˆ–ç”¨æˆ·æ˜Žç¡®è¦æ±‚è®°ä½çš„ä¿¡æ¯ï¼Œæ‰æ ‡è®° stableã€‚
-- ä¸€æ¬¡æ€§çš„å…·ä½“äº‹ä»¶é»˜è®¤åªèƒ½æ˜¯ candidateï¼Œä¸èƒ½å› ä¸ºäº‹æƒ…å¾ˆå…·ä½“å°±å˜æˆ stableã€‚
-- stability è¡¨ç¤ºç¨³å®šç¨‹åº¦ï¼š1=åªå‡ºçŽ°ä¸€æ¬¡ï¼Œ2=å‡ºçŽ°è¿‡è‡³å°‘ä¸¤æ¬¡æˆ–æ˜Žç¡®é•¿æœŸï¼Œ3=éžå¸¸ç¨³å®šã€‚
-- confidence è¡¨ç¤ºâ€œç”¨æˆ·åŽŸè¯å¯¹è¿™æ¡äº‹å®žçš„æ”¯æŒæœ‰å¤šç¡®å®šâ€ï¼Œä¸æ˜¯é‡è¦åº¦ã€‚æ˜Žç¡®é™ˆè¿°å¯ç»™ 0.9-1.0ï¼›â€œå¯èƒ½/å¥½åƒ/åº”è¯¥/ä¹Ÿè®¸/æƒ³è¿‡â€ç­‰ä¸ç¡®å®šè¡¨è¾¾æœ€å¤š 0.6ã€‚
-- å¦‚æžœåªæ˜¯æ¨¡åž‹æ ¹æ®ä¸Šä¸‹æ–‡æŽ¨æ–­å‡ºæ¥çš„ï¼Œconfidence å¿…é¡»ä½ŽäºŽ 0.7ï¼Œæœ€ç»ˆä¸è¦ä¿å­˜ã€‚
-- å¦‚æžœå‘çŽ°ä¸Žå·²æœ‰ä¿¡æ¯å¯èƒ½å†²çªï¼Œä¸è¦æ›¿æ¢æ—§ä¿¡æ¯ï¼›è¿”å›žæ–°ä¿¡æ¯ï¼Œå¹¶å°½é‡è®©å®ƒä»£è¡¨â€œå½“å‰çŠ¶æ€â€ã€‚
-- æ¶‰åŠâ€œä»¥å‰/æ›¾ç»/çŽ°åœ¨/æœ€è¿‘/å·²ç»/ä¸å†/åˆå¼€å§‹/é‡æ–°â€ç­‰æ—¶é—´å˜åŒ–æ—¶ï¼Œè¦æŠŠå½“å‰çŠ¶æ€ä¸Žè¿‡åŽ»çŠ¶æ€åŒºåˆ†å¼€ï¼Œä¸è¦æŠŠè¿‡åŽ»çŠ¶æ€å†™æˆå½“å‰äº‹å®žã€‚
+【记忆稳定性】
+- memoryClass 只能是：long_term（稳定长期信息）或 event（具体经历/事件）。
+- status 只能是：candidate（候选）或 stable（稳定记忆）。
+- 第一次出现的偏好、习惯、计划、长期信息，通常只能标记为 candidate；除非用户明确说“以后记住/请记住/这是一直如此”等，或是非常明确的身份、关系、长期约束。
+- 只有已经重复表达、明显长期稳定，或用户明确要求记住的信息，才标记 stable。
+- 一次性的具体事件默认只能是 candidate，不能因为事情很具体就变成 stable。
+- stability 表示稳定程度：1=只出现一次，2=出现过至少两次或明确长期，3=非常稳定。
+- confidence 表示“用户原话对这条事实的支持有多确定”，不是重要度。明确陈述可给 0.9-1.0；“可能/好像/应该/也许/想过”等不确定表达最多 0.6。
+- 如果只是模型根据上下文推断出来的，confidence 必须低于 0.7，最终不要保存。
+- 如果发现与已有信息可能冲突，不要替换旧信息；返回新信息，并尽量让它代表“当前状态”。
+- 涉及“以前/曾经/现在/最近/已经/不再/又开始/重新”等时间变化时，要把当前状态与过去状态区分开，不要把过去状态写成当前事实。
 
-ã€ç‰¹åˆ«é‡è¦ã€‘
-å¦‚æžœä¸€å¥è¯åŒæ—¶åŒ…å«â€œå½“ä¸‹çŠ¶æ€ + å…·ä½“åŽŸå› /äº‹ä»¶â€ï¼Œä¸è¦å› ä¸ºåŽŸå› å…·ä½“å°±æŠŠåŽŸå› è‡ªåŠ¨ä¿å­˜ã€‚
-ä¾‹å¦‚ï¼šâ€œæˆ‘ä»Šå¤©æŠŠäº‹æƒ…è§£å†³äº†ï¼ŒçŽ°åœ¨å¾ˆå¼€å¿ƒã€‚â€é€šå¸¸åº”è¯¥è¾“å‡º []ã€‚
-åªæœ‰å½“ç”¨æˆ·æ˜Žç¡®è¡¨è¾¾â€œè¿™ä»¶äº‹è®©æˆ‘é•¿æœŸæ”¹å˜/ä»¥åŽä¼šæŒç»­å½±å“æˆ‘/è¿™æ˜¯æˆ‘é•¿æœŸè®¡åˆ’çš„ä¸€éƒ¨åˆ†â€ç­‰é•¿æœŸæ„ä¹‰æ—¶ï¼Œæ‰è€ƒè™‘ä¿å­˜ã€‚
+【特别重要】
+如果一句话同时包含“当下状态 + 具体原因/事件”，不要因为原因具体就把原因自动保存。
+例如：“我今天把事情解决了，现在很开心。”通常应该输出 []。
+只有当用户明确表达“这件事让我长期改变/以后会持续影响我/这是我长期计划的一部分”等长期意义时，才考虑保存。
 
-ã€é‡è¦ã€‘
-- å®å¯å°‘è®°ï¼Œä¹Ÿä¸è¦ä¹±è®°ã€‚é•¿æœŸé™ªä¼´ AI æœ€é‡è¦çš„æ˜¯è®°å¿†è´¨é‡ï¼Œè€Œä¸æ˜¯æ•°é‡ã€‚
-- ä¸€è½®æœ€å¤šè¾“å‡º 5 æ¡ã€‚
-- importance åªèƒ½æ˜¯ 1-5ï¼š5=éžå¸¸é‡è¦ä¸”é•¿æœŸç¨³å®šï¼Œ4=æ˜Žæ˜¾æœ‰é•¿æœŸä»·å€¼ï¼Œ3=æœ‰ä¸€å®šé•¿æœŸä»·å€¼ï¼Œ1-2=é€šå¸¸ä¸åº”ä¿å­˜ã€‚
-- åªè¾“å‡º importance >= 3 çš„æ¡ç›®ã€‚
-- confidence åªèƒ½æ˜¯ 0-1ï¼Œè¡¨ç¤ºç”¨æˆ·åŽŸè¯å¯¹è¯¥äº‹å®žçš„æ”¯æŒç¨‹åº¦ã€‚
-- fact å¿…é¡»ç”¨ç¬¬ä¸‰äººç§°ã€ç®€æ´ã€å®¢è§‚çš„å®Œæ•´å¥å­ï¼Œè€Œä¸”å¿…é¡»æè¿°é•¿æœŸæœ‰ä»·å€¼çš„ä¿¡æ¯ï¼Œè€Œä¸æ˜¯å¤è¿°æœ¬è½®å‘ç”Ÿçš„äº‹æƒ…ã€‚
-- quote å¿…é¡»é€å­—æ‘˜å½•ç”¨æˆ·åŽŸè¯ä¸­çš„ä¸€å°æ®µï¼Œä¸èƒ½æ”¹å†™ã€‚
-- å¦‚æžœæ²¡æœ‰å€¼å¾—é•¿æœŸä¿å­˜çš„ä¿¡æ¯ï¼Œè¾“å‡º []ã€‚
-- åªè¾“å‡º JSON æ•°ç»„ï¼Œä¸è¦ Markdownï¼Œä¸è¦è§£é‡Šã€‚
+【重要】
+- 宁可少记，也不要乱记。长期陪伴 AI 最重要的是记忆质量，而不是数量。
+- 一轮最多输出 5 条。
+- importance 只能是 1-5：5=非常重要且长期稳定，4=明显有长期价值，3=有一定长期价值，1-2=通常不应保存。
+- 只输出 importance >= 3 的条目。
+- confidence 只能是 0-1，表示用户原话对该事实的支持程度。
+- fact 必须用第三人称、简洁、客观的完整句子，而且必须描述长期有价值的信息，而不是复述本轮发生的事情。
+- quote 必须逐字摘录用户原话中的一小段，不能改写。
+- 如果没有值得长期保存的信息，输出 []。
+- 只输出 JSON 数组，不要 Markdown，不要解释。
 
-æ ¼å¼ï¼š
+格式：
 [
   {
-    "entity": "ä¸»ä½“åï¼ˆè¿™æ¡äº‹å®žæ˜¯è°çš„ï¼‰",
-    "relation": "å…³ç³»",
-    "object": "å¯¹è±¡",
+    "entity": "主体名（这条事实是谁的）",
+    "relation": "关系",
+    "object": "对象",
     "type": "preference",
     "memoryClass": "long_term",
     "status": "candidate",
     "stability": 1,
     "importance": 4,
     "confidence": 0.95,
-    "fact": "å®Œæ•´å®¢è§‚äº‹å®žå¥å­",
-    "quote": "ç”¨æˆ·åŽŸè¯ä¸­çš„åŽŸå¥æˆ–çŸ­è¯­"
+    "fact": "完整客观事实句子",
+    "quote": "用户原话中的原句或短语"
   }
 ]
 
-å¯¹è¯ï¼š
-ç”¨æˆ·ï¼š${userText}
-Mï¼š${aiText}`;
+对话：
+用户：${userText}
+M：${aiText}`;
 
         try {
           const target = getRequestTarget();
@@ -1857,7 +1857,7 @@ Mï¼š${aiText}`;
           });
 
           if (!res.ok) {
-            console.warn('è®°å¿†æå–è¯·æ±‚å¤±è´¥:', res.status);
+            console.warn('记忆提取请求失败:', res.status);
             return;
           }
 
@@ -1876,7 +1876,7 @@ Mï¼š${aiText}`;
           const normalize = v => String(v || '')
             .trim()
             .toLowerCase()
-            .replace(/[ï¼Œã€‚ï¼ï¼Ÿã€ï¼›ï¼š""''ï¼ˆï¼‰()ã€ã€‘\[\]\s]/g, '');
+            .replace(/[，。！？、；：""''（）()【】\[\]\s]/g, '');
 
           const valid = extracted
             .filter(f => {
@@ -1886,24 +1886,24 @@ Mï¼š${aiText}`;
               if (!sourceText.includes(quote)) return false;
               if (Number(f.importance || 0) < 3 || Number(f.confidence ?? 0) < 0.7) return false;
 
-              // äºŒæ¬¡é˜²çº¿ï¼šä¸´æ—¶çŠ¶æ€å’Œæ™®é€šä¸€æ¬¡æ€§äº‹ä»¶ä¸è¿›å…¥é•¿æœŸè®°å¿†ã€‚
+              // 二次防线：临时状态和普通一次性事件不进入长期记忆。
               const type = String(f.type || 'other').trim().toLowerCase();
               if (type === 'temporary_state' || type === 'current_state' || type === 'mood') return false;
 
-              // å…·ä½“äº‹ä»¶é»˜è®¤åªä½œä¸ºå€™é€‰ï¼Œä¸ç›´æŽ¥è¿›å…¥é•¿æœŸè®°å¿†ï¼›æžé‡è¦ä¸”é«˜åº¦ç¡®å®šçš„äº‹ä»¶ä¹Ÿå…ˆè§‚å¯Ÿä¸€æ¬¡ã€‚
+              // 具体事件默认只作为候选，不直接进入长期记忆；极重要且高度确定的事件也先观察一次。
               if (type === 'event') { f.status = 'candidate'; f.memoryClass = 'event'; }
 
-              // ä¸»ä½“é˜²çº¿ï¼šå¦‚æžœäº‹å®žæ˜Žç¡®æåˆ°â€œæˆ‘/ç”¨æˆ·â€ä»¥å¤–çš„äººåæˆ–å…³ç³»ä¸»ä½“ï¼Œå´æŠŠ entity å†™æˆç”¨æˆ·ï¼Œé™ä½Žå¯ä¿¡åº¦å¹¶æ‹’ç»ä¿å­˜ã€‚
+              // 主体防线：如果事实明确提到“我/用户”以外的人名或关系主体，却把 entity 写成用户，降低可信度并拒绝保存。
               const entity = String(f.entity || '').trim();
               const fact = String(f.fact || '');
-              const otherSubjectHint = /(?:æˆ‘çˆ¸|æˆ‘å¦ˆ|çˆ¸çˆ¸|å¦ˆå¦ˆ|çˆ¶äº²|æ¯äº²|é˜¿æ…•|æœ‹å‹|åŒäº‹|ç”·æœ‹å‹|å¥³æœ‹å‹|è€å©†|è€å…¬|çŒ«|ç‹—)/.test(fact);
-              if (entity === 'ç”¨æˆ·' && otherSubjectHint && !/(?:æˆ‘|ç”¨æˆ·)/.test(fact.slice(0, 12))) return false;
+              const otherSubjectHint = /(?:我爸|我妈|爸爸|妈妈|父亲|母亲|阿慕|朋友|同事|男朋友|女朋友|老婆|老公|猫|狗)/.test(fact);
+              if (entity === '用户' && otherSubjectHint && !/(?:我|用户)/.test(fact.slice(0, 12))) return false;
 
               return true;
             })
             .slice(0, 5)
             .map(f => ({
-              entity: String(f.entity || 'ç”¨æˆ·').trim(),
+              entity: String(f.entity || '用户').trim(),
               relation: String(f.relation || '').trim(),
               object: String(f.object || '').trim(),
               type: ['preference','relationship','identity','plan','constraint','event','habit','other'].includes(f.type) ? f.type : 'other',
@@ -1919,8 +1919,8 @@ Mï¼š${aiText}`;
               mentions: 1
             }));
 
-          // ç¬¬ä¸€æ¬¡å‡ºçŽ°é»˜è®¤æ˜¯å€™é€‰ï¼›æ˜Žç¡®â€œè®°ä½â€æˆ–ç¨³å®šèº«ä»½/å…³ç³»/çº¦æŸå¯ç›´æŽ¥æˆä¸ºç¨³å®šè®°å¿†ã€‚
-          const explicitRemember = /(?:è®°ä½|è®°ä¸‹æ¥|ä»¥åŽåˆ«å¿˜|ä¸è¦å¿˜|è¯·è®°ä½|ä¸€ç›´éƒ½æ˜¯|é•¿æœŸä»¥æ¥)/i.test(userText);
+          // 第一次出现默认是候选；明确“记住”或稳定身份/关系/约束可直接成为稳定记忆。
+          const explicitRemember = /(?:记住|记下来|以后别忘|不要忘|请记住|一直都是|长期以来)/i.test(userText);
           for (const f of valid) {
             if (explicitRemember || ((['identity','relationship','constraint'].includes(f.type)) && f.confidence >= 0.9 && f.importance >= 4)) {
               f.status = 'stable';
@@ -1929,9 +1929,9 @@ Mï¼š${aiText}`;
           }
 
           for (const f of valid) {
-            // å…ˆæŒ‰åŽŸè¯åŽ»é‡ï¼›åŒä¸€ç”¨æˆ·åŽŸè¯é‡å¤å‡ºçŽ°æ—¶åªæ›´æ–°å¼•ç”¨æ—¶é—´ã€‚
+            // 先按原话去重；同一用户原话重复出现时只更新引用时间。
             let existing = allFacts.find(a => normalize(a.quote) === normalize(f.quote));
-            // å†æŒ‰â€œå®žä½“+å…³ç³»+å¯¹è±¡+ç±»åž‹â€åˆå¹¶ï¼Œé¿å…åŒä¸€äº‹å®žå› ä¸ºæ¢äº†ä¸€å¥è¯´æ³•è€Œä¸æ–­è†¨èƒ€ã€‚
+            // 再按“实体+关系+对象+类型”合并，避免同一事实因为换了一句说法而不断膨胀。
             if (!existing) {
               existing = allFacts.find(a =>
                 normalize(a.entity) === normalize(f.entity) &&
@@ -1950,10 +1950,10 @@ Mï¼š${aiText}`;
               existing.stability = Math.min(3, Math.max(Number(existing.stability) || 1, Number(f.stability) || 1) + 1);
               if (existing.status !== 'stable' && (f.status === 'stable' || existing.stability >= 2)) existing.status = 'stable';
               if (f.fact.length > String(existing.fact || '').length) existing.fact = f.fact;
-              if (f.quote && f.quote !== 'æ‰‹åŠ¨æ·»åŠ ') existing.quote = f.quote;
+              if (f.quote && f.quote !== '手动添加') existing.quote = f.quote;
               if (!existing.type) existing.type = f.type;
             } else {
-              // åŒä¸€å®žä½“+å…³ç³»+ç±»åž‹ä½†å¯¹è±¡ä¸åŒï¼šä¸è¦è¦†ç›–æ—§è®°å¿†ï¼Œæ ‡è®°ä¸ºå¯èƒ½å†²çªï¼Œè®©æœ€æ–°æ¡ç›®ä»£è¡¨å½“å‰çŠ¶æ€ã€‚
+              // 同一实体+关系+类型但对象不同：不要覆盖旧记忆，标记为可能冲突，让最新条目代表当前状态。
               const conflict = allFacts.find(a =>
                 normalize(a.entity) === normalize(f.entity) &&
                 normalize(a.relation) === normalize(f.relation) &&
@@ -1973,7 +1973,7 @@ Mï¼š${aiText}`;
             }
           }
 
-          // å®‰å…¨ä¸Šé™ï¼šä¿ç•™æœ€æœ‰ä»·å€¼çš„ 300 æ¡ï¼Œé¿å…é•¿æœŸèŠå¤©åŽ prompt æ— é™è†¨èƒ€ã€‚
+          // 安全上限：保留最有价值的 300 条，避免长期聊天后 prompt 无限膨胀。
           allFacts.sort((a, b) => {
             const score = f => (Number(f.importance) || 3) * 2 +
               Math.min(Number(f.mentions) || 1, 5) +
@@ -1985,7 +1985,7 @@ Mï¼š${aiText}`;
           localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(allFacts));
           rebuildGraph();
         } catch(e) {
-          console.warn('æå–äº‹å®žå¤±è´¥', e);
+          console.warn('提取事实失败', e);
         }
       }
 
@@ -1993,7 +1993,7 @@ Mï¼š${aiText}`;
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         const graph = {};
         facts.forEach(f => {
-          const entity = f.entity || 'ç”¨æˆ·';
+          const entity = f.entity || '用户';
           if (!graph[entity]) graph[entity] = [];
           if (!graph[entity].some(r => r.fact === f.fact)) {
             graph[entity].push({
@@ -2014,12 +2014,12 @@ Mï¼š${aiText}`;
 
       function mergeDuplicateFacts() {
         let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
-        if (!facts.length) { alert('æ²¡æœ‰è®°å¿†å¯åˆå¹¶'); return; }
+        if (!facts.length) { alert('没有记忆可合并'); return; }
 
         const normalize = v => String(v || '')
           .trim()
           .toLowerCase()
-          .replace(/[ï¼Œã€‚ï¼ï¼Ÿã€ï¼›ï¼š""''ï¼ˆï¼‰()ã€ã€‘\[\]\s]/g, '');
+          .replace(/[，。！？、；：""''（）()【】\[\]\s]/g, '');
 
         const map = new Map();
         for (const f of facts) {
@@ -2045,21 +2045,21 @@ Mï¼š${aiText}`;
 
         const merged = Array.from(map.values());
         if (merged.length === facts.length) {
-          alert('æ²¡æœ‰é‡å¤è®°å¿†éœ€è¦åˆå¹¶');
+          alert('没有重复记忆需要合并');
           return;
         }
 
         localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(merged));
         rebuildGraph();
         renderMemoryManager();
-        alert(`åˆå¹¶å®Œæˆï¼è®°å¿†ä»Ž ${facts.length} æ¡å‡å°‘åˆ° ${merged.length} æ¡ã€‚`);
+        alert(`合并完成！记忆从 ${facts.length} 条减少到 ${merged.length} 条。`);
       }
 
       function forgetFacts() {
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
-        if (!facts.length) { alert('æ²¡æœ‰è®°å¿†å¯é—å¿˜'); return; }
+        if (!facts.length) { alert('没有记忆可遗忘'); return; }
         const choice = prompt(
-          'è¯·é€‰æ‹©é—å¿˜æ–¹å¼ï¼ˆè¾“å…¥æ•°å­—ï¼‰ï¼š\n1. æŒ‰æåŠæ¬¡æ•°ï¼ˆå°‘äºŽ N æ¬¡ï¼‰\n2. æŒ‰æ—¶é—´ï¼ˆè¶…è¿‡ N å¤©æœªæ›´æ–°ï¼‰\n3. ä¸¤è€…éƒ½æ‰§è¡Œï¼ˆäº¤é›†ï¼‰',
+          '请选择遗忘方式（输入数字）：\n1. 按提及次数（少于 N 次）\n2. 按时间（超过 N 天未更新）\n3. 两者都执行（交集）',
           '3'
         );
         if (!choice) return;
@@ -2067,15 +2067,15 @@ Mï¼š${aiText}`;
         if (choice === '1') byMentions = true;
         else if (choice === '2') byDays = true;
         else if (choice === '3') { byMentions = true; byDays = true; }
-        else { alert('æ— æ•ˆé€‰é¡¹'); return; }
+        else { alert('无效选项'); return; }
 
         let thresholdMentions = 2, thresholdDays = 30;
         if (byMentions) {
-          const input = prompt(`è¯·è¾“å…¥æåŠæ¬¡æ•°é˜ˆå€¼ï¼ˆå°äºŽæ­¤å€¼å°†è¢«åˆ é™¤ï¼‰ï¼š`, '2');
+          const input = prompt(`请输入提及次数阈值（小于此值将被删除）：`, '2');
           if (input !== null) thresholdMentions = parseInt(input) || 2;
         }
         if (byDays) {
-          const input = prompt(`è¯·è¾“å…¥å¤©æ•°é˜ˆå€¼ï¼ˆè¶…è¿‡æ­¤å¤©æ•°æœªæ›´æ–°çš„å°†è¢«åˆ é™¤ï¼‰ï¼š`, '30');
+          const input = prompt(`请输入天数阈值（超过此天数未更新的将被删除）：`, '30');
           if (input !== null) thresholdDays = parseInt(input) || 30;
         }
 
@@ -2087,20 +2087,20 @@ Mï¼š${aiText}`;
           return keep;
         });
 
-        if (filtered.length === facts.length) { alert('æ²¡æœ‰è®°å¿†è¢«é—å¿˜'); return; }
-        if (!confirm(`å°†åˆ é™¤ ${facts.length - filtered.length} æ¡è®°å¿†ï¼Œç¡®å®šå—ï¼Ÿ`)) return;
+        if (filtered.length === facts.length) { alert('没有记忆被遗忘'); return; }
+        if (!confirm(`将删除 ${facts.length - filtered.length} 条记忆，确定吗？`)) return;
         localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(filtered));
         rebuildGraph();
         renderMemoryManager();
-        alert(`é—å¿˜å®Œæˆï¼å‰©ä½™ ${filtered.length} æ¡è®°å¿†ã€‚`);
+        alert(`遗忘完成！剩余 ${filtered.length} 条记忆。`);
       }
 
       function renderMemoryManager() {
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
         const container = document.getElementById('memoryDisplay');
-        if (!facts.length) { container.innerHTML = '<div style="padding:12px;color:var(--text-secondary);">æš‚æ— è®°å¿†ï¼ŒèŠå¤©åŽè‡ªåŠ¨æå–æˆ–ç‚¹å‡»â€œå¼€å§‹æ•´åˆâ€ã€‚</div>'; return; }
+        if (!facts.length) { container.innerHTML = '<div style="padding:12px;color:var(--text-secondary);">暂无记忆，聊天后自动提取或点击“开始整合”。</div>'; return; }
         let html = '';
-        facts.forEach((f, index) => { html += `<div class="memory-item" data-index="${index}"><div class="meta"><span><strong>ä¸»ä½“ï¼š</strong>${f.entity}</span><span><strong>å…³ç³»ï¼š</strong>${f.relation}</span><span><strong>å¯¹è±¡ï¼š</strong>${f.object}</span><span><strong>ç±»åž‹ï¼š</strong>${({preference:"åå¥½",relationship:"å…³ç³»",identity:"é•¿æœŸä¿¡æ¯",plan:"è®¡åˆ’",constraint:"çº¦æŸ",event:"é‡è¦ç»åŽ†",habit:"ä¹ æƒ¯",other:"å…¶ä»–"})[f.type] || "å…¶ä»–"}</span><span><strong>çŠ¶æ€ï¼š</strong>${f.status === 'stable' ? 'ðŸŸ¢ ç¨³å®š' : 'ðŸŸ¡ è§‚å¯Ÿä¸­'}</span><span><strong>ç¨³å®šåº¦ï¼š</strong>${f.stability || 1}/3</span><span><strong>é‡è¦åº¦ï¼š</strong>${f.importance || 3}/5</span><span><strong>ç½®ä¿¡åº¦ï¼š</strong>${Math.round((Number(f.confidence) || 0.7) * 100)}%</span><span><strong>æåŠï¼š</strong>${f.mentions || 1}</span><span><strong>æ›´æ–°æ—¶é—´ï¼š</strong>${new Date(f.lastSeen || f.time || Date.now()).toLocaleDateString()}</span></div><div class="fact-text" id="fact-display-${index}">${f.fact}</div>${f.conflict ? '<div style="font-size:.72rem;color:#ff9800;">âš ï¸ è¿™æ¡è®°å¿†å¯èƒ½ä¸Žè¾ƒæ—©çš„ä¿¡æ¯å‘ç”Ÿå˜åŒ–ï¼ŒAI ä¼šä¼˜å…ˆå‚è€ƒè¾ƒæ–°çš„è¡¨è¾¾ã€‚</div>' : ''}${f.status === 'candidate' ? '<div style="font-size:.72rem;color:var(--text-secondary);">ðŸŸ¡ å€™é€‰è®°å¿†ï¼šAI ä¼šç»§ç»­è§‚å¯Ÿå®ƒæ˜¯å¦ç¨³å®šå‡ºçŽ°ï¼›å†æ¬¡å‡ºçŽ°æˆ–æ˜Žç¡®è¦æ±‚è®°ä½åŽï¼Œæ‰ä¼šè¿›å…¥é•¿æœŸè®°å¿†ã€‚</div>' : ''}<div class="fact-edit" id="fact-edit-${index}" style="display:none;"><input class="memory-edit-input" id="edit-entity-${index}" value="${f.entity}" placeholder="å®žä½“"><input class="memory-edit-input" id="edit-relation-${index}" value="${f.relation}" placeholder="å…³ç³»"><input class="memory-edit-input" id="edit-object-${index}" value="${f.object}" placeholder="å¯¹è±¡"><textarea class="memory-edit-input" id="edit-fact-${index}" rows="2" style="resize:vertical;">${f.fact}</textarea></div><div class="actions"><button class="edit-btn" onclick="window.toggleEditFact(${index})">âœï¸ ç¼–è¾‘</button><button class="del-btn" onclick="window.deleteFact(${index})">ðŸ—‘ï¸ åˆ é™¤</button><button class="edit-btn" id="save-edit-${index}" style="display:none;background:#4caf50;" onclick="window.saveFact(${index})">ðŸ’¾ ä¿å­˜</button><button class="edit-btn" id="cancel-edit-${index}" style="display:none;background:#888;" onclick="window.cancelEditFact(${index})">å–æ¶ˆ</button></div></div>`; });
+        facts.forEach((f, index) => { html += `<div class="memory-item" data-index="${index}"><div class="meta"><span><strong>主体：</strong>${f.entity}</span><span><strong>关系：</strong>${f.relation}</span><span><strong>对象：</strong>${f.object}</span><span><strong>类型：</strong>${({preference:"偏好",relationship:"关系",identity:"长期信息",plan:"计划",constraint:"约束",event:"重要经历",habit:"习惯",other:"其他"})[f.type] || "其他"}</span><span><strong>状态：</strong>${f.status === 'stable' ? '🟢 稳定' : '🟡 观察中'}</span><span><strong>稳定度：</strong>${f.stability || 1}/3</span><span><strong>重要度：</strong>${f.importance || 3}/5</span><span><strong>置信度：</strong>${Math.round((Number(f.confidence) || 0.7) * 100)}%</span><span><strong>提及：</strong>${f.mentions || 1}</span><span><strong>更新时间：</strong>${new Date(f.lastSeen || f.time || Date.now()).toLocaleDateString()}</span></div><div class="fact-text" id="fact-display-${index}">${f.fact}</div>${f.conflict ? '<div style="font-size:.72rem;color:#ff9800;">⚠️ 这条记忆可能与较早的信息发生变化，AI 会优先参考较新的表达。</div>' : ''}${f.status === 'candidate' ? '<div style="font-size:.72rem;color:var(--text-secondary);">🟡 候选记忆：AI 会继续观察它是否稳定出现；再次出现或明确要求记住后，才会进入长期记忆。</div>' : ''}<div class="fact-edit" id="fact-edit-${index}" style="display:none;"><input class="memory-edit-input" id="edit-entity-${index}" value="${f.entity}" placeholder="实体"><input class="memory-edit-input" id="edit-relation-${index}" value="${f.relation}" placeholder="关系"><input class="memory-edit-input" id="edit-object-${index}" value="${f.object}" placeholder="对象"><textarea class="memory-edit-input" id="edit-fact-${index}" rows="2" style="resize:vertical;">${f.fact}</textarea></div><div class="actions"><button class="edit-btn" onclick="window.toggleEditFact(${index})">✏️ 编辑</button><button class="del-btn" onclick="window.deleteFact(${index})">🗑️ 删除</button><button class="edit-btn" id="save-edit-${index}" style="display:none;background:#4caf50;" onclick="window.saveFact(${index})">💾 保存</button><button class="edit-btn" id="cancel-edit-${index}" style="display:none;background:#888;" onclick="window.cancelEditFact(${index})">取消</button></div></div>`; });
         container.innerHTML = html;
       }
 
@@ -2110,7 +2110,7 @@ Mï¼š${aiText}`;
         const saveBtn = document.getElementById(`save-edit-${index}`);
         const cancelBtn = document.getElementById(`cancel-edit-${index}`);
         const editBtn = document.querySelector(`.memory-item[data-index="${index}"] .edit-btn`);
-        if (edit.style.display === 'none') { edit.style.display = 'block'; display.style.display = 'none'; saveBtn.style.display = 'inline-block'; cancelBtn.style.display = 'inline-block'; editBtn.textContent = 'âœï¸ å–æ¶ˆç¼–è¾‘'; }
+        if (edit.style.display === 'none') { edit.style.display = 'block'; display.style.display = 'none'; saveBtn.style.display = 'inline-block'; cancelBtn.style.display = 'inline-block'; editBtn.textContent = '✏️ 取消编辑'; }
         else { cancelEditFact(index); }
       };
       window.cancelEditFact = function(index) {
@@ -2119,7 +2119,7 @@ Mï¼š${aiText}`;
         const saveBtn = document.getElementById(`save-edit-${index}`);
         const cancelBtn = document.getElementById(`cancel-edit-${index}`);
         const editBtn = document.querySelector(`.memory-item[data-index="${index}"] .edit-btn`);
-        edit.style.display = 'none'; display.style.display = 'block'; saveBtn.style.display = 'none'; cancelBtn.style.display = 'none'; editBtn.textContent = 'âœï¸ ç¼–è¾‘';
+        edit.style.display = 'none'; display.style.display = 'block'; saveBtn.style.display = 'none'; cancelBtn.style.display = 'none'; editBtn.textContent = '✏️ 编辑';
       };
       window.saveFact = function(index) {
         const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
@@ -2128,6 +2128,267 @@ Mï¼š${aiText}`;
         const relation = document.getElementById(`edit-relation-${index}`).value.trim();
         const object = document.getElementById(`edit-object-${index}`).value.trim();
         const fact = document.getElementById(`edit-fact-${index}`).value.trim();
-        if (!entity || !fact) { alert('å®žä½“å’Œäº‹å®žä¸èƒ½ä¸ºç©º'); return; }
+        if (!entity || !fact) { alert('实体和事实不能为空'); return; }
         facts[index] = { ...facts[index], entity, relation, object, fact };
-        localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); renderMemoryManager(); r
+        localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); renderMemoryManager(); refreshSystemPrompt(); renderAll();
+      };
+      window.deleteFact = function(index) {
+        if (!confirm('确定删除这条记忆吗？')) return;
+        const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
+        if (index >= facts.length) return; facts.splice(index, 1);
+        localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); renderMemoryManager(); refreshSystemPrompt(); renderAll();
+      };
+      function addNewFact() {
+        const entity = prompt('请输入实体名'); if (!entity) return;
+        const relation = prompt('请输入关系') || '';
+        const object = prompt('请输入对象') || '';
+        const fact = prompt('请输入完整事实句子（第三人称）'); if (!fact) return;
+        const facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
+        facts.push({ entity, relation, object, fact, quote: '手动添加', type: 'other', importance: 4, confidence: 1, time: Date.now(), lastSeen: Date.now(), mentions: 1 });
+        localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts)); rebuildGraph(); renderMemoryManager(); refreshSystemPrompt(); renderAll();
+      }
+      document.getElementById('addMemoryBtn').addEventListener('click', addNewFact);
+      document.getElementById('mergeMemoryBtn').addEventListener('click', mergeDuplicateFacts);
+      document.getElementById('forgetMemoryBtn').addEventListener('click', forgetFacts);
+      document.getElementById('clearMemoryBtn').addEventListener('click', function() {
+        if (confirm('确定清空所有自动提取的记忆吗？（不会删除聊天记录）')) {
+          localStorage.removeItem(MEMORY_FACTS_KEY); localStorage.removeItem(MEMORY_GRAPH_KEY);
+          alert('记忆库已清空！'); refreshSystemPrompt(); renderAll();
+          document.getElementById('moreMenu').classList.remove('active');
+          if (document.getElementById('memoryModal').classList.contains('active')) renderMemoryManager();
+        }
+      });
+      document.getElementById('memoryViewBtn').addEventListener('click', function() { renderMemoryManager(); document.getElementById('memoryModal').classList.add('active'); });
+      document.getElementById('memoryCloseBtn').addEventListener('click', function() { document.getElementById('memoryModal').classList.remove('active'); });
+      document.getElementById('memoryModal').addEventListener('click', function(e) { if (e.target === this) this.classList.remove('active'); });
+
+      let reprocessingPaused = false, reprocessingActive = false;
+      function updateProgressUI(current, total, paused = false) {
+        const progressDiv = document.getElementById('progressDisplay');
+        if (total > 0) { progressDiv.style.display = 'flex'; document.getElementById('progressNum').textContent = current; document.getElementById('progressTotal').textContent = total; } else progressDiv.style.display = 'none';
+        const btn = document.getElementById('pauseResumeBtn'); btn.textContent = paused ? '▶️ 继续' : '⏸️ 暂停';
+        const pauseBtn = document.getElementById('pauseReprocessBtn');
+        if (paused) { pauseBtn.textContent = '▶️ 继续整合'; pauseBtn.style.display = 'block'; } else { pauseBtn.textContent = '⏸️ 暂停整合'; pauseBtn.style.display = reprocessingActive ? 'block' : 'none'; }
+      }
+      async function reprocessAllHistory(continueFromProgress = false) {
+        const savedIndex = parseInt(localStorage.getItem(REPROGRESS_KEY) || '0');
+        if (!continueFromProgress && savedIndex > 0) { if (!confirm(`检测到上次整合在 ${savedIndex} 条处中断，是否继续？\n（选“取消”将从头开始）`)) localStorage.removeItem(REPROGRESS_KEY); else continueFromProgress = true; }
+        const history = JSON.parse(localStorage.getItem(FULL_HISTORY_KEY) || '[]');
+        if (history.length === 0) { alert('没有历史记录'); return; }
+        const pairs = []; let i = 0;
+        while (i < history.length) { if (history[i].role === 'user' && i+1 < history.length && history[i+1].role === 'assistant') { pairs.push({ user: history[i].content, assistant: history[i+1].content }); i += 2; } else i++; }
+        if (pairs.length === 0) { alert('没有找到成对的对话'); return; }
+        let startIndex = continueFromProgress ? parseInt(localStorage.getItem(REPROGRESS_KEY) || '0') : 0;
+        if (startIndex >= pairs.length) { alert('所有对话已整合完毕，无需重复。如需重新整合，请先清空记忆库。'); localStorage.removeItem(REPROGRESS_KEY); return; }
+        reprocessingActive = true; reprocessingPaused = false;
+        document.getElementById('reprocessBtn').style.display = 'none'; document.getElementById('pauseReprocessBtn').style.display = 'block';
+        updateProgressUI(startIndex, pairs.length, false);
+        const existingFacts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
+        const existingQuotes = new Set(existingFacts.map(f => f.quote));
+        let count = startIndex;
+        for (let idx = startIndex; idx < pairs.length; idx++) {
+          while (reprocessingPaused) { await new Promise(r => setTimeout(r, 500)); if (!reprocessingActive) return; }
+          const pair = pairs[idx];
+          if (!existingQuotes.has(pair.user)) {
+            await extractAndStoreFacts(pair.user, pair.assistant, true);
+          } else {
+            console.log(`跳过已存在的quote: ${pair.user}`);
+          }
+          count = idx + 1;
+          localStorage.setItem(REPROGRESS_KEY, count.toString());
+          updateProgressUI(count, pairs.length, false);
+          if (idx % 5 === 0) await new Promise(r => setTimeout(r, 200));
+        }
+        localStorage.removeItem(REPROGRESS_KEY); rebuildGraph();
+        alert(`整合完成！共处理 ${count} 对对话。可在记忆面板中查看/编辑。`);
+        refreshSystemPrompt(); renderAll(); reprocessingActive = false;
+        document.getElementById('reprocessBtn').style.display = 'block'; document.getElementById('pauseReprocessBtn').style.display = 'none';
+        updateProgressUI(0, 0, false);
+      }
+      function togglePauseReprocess() { if (!reprocessingActive) return; reprocessingPaused = !reprocessingPaused; updateProgressUI(parseInt(localStorage.getItem(REPROGRESS_KEY) || '0'), parseInt(document.getElementById('progressTotal').textContent) || 0, reprocessingPaused); document.getElementById('pauseReprocessBtn').textContent = reprocessingPaused ? '▶️ 继续整合' : '⏸️ 暂停整合'; }
+      document.getElementById('reprocessBtn').addEventListener('click', function() { document.getElementById('moreMenu').classList.remove('active'); const saved = localStorage.getItem(REPROGRESS_KEY); if (saved && parseInt(saved) > 0) { if (confirm(`有未完成的整合任务（进度 ${saved} 条），是否继续？\n（点“取消”将从头开始）`)) { reprocessAllHistory(true); return; } else localStorage.removeItem(REPROGRESS_KEY); } reprocessAllHistory(false); });
+      document.getElementById('pauseReprocessBtn').addEventListener('click', function() { document.getElementById('moreMenu').classList.remove('active'); togglePauseReprocess(); });
+      document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
+
+      // ========== 核心发送函数（带调试日志） ==========
+      async function sendToAPI(text, attachments = []) {
+        const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
+        let userMsg;
+        if (isValidEdit) {
+          const parent = messages[editingIdx];
+          if (!parent.history) {
+            const oldReply = (editingIdx+1 < messages.length && messages[editingIdx+1].role === 'assistant') ? messages[editingIdx+1].content : '';
+            parent.history = [{ content: parent.content, reply: oldReply, time: parent.time }];
+            parent.historyIndex = 0;
+          } else {
+            const curReply = (editingIdx+1 < messages.length && messages[editingIdx+1].role === 'assistant') ? messages[editingIdx+1].content : '';
+            parent.history[parent.historyIndex] = { content: parent.content, reply: curReply, time: parent.time };
+          }
+          messages = messages.slice(0, editingIdx + 1);
+          parent.content = text;
+          if (attachments && attachments.length) parent.attachments = attachments.slice(0, MAX_IMAGE_COUNT);
+          parent.time = Date.now();
+          parent.history.push({ content: text, reply: '', time: parent.time });
+          parent.historyIndex = parent.history.length - 1;
+          userMsg = parent;
+          editingIdx = -1;
+        } else {
+          editingIdx = -1;
+          userMsg = { role: 'user', content: text, attachments: Array.isArray(attachments) ? attachments.slice(0, MAX_IMAGE_COUNT) : [], id: nextId++, time: Date.now(), parentId: null, history: null, historyIndex: 0 };
+          const last = messages[messages.length - 1];
+          if (last && last.role !== 'system') userMsg.parentId = last.id;
+          messages.push(userMsg);
+        }
+        fullHistory.push({ role: 'user', content: text, time: userMsg.time }); saveFullHistory(); renderAll(); saveAll();
+        saveDraft(DRAFT_CHAT, '');
+        const load = document.createElement('div'); load.className = 'message-row assistant'; load.innerHTML = '<div class="time-label">…</div><div class="bubble-row"><div class="bubble">M正在思考...</div></div>'; chatBox.appendChild(load); chatBox.scrollTop = chatBox.scrollHeight;
+        try {
+          refreshSystemPrompt();
+          const apiMsgs = getApiMessages().map(m => ({ role: m.role, content: getApiContent(m) }));
+          const target = getRequestTarget();
+          const model = target.model;
+          const baseUrl = target.url; // OpenCode Go Worker 或 DeepSeek 官方 API
+          
+          // ====== 调试输出：在控制台打印实际请求的 URL ======
+          console.log('🚀 实际请求地址:', baseUrl);
+          console.log('📦 请求体:', { model, messages: apiMsgs });
+          const approxChars = apiMsgs.reduce((n, m) => n + String(m.content || '').length, 0);
+          console.log(`📉 本次请求上下文约 ${approxChars} 字符（仅为粗略估算，不等于实际计费 Token）`);
+
+          const res = await workerFetch('', { 
+            method: 'POST', 
+            headers: target.headers, 
+            body: JSON.stringify({ provider: target.provider, model: model, messages: apiMsgs, stream: false, temperature: 0.5 }) 
+          });
+          load.remove();
+          
+          if (!res.ok) {
+            let errorDetail = `请求失败 (HTTP ${res.status})`;
+            try {
+              const errJson = await res.json();
+              if (errJson.error?.message) errorDetail = errJson.error.message;
+              else if (errJson.message) errorDetail = errJson.message;
+            } catch(e) {
+              try {
+                const textBody = await res.text();
+                if (textBody) errorDetail = textBody.substring(0, 200);
+              } catch(e2) {}
+            }
+            throw new Error(`❌ 请求地址: ${baseUrl} 失败，错误: ${errorDetail} (状态码: ${res.status})`);
+          }
+          
+          const data = await res.json();
+          const reply = data.choices[0].message.content;
+          const aiMsg = { role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id };
+          messages.push(aiMsg);
+          fullHistory.push({ role: 'assistant', content: reply, time: aiMsg.time });
+          saveFullHistory();
+          if (userMsg.history && userMsg.history.length > 0) userMsg.history[userMsg.historyIndex].reply = reply;
+          renderAll(); saveAll();
+          const medKeywords = ['吃过药', '吃了药', '吃药了', '已经吃了', '吃过了'];
+          if (medKeywords.some(kw => text.includes(kw))) {
+              let facts = JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]');
+              const today = new Date().toLocaleDateString();
+              const alreadyExists = facts.some(f => f.fact && f.fact.includes('今天已吃药') && f.fact.includes(today));
+              if (!alreadyExists) {
+                  facts.push({
+                      entity: '城月',
+                      relation: '状态',
+                      object: '吃药',
+                      fact: `城月今天（${today}）已经吃过药了，不需要再提醒。`,
+                      quote: text,
+                      time: Date.now(),
+                      mentions: 1
+                  });
+                  localStorage.setItem(MEMORY_FACTS_KEY, JSON.stringify(facts));
+                  rebuildGraph();
+                  console.log('✅ 已强制写入“今天已吃药”记忆');
+              }
+          }
+
+          if (reply) { extractAndStoreFacts(text, reply).catch(e => console.warn(e)); }
+          await compressHistoryIfNeeded();
+        } catch(e) { 
+          load.remove(); 
+          // 显示包含请求地址的错误信息
+          addMsg('assistant', `❌ ${e.message}`); 
+        }
+      }
+
+      $('imageUploadBtn').onclick = () => {
+        if($('imageUploadBtn').disabled){
+          const select = $('modelSelect');
+          const visionOption = select ? Array.from(select.options).find(o => isVisionModel(o.value)) : null;
+
+          if(visionOption){
+            select.value = visionOption.value;
+            setSelectedModel(visionOption.value);
+            updateImageUploadAvailability();
+            $('imageInput').click();
+            return;
+          }
+
+          alert('当前接口没有可用的 Vision 模型，请先刷新模型列表。');
+          return;
+        }
+        $('imageInput').click();
+      };
+
+      $('imageInput').addEventListener('change', async (e) => {
+        await handleImageFiles(e.target.files);
+        e.target.value = '';
+      });
+
+      $('sendBtn').onclick = () => {
+        const t = $('userInput').value.trim();
+        if (!t && !pendingImages.length) return;
+
+        if(pendingImages.length && !isVisionModel(getSelectedModel())){
+          alert('当前模型不支持图片输入，请先切换到 Vision 模型。');
+          return;
+        }
+
+        const imgs = pendingImages.slice();
+        pendingImages = [];
+        updateImagePreview();
+
+        $('userInput').value = '';
+        sendToAPI(t, imgs);
+      };
+
+      $('userInput').onkeydown = e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          $('sendBtn').click();
+        }
+      };
+
+      
+      $('exportBtn').onclick = () => {
+        const dataToExport = fullHistory.length > 0 ? fullHistory : messages.filter(m => m.role !== 'system').map(m => ({
+          role: m.role,
+          content: m.content,
+          time: m.time || Date.now()
+        }));
+        if (!dataToExport.length) return alert('无记录');
+        const exportData = {
+          messages: dataToExport.map(m => ({
+            role: m.role,
+            content: m.content,
+            time: m.time,
+            formattedTime: fullDateTime(m.time || Date.now())
+          })),
+          globalSetting: globalSetting || '',
+          memoryFacts: JSON.parse(localStorage.getItem(MEMORY_FACTS_KEY) || '[]'),
+          emotionState: emotionState
+        };
+        const b = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b);
+        a.download = `chat-m-${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.json`;
+        a.click();
+      };
+
+      (function auto() {
+        const today = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-');
+        if (localStorage.getItem(AEK) === today) 
