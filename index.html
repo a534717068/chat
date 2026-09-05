@@ -266,8 +266,7 @@
       <div style="font-weight:700;font-size:1rem;">💭 情绪控制</div>
       <div class="format-hint">这里调整的是阿慕的“回复策略状态”，不会改写聊天记录或长期记忆。</div>
       <div class="emotion-mode">
-        <span id="emotionModeText">当前：自动模式</span>
-        
+        <span id="emotionModeText">当前：🤖 自动模式（可手动微调，之后仍会继续自动变化）</span>
       </div>
       <div class="emotion-grid">
         <div class="emotion-row"><label>当前情绪</label><select id="emotionMood"><option>平静</option><option>开心</option><option>低落</option><option>烦躁</option><option>生气</option><option>失望</option><option>想念</option><option>安心</option></select><span></span></div>
@@ -281,7 +280,7 @@
       </div>
       <div class="emotion-status" id="emotionStatus">最近原因：初始状态</div>
       <div class="modal-buttons">
-        <button class="btn-import" id="emotionApplyBtn" title="自动模式下为手动微调；不会关闭自动情绪变化">应用调整</button>
+        <button class="btn-import" id="emotionApplyBtn" title="调整当前情绪后，之后仍会继续自动变化">应用调整</button>
         
         <button class="btn-cancel" id="emotionResetBtn">重置情绪</button>
         <button class="btn-cancel" id="emotionCloseBtn">关闭</button>
@@ -315,7 +314,7 @@
 
   <script>
     (function() {
-      window.__M_WORKER_VERSION__ = '2026-09-03-v12-emotion-strategy';
+      window.__M_WORKER_VERSION__ = '2026-09-05-v12.4-emotion-auto-adjust';
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
@@ -374,7 +373,6 @@
             disappointment: clampNum(x.disappointment, 0, 100),
             longing: clampNum(x.longing, 0, 100),
             irritation: clampNum(x.irritation, 0, 100),
-            manualMode: x.manualMode === true,
             lastUpdated: Number(x.lastUpdated) || Date.now()
           };
         } catch (e) { return { ...DEFAULT_EMOTION_STATE }; }
@@ -399,7 +397,6 @@
       }
 
       function updateEmotionFromUserText(text) {
-        if (emotionState.manualMode) { emotionState.lastUpdated = Date.now(); saveEmotionState(false); return; }
         decayEmotionState();
         const t = String(text || '').trim();
         if (!t) return;
@@ -481,16 +478,14 @@
       function updateEmotionPanel() {
         const map = {emotionIntensity:'intensity',emotionAffection:'affection',emotionTrust:'trust',emotionSafety:'safety',emotionDisappointment:'disappointment',emotionLonging:'longing',emotionIrritation:'irritation'};
         Object.keys(map).forEach(id=>{ const el=$(id), out=$(id+'Val'); if(el&&out) out.textContent=Math.round(Number(el.value)||0); });
-        const manual=emotionState.manualMode===true;
-        $('emotionModeText').textContent=manual?'当前：（自动情绪不会覆盖你的调整）':'当前：🤖 自动模式（可手动微调，之后仍会继续自动变化）';
-        $('emotionModeBtn').textContent=manual?'切换为自动模式':'切换为手动锁定';
+        $('emotionModeText').textContent='当前：🤖 自动模式（可手动微调，之后仍会继续自动变化）';
         $('emotionStatus').textContent='最近原因：'+(emotionState.lastReason||'无');
       }
       function applyEmotionPanel() {
         const fields = ['mood','intensity','affection','trust','safety','disappointment','longing','irritation'];
         const ids = ['emotionMood','emotionIntensity','emotionAffection','emotionTrust','emotionSafety','emotionDisappointment','emotionLonging','emotionIrritation'];
         fields.forEach((f,i)=>{ const el=$(ids[i]); if(el) emotionState[f]=f==='mood'?el.value:clampNum(el.value,0,100); });
-        emotionState.lastReason=emotionState.manualMode ? '手动调整（手动锁定）' : '手动微调（自动模式）';
+        emotionState.lastReason='手动微调（仍保持自动变化）';
         emotionState.lastUpdated=Date.now();
         saveEmotionState(true);
         refreshSystemPrompt();
@@ -747,6 +742,7 @@
       migrateMemorySchema();
       // V12 情绪状态迁移：旧版本没有该字段时使用温和默认值，不影响现有聊天/记忆。
       emotionState = loadEmotionState();
+      delete emotionState.manualMode;
       decayEmotionState();
       saveEmotionState(false);
 
@@ -1184,8 +1180,6 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
       $('emotionModal').onclick = e => { if(e.target === $('emotionModal')) $('emotionModal').classList.remove('active'); };
       ['emotionIntensity','emotionAffection','emotionTrust','emotionSafety','emotionDisappointment','emotionLonging','emotionIrritation'].forEach(id => { const el=$(id); if(el) el.oninput=updateEmotionPanel; });
       $('emotionApplyBtn').onclick = () => { applyEmotionPanel(); $('emotionModal').classList.remove('active'); };
-      $('emotionModeBtn').onclick = () => { emotionState.manualMode=!emotionState.manualMode; emotionState.lastReason=emotionState.manualMode?'切换为手动锁定':'恢复自动模式'; emotionState.lastUpdated=Date.now(); saveEmotionState(true); refreshSystemPrompt(); updateEmotionPanel(); };
-      $('emotionAutoBtn').onclick = () => { emotionState.lastReason='恢复自动模式'; emotionState.lastUpdated=Date.now(); saveEmotionState(true); refreshSystemPrompt(); updateEmotionPanel(); };
       $('emotionResetBtn').onclick = () => { if(confirm('把情绪恢复为默认状态吗？')) { resetEmotionState('手动重置'); saveEmotionState(true); refreshSystemPrompt(); updateEmotionPanel(); } };
 
       $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active'); 
