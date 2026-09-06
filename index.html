@@ -2601,8 +2601,19 @@ M：${aiText}`;
       }
 
       // 判断 roll 返回是否处于“等待玩家完成任务”状态。
+      // 优先解析 structuredContent.tile：等于 "task" 才等待；其它（如 chance）不等待。
       function mcpWaitingForContinue(resultStr) {
         const s = String(resultStr || '');
+        let obj = null;
+        try { obj = JSON.parse(s); } catch (_) {}
+        if (obj && typeof obj === 'object') {
+          let sc = obj.structuredContent;
+          if (typeof sc === 'string') { try { sc = JSON.parse(sc); } catch (_) {} }
+          if (sc && typeof sc === 'object' && sc.tile !== undefined) {
+            return String(sc.tile).toLowerCase() === 'task';
+          }
+        }
+        // 无结构化字段或无法解析时，回退关键词判断。
         return /等待玩家|等待你|等待用户|等待输入|等待继续|等待操作|需要玩家|需要你|需要用户|请完成|请执行|完成任务|待完成|待操作|等待.*任务|需要.*任务|waiting_for|requires_action|needs_player|player_action|pending_task/i.test(s);
       }
 
