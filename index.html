@@ -317,11 +317,12 @@
       window.__M_WORKER_VERSION__ = '2026-09-05-v12.4-emotion-auto-adjust';
       const $ = id => document.getElementById(id);
 
-      // ===== V14.2：输入框身份追踪 + PointerDown 发送硬绑定 =====
+      // ===== V14.3：输入框身份追踪 + PointerDown 发送硬绑定 =====
       // 目的：确认“肉眼看到的文字”和 JS 读取到的 userInput 是否是同一个 DOM/value。
-      window.__M_V14_2_BUILD__ = '2026-09-06-V14.2-INPUT-TRACE';
-      window.__M_V14_SEND_STATE__ = '🟢 V14.2 输入追踪已启动';
-      window.__M_V14_TRACE__ = { lastInputLen: 0, lastEvent: 'init', lastValue: '', count: 0 };
+      window.__M_V14_2_BUILD__ = '2026-09-06-V14.3-REAL-INPUT-FIX';
+      window.__M_V14_SEND_STATE__ = '🟢 V14.3 输入追踪已启动';
+      window.__M_V14_TRACE__ = { lastInputLen: 0, lastEvent: 'init', lastValue: '', count: 0, realInputIndex: -1 };
+      window.__M_REAL_INPUT__ = null;
       window.__M_V14_SEND_LOCK__ = 0;
 
       function __m142_getInputInfo() {
@@ -351,7 +352,36 @@
         window.__M_V14_TRACE__.activeIsUserInput = info.activeIsUserInput;
         window.__M_V14_TRACE__.lastEvent = text;
         window.__M_V14_TRACE__.lastSnapshot = info;
-        console.warn('[V14.2]', text, info);
+        console.warn('[V14.3]', text, info);
+      }
+
+      // V14.3：不要再假设“第一个可见 userInput”就是用户真正输入的那个。
+      // 只要 input 事件发生过，就把实际产生输入事件的 DOM 节点锁定为真实输入框。
+      function __m143_findRealInput() {
+        const nodes = Array.from(document.querySelectorAll('#userInput'));
+        const remembered = window.__M_REAL_INPUT__;
+        if (remembered && remembered.isConnected) return remembered;
+
+        // 如果页面动态复制了 userInput，优先选择当前 value 最长的节点；
+        // 其次选择可见、未禁用的节点。
+        const usable = nodes.filter(n => !n.disabled);
+        if (!usable.length) return nodes[0] || null;
+        return usable.slice().sort((a,b) => {
+          const av = String(a.value || '').length, bv = String(b.value || '').length;
+          if (bv !== av) return bv - av;
+          const ad = !!(a.offsetWidth || a.offsetHeight || a.getClientRects().length);
+          const bd = !!(b.offsetWidth || b.offsetHeight || b.getClientRects().length);
+          return Number(bd) - Number(ad);
+        })[0] || null;
+      }
+
+      function __m143_cleanupDuplicateInputs() {
+        const nodes = Array.from(document.querySelectorAll('#userInput'));
+        if (nodes.length <= 1) return;
+        // 不删除任何节点，避免破坏页面；只记录并锁定真正产生 input 事件的节点。
+        const real = __m143_findRealInput();
+        window.__M_REAL_INPUT__ = real;
+        console.warn('[V14.3 DUPLICATE userInput]', nodes.map((n,i)=>({index:i, valueLen:String(n.value||'').length, disabled:!!n.disabled, visible:!!(n.offsetWidth||n.offsetHeight||n.getClientRects().length), same:n===real})));
       }
 
       function __m142_sendFromSnapshot(source) {
@@ -360,11 +390,11 @@
         window.__M_V14_SEND_LOCK__ = now;
 
         const nodes = Array.from(document.querySelectorAll('#userInput'));
-        const input = nodes.find(n => n.offsetWidth || n.offsetHeight || n.getClientRects().length) || nodes[0];
+        const input = __m143_findRealInput();
         const btn = document.getElementById('sendBtn');
         if (!input || !btn) {
           __m142_setState('🔴 ' + source + '：找不到输入框/发送按钮');
-          alert('V14.2错误：找不到输入框或发送按钮');
+          alert('V14.3错误：找不到输入框或发送按钮');
           return;
         }
 
@@ -376,7 +406,8 @@
 
         if (!text && !imgs.length) {
           const info = __m142_getInputInfo();
-          __m142_setState('🟡 ' + source + '：仍读取到空内容｜DOM数量=' + info.count + '｜焦点=' + (info.activeId || '无') + '｜可见value长度=' + ((info.values.find(x => x.displayed) || {}).valueLen || 0));
+          const realIndex = nodes.indexOf(input);
+          __m142_setState('🟡 ' + source + '：仍读取到空内容｜DOM数量=' + info.count + '｜真实输入框序号=' + realIndex + '｜焦点=' + (info.activeId || '无') + '｜各value长度=' + info.values.map(x=>x.valueLen).join('/'));
           return;
         }
 
@@ -395,11 +426,11 @@
           Promise.resolve(sendToAPI(text, imgs)).then(function() {
             __m142_setState('🟢 ' + source + '：sendToAPI 已调用｜发送=' + text.length + '字');
           }).catch(function(err) {
-            console.error('V14.2 sendToAPI error:', err);
+            console.error('V14.3 sendToAPI error:', err);
             __m142_setState('🔴 sendToAPI错误：' + (err && err.message ? err.message : err));
           });
         } catch (err) {
-          console.error('V14.2 send handler error:', err);
+          console.error('V14.3 send handler error:', err);
           __m142_setState('🔴 发送处理错误：' + (err && err.message ? err.message : err));
           input.value = text;
         }
@@ -412,22 +443,33 @@
         const id = el.id || '';
         const val = String(el.value || '');
         if (id === 'userInput' || el.tagName === 'TEXTAREA') {
+          window.__M_REAL_INPUT__ = el;
+          window.__M_V14_TRACE__.realInputIndex = Array.from(document.querySelectorAll('#userInput')).indexOf(el);
           window.__M_V14_TRACE__.lastInputElement = { id, tag: el.tagName, valueLen: val.length, value: val.slice(0, 80) };
           window.__M_V14_TRACE__.lastInputLen = val.length;
           window.__M_V14_TRACE__.lastValue = val.slice(0, 80);
-          console.warn('[V14.2 INPUT]', { id, tag: el.tagName, valueLen: val.length, value: val.slice(0, 80) });
+          console.warn('[V14.3 INPUT]', { id, tag: el.tagName, valueLen: val.length, value: val.slice(0, 80) });
         }
       }, true);
 
+      // 监控动态 DOM：如果某段代码/浏览器运行时再次制造第二个 userInput，
+      // V14.3 不会删除它，而是确保发送逻辑仍然指向真正产生输入的节点。
+      new MutationObserver(function() {
+        const nodes = document.querySelectorAll('#userInput');
+        if (nodes.length > 1) __m143_cleanupDuplicateInputs();
+      }).observe(document.documentElement, { childList: true, subtree: true });
+
+      setTimeout(__m143_cleanupDuplicateInputs, 0);
+
       document.addEventListener('focusin', function(e) {
         if (e.target && (e.target.id === 'userInput' || e.target.tagName === 'TEXTAREA')) {
-          console.warn('[V14.2 FOCUS]', __m142_getInputInfo());
+          console.warn('[V14.3 FOCUS]', __m142_getInputInfo());
         }
       }, true);
 
       document.addEventListener('blur', function(e) {
         if (e.target && (e.target.id === 'userInput' || e.target.tagName === 'TEXTAREA')) {
-          console.warn('[V14.2 BLUR]', { targetId: e.target.id, targetValueLen: String(e.target.value || '').length }, __m142_getInputInfo());
+          console.warn('[V14.3 BLUR]', { targetId: e.target.id, targetValueLen: String(e.target.value || '').length }, __m142_getInputInfo());
         }
       }, true);
 
@@ -437,7 +479,7 @@
         if (!btn) return;
         const info = __m142_getInputInfo();
         window.__M_V14_TRACE__.pointerDown = info;
-        console.warn('[V14.2 POINTERDOWN]', info);
+        console.warn('[V14.3 POINTERDOWN]', info);
         e.preventDefault();
         e.stopImmediatePropagation();
         __m142_sendFromSnapshot('pointerdown');
@@ -449,7 +491,7 @@
         if (!btn) return;
         const info = __m142_getInputInfo();
         window.__M_V14_TRACE__.touchStart = info;
-        console.warn('[V14.2 TOUCHSTART]', info);
+        console.warn('[V14.3 TOUCHSTART]', info);
         e.preventDefault();
         e.stopImmediatePropagation();
         __m142_sendFromSnapshot('touchstart');
@@ -474,11 +516,11 @@
       }, true);
 
       window.addEventListener('error', function(e) {
-        if (e && e.error) console.error('V14.2捕获页面错误:', e.error);
+        if (e && e.error) console.error('V14.3捕获页面错误:', e.error);
         window.__M_V14_SEND_STATE__ = '🔴 页面JS错误：' + String((e && e.message) || 'unknown error');
       });
       window.addEventListener('unhandledrejection', function(e) {
-        console.error('V14.2捕获Promise错误:', e && e.reason);
+        console.error('V14.3捕获Promise错误:', e && e.reason);
       });
 
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
