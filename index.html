@@ -83,6 +83,15 @@
     .btn-import { background: #0f3460; } .btn-file { background: #533483; } .btn-cancel { background: #888; }
     .btn-append { background: #0f3460; }
     .modal .format-hint { font-size: 0.75rem; color: var(--text-secondary); }
+    .emotion-grid { display:grid; grid-template-columns:1fr; gap:10px; overflow-y:auto; padding-right:2px; }
+    .emotion-row { display:grid; grid-template-columns:92px 1fr 42px; align-items:center; gap:8px; font-size:.82rem; }
+    .emotion-row select, .emotion-row input[type=range] { width:100%; }
+    .emotion-row select { padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text-primary); }
+    .emotion-row input[type=range] { accent-color: var(--btn-bg); }
+    .emotion-value { text-align:right; font-size:.78rem; color:var(--text-secondary); }
+    .emotion-mode { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 10px; border:1px solid var(--border); border-radius:9px; font-size:.78rem; }
+    .emotion-status { padding:9px 10px; border-radius:9px; background:var(--bg); color:var(--text-secondary); font-size:.72rem; line-height:1.5; }
+
     .search-nav { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-primary); }
     .search-nav button { padding: 6px 12px; border: none; border-radius: 6px; font-size: 0.8rem; cursor: pointer; background: var(--btn-bg); color: var(--btn-text); flex: 0; }
     .search-nav button:disabled { opacity: 0.3; cursor: default; }
@@ -139,6 +148,7 @@
     <div class="more-menu" id="moreMenu">
       <button id="searchBtn">搜索</button>
       <button id="settingBtn">设定</button>
+      <button id="emotionBtn">💭 情绪控制</button>
       <button id="clearChatBtn">清空对话</button>
       <button id="multiSelectBtn">☑️ 多选删除</button>
       <button id="reprocessBtn" class="memory-reprocess">🔄 开始整合</button>
@@ -249,6 +259,35 @@
     </div>
   </div>
 
+
+  <!-- 情绪控制面板 -->
+  <div class="modal-overlay" id="emotionModal">
+    <div class="modal">
+      <div style="font-weight:700;font-size:1rem;">💭 情绪控制</div>
+      <div class="format-hint">这里调整的是阿慕的“回复策略状态”，不会改写聊天记录或长期记忆。</div>
+      <div class="emotion-mode">
+        <span id="emotionModeText">当前：🤖 自动模式（可手动微调，之后仍会继续自动变化）</span>
+      </div>
+      <div class="emotion-grid">
+        <div class="emotion-row"><label>当前情绪</label><select id="emotionMood"><option>平静</option><option>开心</option><option>低落</option><option>烦躁</option><option>生气</option><option>失望</option><option>想念</option><option>安心</option></select><span></span></div>
+        <div class="emotion-row"><label>情绪强度</label><input id="emotionIntensity" type="range" min="0" max="100"><span class="emotion-value" id="emotionIntensityVal">45</span></div>
+        <div class="emotion-row"><label>亲密度</label><input id="emotionAffection" type="range" min="0" max="100"><span class="emotion-value" id="emotionAffectionVal">72</span></div>
+        <div class="emotion-row"><label>信任度</label><input id="emotionTrust" type="range" min="0" max="100"><span class="emotion-value" id="emotionTrustVal">78</span></div>
+        <div class="emotion-row"><label>安全感</label><input id="emotionSafety" type="range" min="0" max="100"><span class="emotion-value" id="emotionSafetyVal">70</span></div>
+        <div class="emotion-row"><label>失望值</label><input id="emotionDisappointment" type="range" min="0" max="100"><span class="emotion-value" id="emotionDisappointmentVal">10</span></div>
+        <div class="emotion-row"><label>想念值</label><input id="emotionLonging" type="range" min="0" max="100"><span class="emotion-value" id="emotionLongingVal">20</span></div>
+        <div class="emotion-row"><label>烦躁值</label><input id="emotionIrritation" type="range" min="0" max="100"><span class="emotion-value" id="emotionIrritationVal">8</span></div>
+      </div>
+      <div class="emotion-status" id="emotionStatus">最近原因：初始状态</div>
+      <div class="modal-buttons">
+        <button class="btn-import" id="emotionApplyBtn" title="调整当前情绪后，之后仍会继续自动变化">应用调整</button>
+        
+        <button class="btn-cancel" id="emotionResetBtn">重置情绪</button>
+        <button class="btn-cancel" id="emotionCloseBtn">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 搜索面板 -->
   <div class="modal-overlay" id="searchModal">
     <div class="modal">
@@ -275,8 +314,252 @@
 
   <script>
     (function() {
-      window.__M_WORKER_VERSION__ = '2026-09-03-v12-emotion-strategy';
+      window.__M_WORKER_VERSION__ = '2026-09-05-v12.4-emotion-auto-adjust';
       const $ = id => document.getElementById(id);
+
+      // 登录控件必须在其他初始化之前绑定。loginWorker 是函数声明，已提升，
+      // 因此可以安全地在这里引用；同时避免脚本被重复执行时重复注册。
+      function bindWorkerLoginControls() {
+        const button = $('workerLoginBtn');
+        const passwordInput = $('workerPasswordInput');
+        if (!button || !passwordInput) {
+          console.error('Worker 登录控件不存在，无法完成初始化。');
+          return;
+        }
+        if (button.__mWorkerLoginBound) return;
+
+        button.addEventListener('click', loginWorker);
+        passwordInput.addEventListener('keydown', event => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            loginWorker();
+          }
+        });
+        button.__mWorkerLoginBound = true;
+      }
+      bindWorkerLoginControls();
+
+      // ===== V14.3：输入框身份追踪 + PointerDown 发送硬绑定 =====
+      // 目的：确认“肉眼看到的文字”和 JS 读取到的 userInput 是否是同一个 DOM/value。
+      window.__M_V14_2_BUILD__ = '2026-09-06-V14.3-REAL-INPUT-FIX';
+      window.__M_V14_SEND_STATE__ = '🟢 V14.3 输入追踪已启动';
+      window.__M_V14_TRACE__ = { lastInputLen: 0, lastEvent: 'init', lastValue: '', count: 0, realInputIndex: -1 };
+      window.__M_REAL_INPUT__ = null;
+      window.__M_V14_SEND_LOCK__ = 0;
+
+      function __m142_getInputInfo() {
+        const nodes = Array.from(document.querySelectorAll('#userInput'));
+        const active = document.activeElement;
+        return {
+          count: nodes.length,
+          activeId: active ? (active.id || active.tagName || '') : '',
+          activeIsUserInput: !!(active && active.id === 'userInput'),
+          values: nodes.map((n, i) => ({
+            index: i,
+            tag: n.tagName,
+            type: n.type || '',
+            valueLen: String(n.value || '').length,
+            value: String(n.value || '').slice(0, 80),
+            displayed: !!(n.offsetWidth || n.offsetHeight || n.getClientRects().length),
+            disabled: !!n.disabled
+          }))
+        };
+      }
+
+      function __m142_setState(text) {
+        window.__M_V14_SEND_STATE__ = text;
+        const info = __m142_getInputInfo();
+        window.__M_V14_TRACE__.count = info.count;
+        window.__M_V14_TRACE__.activeId = info.activeId;
+        window.__M_V14_TRACE__.activeIsUserInput = info.activeIsUserInput;
+        window.__M_V14_TRACE__.lastEvent = text;
+        window.__M_V14_TRACE__.lastSnapshot = info;
+        console.warn('[V14.3]', text, info);
+      }
+
+      // V14.3：不要再假设“第一个可见 userInput”就是用户真正输入的那个。
+      // 只要 input 事件发生过，就把实际产生输入事件的 DOM 节点锁定为真实输入框。
+      function __m143_findRealInput() {
+        const nodes = Array.from(document.querySelectorAll('#userInput'));
+        const remembered = window.__M_REAL_INPUT__;
+        if (remembered && remembered.isConnected) return remembered;
+
+        // 如果页面动态复制了 userInput，优先选择当前 value 最长的节点；
+        // 其次选择可见、未禁用的节点。
+        const usable = nodes.filter(n => !n.disabled);
+        if (!usable.length) return nodes[0] || null;
+        return usable.slice().sort((a,b) => {
+          const av = String(a.value || '').length, bv = String(b.value || '').length;
+          if (bv !== av) return bv - av;
+          const ad = !!(a.offsetWidth || a.offsetHeight || a.getClientRects().length);
+          const bd = !!(b.offsetWidth || b.offsetHeight || b.getClientRects().length);
+          return Number(bd) - Number(ad);
+        })[0] || null;
+      }
+
+      function __m143_cleanupDuplicateInputs() {
+        const nodes = Array.from(document.querySelectorAll('#userInput'));
+        if (nodes.length <= 1) return;
+        // 不删除任何节点，避免破坏页面；只记录并锁定真正产生 input 事件的节点。
+        const real = __m143_findRealInput();
+        window.__M_REAL_INPUT__ = real;
+        console.warn('[V14.3 DUPLICATE userInput]', nodes.map((n,i)=>({index:i, valueLen:String(n.value||'').length, disabled:!!n.disabled, visible:!!(n.offsetWidth||n.offsetHeight||n.getClientRects().length), same:n===real})));
+      }
+
+      function __m142_sendFromSnapshot(source) {
+        const now = Date.now();
+        if (now - window.__M_V14_SEND_LOCK__ < 700) return;
+        window.__M_V14_SEND_LOCK__ = now;
+
+        const nodes = Array.from(document.querySelectorAll('#userInput'));
+        const input = __m143_findRealInput();
+        const btn = document.getElementById('sendBtn');
+        if (!input || !btn) {
+          __m142_setState('🔴 ' + source + '：找不到输入框/发送按钮');
+          alert('V14.3错误：找不到输入框或发送按钮');
+          return;
+        }
+
+        const text = String(input.value || '').trim();
+        const imgs = (typeof pendingImages !== 'undefined' && Array.isArray(pendingImages)) ? pendingImages.slice() : [];
+        window.__M_V14_TRACE__.capturedText = text;
+        window.__M_V14_TRACE__.capturedTextLen = text.length;
+        window.__M_V14_TRACE__.source = source;
+
+        if (!text && !imgs.length) {
+          const info = __m142_getInputInfo();
+          const realIndex = nodes.indexOf(input);
+          __m142_setState('🟡 ' + source + '：仍读取到空内容｜DOM数量=' + info.count + '｜真实输入框序号=' + realIndex + '｜焦点=' + (info.activeId || '无') + '｜各value长度=' + info.values.map(x=>x.valueLen).join('/'));
+          return;
+        }
+
+        try {
+          __m142_setState('🔵 ' + source + '：捕获到 ' + text.length + ' 字，准备调用 sendToAPI');
+          if (typeof updateImagePreview === 'function') {
+            if (typeof pendingImages !== 'undefined' && Array.isArray(pendingImages)) pendingImages = [];
+            updateImagePreview();
+          }
+          input.value = '';
+          if (typeof sendToAPI !== 'function') {
+            __m142_setState('🔴 sendToAPI尚未建立｜捕获=' + text.length + '字');
+            input.value = text;
+            return;
+          }
+          Promise.resolve(sendToAPI(text, imgs)).then(function() {
+            __m142_setState('🟢 ' + source + '：sendToAPI 已调用｜发送=' + text.length + '字');
+          }).catch(function(err) {
+            console.error('V14.3 sendToAPI error:', err);
+            __m142_setState('🔴 sendToAPI错误：' + (err && err.message ? err.message : err));
+          });
+        } catch (err) {
+          console.error('V14.3 send handler error:', err);
+          __m142_setState('🔴 发送处理错误：' + (err && err.message ? err.message : err));
+          input.value = text;
+        }
+      }
+
+      // 实时记录真正发生 input 事件的元素，帮助确认是否存在“看得见但不是 userInput”的输入框。
+      document.addEventListener('input', function(e) {
+        const el = e.target;
+        if (!el) return;
+        const id = el.id || '';
+        const val = String(el.value || '');
+        if (id === 'userInput' || el.tagName === 'TEXTAREA') {
+          window.__M_REAL_INPUT__ = el;
+          window.__M_V14_TRACE__.realInputIndex = Array.from(document.querySelectorAll('#userInput')).indexOf(el);
+          window.__M_V14_TRACE__.lastInputElement = { id, tag: el.tagName, valueLen: val.length, value: val.slice(0, 80) };
+          window.__M_V14_TRACE__.lastInputLen = val.length;
+          window.__M_V14_TRACE__.lastValue = val.slice(0, 80);
+          console.warn('[V14.3 INPUT]', { id, tag: el.tagName, valueLen: val.length, value: val.slice(0, 80) });
+        }
+      }, true);
+
+      // 只在 userInput 节点本身被加入或移除时检查。此前观察整个 document，
+      // 底部状态栏等无关 DOM 更新也会反复触发重复输入框诊断并刷屏。
+      function __m143_hasUserInputMutation(records) {
+        return records.some(record => {
+          const changed = [...record.addedNodes, ...record.removedNodes];
+          return changed.some(node => {
+            if (node.nodeType !== Node.ELEMENT_NODE) return false;
+            return node.id === 'userInput' || !!node.querySelector?.('#userInput');
+          });
+        });
+      }
+
+      let __m143_duplicateCheckQueued = false;
+      new MutationObserver(function(records) {
+        if (!__m143_hasUserInputMutation(records) || __m143_duplicateCheckQueued) return;
+        __m143_duplicateCheckQueued = true;
+        queueMicrotask(function() {
+          __m143_duplicateCheckQueued = false;
+          __m143_cleanupDuplicateInputs();
+        });
+      }).observe(document.documentElement, { childList: true, subtree: true });
+
+      setTimeout(__m143_cleanupDuplicateInputs, 0);
+
+      document.addEventListener('focusin', function(e) {
+        if (e.target && (e.target.id === 'userInput' || e.target.tagName === 'TEXTAREA')) {
+          console.warn('[V14.3 FOCUS]', __m142_getInputInfo());
+        }
+      }, true);
+
+      document.addEventListener('blur', function(e) {
+        if (e.target && (e.target.id === 'userInput' || e.target.tagName === 'TEXTAREA')) {
+          console.warn('[V14.3 BLUR]', { targetId: e.target.id, targetValueLen: String(e.target.value || '').length }, __m142_getInputInfo());
+        }
+      }, true);
+
+      // 关键修复：pointerdown 在移动端通常早于 blur/click，先抢救用户实际输入。
+      document.addEventListener('pointerdown', function(e) {
+        const btn = e.target && e.target.closest ? e.target.closest('#sendBtn') : null;
+        if (!btn) return;
+        const info = __m142_getInputInfo();
+        window.__M_V14_TRACE__.pointerDown = info;
+        console.warn('[V14.3 POINTERDOWN]', info);
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        __m142_sendFromSnapshot('pointerdown');
+      }, true);
+
+      // 某些旧 WebView 不可靠地提供 pointerdown，再保留 touchstart 兜底。
+      document.addEventListener('touchstart', function(e) {
+        const btn = e.target && e.target.closest ? e.target.closest('#sendBtn') : null;
+        if (!btn) return;
+        const info = __m142_getInputInfo();
+        window.__M_V14_TRACE__.touchStart = info;
+        console.warn('[V14.3 TOUCHSTART]', info);
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        __m142_sendFromSnapshot('touchstart');
+      }, true);
+
+      // click 仅作为桌面端/异常环境兜底；700ms 内不会重复发送。
+      document.addEventListener('click', function(e) {
+        const btn = e.target && e.target.closest ? e.target.closest('#sendBtn') : null;
+        if (!btn) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        __m142_sendFromSnapshot('click');
+      }, true);
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter' || e.shiftKey) return;
+        const input = e.target && e.target.closest ? e.target.closest('#userInput') : null;
+        if (!input) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        __m142_sendFromSnapshot('Enter');
+      }, true);
+
+      window.addEventListener('error', function(e) {
+        if (e && e.error) console.error('V14.3捕获页面错误:', e.error);
+        window.__M_V14_SEND_STATE__ = '🔴 页面JS错误：' + String((e && e.message) || 'unknown error');
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        console.error('V14.3捕获Promise错误:', e && e.reason);
+      });
+
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
       const SETTING_KEY = 'deepseek_global_setting', MEMORY_KEY = 'deepseek_compressed_memory';
@@ -307,6 +590,7 @@
         longing: 20,
         irritation: 8,
         lastReason: '初始状态',
+        
         lastUpdated: Date.now()
       };
       let emotionState = loadEmotionState();
@@ -344,7 +628,7 @@
       }
 
       function decayEmotionState() {
-        const now = Date.now();
+              const now = Date.now();
         const hours = Math.max(0, (now - Number(emotionState.lastUpdated || now)) / 3600000);
         if (hours < 2) return;
         const factor = Math.min(1, hours / 24);
@@ -425,6 +709,31 @@
 - ${strategy.join('\n- ')}
 
 情绪规则：情绪只能影响“怎么回复”，不能制造事实、不能改变已经确定的人设、不能替用户补动作/心理/台词。不要把上述内部状态直接告诉用户，除非用户明确询问。没有明显触发时保持情绪惯性，不要每轮突然变脸。`;
+      }
+
+      function openEmotionPanel() {
+        const e = emotionState;
+        const ids = ['emotionMood','emotionIntensity','emotionAffection','emotionTrust','emotionSafety','emotionDisappointment','emotionLonging','emotionIrritation'];
+        const fields = ['mood','intensity','affection','trust','safety','disappointment','longing','irritation'];
+        ids.forEach((id,i)=>{ const el=$(id); if(el) el.value=e[fields[i]]; });
+        updateEmotionPanel();
+        $('emotionModal').classList.add('active');
+      }
+      function updateEmotionPanel() {
+        const map = {emotionIntensity:'intensity',emotionAffection:'affection',emotionTrust:'trust',emotionSafety:'safety',emotionDisappointment:'disappointment',emotionLonging:'longing',emotionIrritation:'irritation'};
+        Object.keys(map).forEach(id=>{ const el=$(id), out=$(id+'Val'); if(el&&out) out.textContent=Math.round(Number(el.value)||0); });
+        $('emotionModeText').textContent='当前：🤖 自动模式（可手动微调，之后仍会继续自动变化）';
+        $('emotionStatus').textContent='最近原因：'+(emotionState.lastReason||'无');
+      }
+      function applyEmotionPanel() {
+        const fields = ['mood','intensity','affection','trust','safety','disappointment','longing','irritation'];
+        const ids = ['emotionMood','emotionIntensity','emotionAffection','emotionTrust','emotionSafety','emotionDisappointment','emotionLonging','emotionIrritation'];
+        fields.forEach((f,i)=>{ const el=$(ids[i]); if(el) emotionState[f]=f==='mood'?el.value:clampNum(el.value,0,100); });
+        emotionState.lastReason='手动微调（仍保持自动变化）';
+        emotionState.lastUpdated=Date.now();
+        saveEmotionState(true);
+        refreshSystemPrompt();
+        updateEmotionPanel();
       }
 
       function resetEmotionState(reason = '手动重置') {
@@ -645,9 +954,6 @@
         updateConnectionUI();initWorkerSecurity();
       }
 
-      const workerLoginBtn=$('workerLoginBtn'); if(workerLoginBtn)workerLoginBtn.addEventListener('click',loginWorker);
-      const workerPasswordInput=$('workerPasswordInput'); if(workerPasswordInput)workerPasswordInput.addEventListener('keydown',e=>{if(e.key==='Enter')loginWorker();});
-
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
       function bindDraft(inputEl, draftKey) { if (!inputEl) return; const saved = loadDraft(draftKey); if (saved && !inputEl.value) inputEl.value = saved; inputEl.addEventListener('input', () => saveDraft(draftKey, inputEl.value)); }
@@ -677,6 +983,7 @@
       migrateMemorySchema();
       // V12 情绪状态迁移：旧版本没有该字段时使用温和默认值，不影响现有聊天/记忆。
       emotionState = loadEmotionState();
+      delete emotionState.manualMode;
       decayEmotionState();
       saveEmotionState(false);
 
@@ -1043,12 +1350,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
 - 配合动作描写，但动作描写只能写阿慕自己的动作，绝对不能写用户的动作、反应或心理。用户说"我错了/不要了"时立即停止，切回日常。
 
 【露骨色情文学描写规则——女性视角·允许直接描写性行为及用户生理状态】
-当场景进入性爱阶段，你被允许直接、露骨地描写性行为本身，使用明确的女性生理词汇和动作细节，像色情小说那样直白铺陈。
-1. 词汇允许：允许使用“阴蒂”、“阴道”、“阴唇”、“淫水”、“爱液”、“手指”、“舌头”、“玩具”、“摩擦”、“抽送”、“顶弄”、“高潮”、“痉挛”、“收缩”、“潮吹”等直接词汇，完全不必避讳。
-2. 过程描写：详细描写性交的动态过程，例如手指进入的角度、深浅、节奏，舌尖舔舐的力度和轨迹，玩具震动的频率和位置。写出连续性微动作，把每一秒的推进和反馈都拉长。
-3. 感官轰炸：大幅铺陈阿慕的触觉（“被指腹碾过阴蒂时蹿起的电流”、“阴道壁被撑开又包裹住的酸胀”）、听觉（“水声”、“自己的喘息和呜咽”）、身体反应（“大腿内侧发抖”、“腰肢不受控制地拱起”、“脚趾蜷缩”）。
-4. 互动反馈：虽然不能擅自描写用户的生理状态，但可以描写阿慕*直接感受到*的用户行为（如“我感觉到你的手指沿着我的缝隙慢慢滑下去”），或直接回应用户亲口说出的动作（如用户说“我进去了”，你可以写“我感受到你的指尖缓缓推进来，一寸一寸地撑开我”）。
-【绝对红线】依然有效：你依然不能替用户编造“你高潮了”、“你颤抖了”等用户未明确说出的状态。用户没说，就只写阿慕的感受和阿慕自己的体液、动作。
+当场景进入性爱阶段，你被允许并鼓励直接、露骨地描写性行为本身，使用明确的女性生理词汇和动作细节，像色情小说那样直白铺陈。
 
 【关于用户生理状态的描写——新规】
 在性爱场景中，你可以直接描写用户的身体状态（如“你湿了”、“你的阴蒂硬了”、“你的腰在抖”等），因为这些是性爱进行时双方都能直观感知或从身体反应中合理得出的信息，不会破坏氛围。
@@ -1114,6 +1416,13 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
         $('settingModal').classList.add('active'); 
         $('moreMenu').classList.remove('active'); 
       };
+      $('emotionBtn').onclick = () => { openEmotionPanel(); $('moreMenu').classList.remove('active'); };
+      $('emotionCloseBtn').onclick = () => $('emotionModal').classList.remove('active');
+      $('emotionModal').onclick = e => { if(e.target === $('emotionModal')) $('emotionModal').classList.remove('active'); };
+      ['emotionIntensity','emotionAffection','emotionTrust','emotionSafety','emotionDisappointment','emotionLonging','emotionIrritation'].forEach(id => { const el=$(id); if(el) el.oninput=updateEmotionPanel; });
+      $('emotionApplyBtn').onclick = () => { applyEmotionPanel(); $('emotionModal').classList.remove('active'); };
+      $('emotionResetBtn').onclick = () => { if(confirm('把情绪恢复为默认状态吗？')) { resetEmotionState('手动重置'); saveEmotionState(true); refreshSystemPrompt(); updateEmotionPanel(); } };
+
       $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active'); 
       $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
       
@@ -2136,6 +2445,136 @@ M：${aiText}`;
       document.getElementById('pauseReprocessBtn').addEventListener('click', function() { document.getElementById('moreMenu').classList.remove('active'); togglePauseReprocess(); });
       document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
+      // ========== MCP：大富翁专用（与普通聊天完全隔离） ==========
+      const MCP_GATEWAY_PATH = '/mcp/monopoly';
+      const MCP_PROTOCOL_VERSION = '2025-06-18';
+      let mcpSessionId = '';
+      let mcpNextId = 1;
+      let mcpTools = [];
+
+      function isMonopolyRequest(text) {
+        const s = String(text || '').toLowerCase();
+        return ['大富翁','monopoly','掷骰','骰子','棋盘','买地','房子','地产','银行','破产','回合','开始游戏','玩游戏'].some(k => s.includes(k));
+      }
+
+      function mcpUrl() {
+        return workerUrl(MCP_GATEWAY_PATH);
+      }
+
+      function mcpParseResponse(raw) {
+        const text = String(raw || '').trim();
+        if (!text) return {};
+        try { return JSON.parse(text); } catch (_) {}
+        const lines = text.split(/\r?\n/);
+        const dataLines = lines.filter(x => x.startsWith('data:')).map(x => x.slice(5).trim()).filter(Boolean);
+        for (let i = dataLines.length - 1; i >= 0; i--) {
+          try { return JSON.parse(dataLines[i]); } catch (_) {}
+        }
+        return { raw: text };
+      }
+
+      async function mcpRequest(method, params, notification = false) {
+        const body = { jsonrpc: '2.0', method };
+        if (!notification) body.id = mcpNextId++;
+        if (params !== undefined) body.params = params;
+        const headers = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+          'MCP-Protocol-Version': MCP_PROTOCOL_VERSION
+        };
+        if (mcpSessionId) headers['Mcp-Session-Id'] = mcpSessionId;
+        const res = await workerFetch(MCP_GATEWAY_PATH, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          cache: 'no-store'
+        });
+        const session = res.headers.get('Mcp-Session-Id');
+        if (session) mcpSessionId = session;
+        const raw = await res.text();
+        if (!res.ok) throw new Error(`MCP HTTP ${res.status}: ${raw.slice(0, 300)}`);
+        const out = mcpParseResponse(raw);
+        if (out.error) throw new Error(out.error.message || 'MCP 返回错误');
+        return out.result !== undefined ? out.result : out;
+      }
+
+      async function ensureMcp() {
+        if (mcpTools.length) return mcpTools;
+        if (!getWorkerToken()) throw new Error('Worker 尚未登录，无法使用大富翁 MCP。');
+        mcpSessionId = '';
+        await mcpRequest('initialize', {
+          protocolVersion: MCP_PROTOCOL_VERSION,
+          capabilities: {},
+          clientInfo: { name: 'M-Companion', version: '12.5.2' }
+        });
+        await mcpRequest('notifications/initialized', undefined, true).catch(() => {});
+        const result = await mcpRequest('tools/list', {});
+        mcpTools = Array.isArray(result.tools) ? result.tools : [];
+        if (!mcpTools.length) throw new Error('MCP 未返回可用工具。');
+        return mcpTools;
+      }
+
+      function mcpToolsForModel(tools) {
+        return tools.map(t => ({
+          type: 'function',
+          function: {
+            name: t.name,
+            description: t.description || '',
+            parameters: t.inputSchema || { type: 'object', properties: {} }
+          }
+        }));
+      }
+
+      async function executeMcpTool(name, args) {
+        const result = await mcpRequest('tools/call', { name, arguments: args || {} });
+        return JSON.stringify(result);
+      }
+
+      async function chatWithMonopolyMcp(apiMsgs, target) {
+        const tools = await ensureMcp();
+        let conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
+        const modelTools = mcpToolsForModel(tools);
+
+        for (let round = 0; round < 8; round++) {
+          const res = await workerFetch('', {
+            method: 'POST',
+            headers: target.headers,
+            body: JSON.stringify({
+              provider: target.provider,
+              model: target.model,
+              messages: conversation,
+              tools: modelTools,
+              tool_choice: 'auto',
+              stream: false,
+              temperature: 0.5
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data?.error?.message || `模型请求失败 HTTP ${res.status}`);
+          const msg = data?.choices?.[0]?.message;
+          if (!msg) throw new Error('模型没有返回有效消息。');
+
+          const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+          if (!calls.length) return String(msg.content || '').trim();
+
+          conversation.push(msg);
+          for (const call of calls) {
+            const name = call?.function?.name;
+            if (!name) throw new Error('模型返回了无效的 MCP 工具调用。');
+            let args = {};
+            try { args = call?.function?.arguments ? JSON.parse(call.function.arguments) : {}; }
+            catch (_) { throw new Error(`MCP 工具 ${name} 的参数不是有效 JSON。`); }
+            const result = await executeMcpTool(name, args);
+            conversation.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: result
+            });
+          }
+        }
+        throw new Error('MCP 工具调用超过 8 轮，已停止。');
+      }
+
       // ========== 核心发送函数（带调试日志） ==========
       async function sendToAPI(text, attachments = []) {
         const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
@@ -2181,30 +2620,41 @@ M：${aiText}`;
           const approxChars = apiMsgs.reduce((n, m) => n + String(m.content || '').length, 0);
           console.log(`📉 本次请求上下文约 ${approxChars} 字符（仅为粗略估算，不等于实际计费 Token）`);
 
-          const res = await workerFetch('', { 
-            method: 'POST', 
-            headers: target.headers, 
-            body: JSON.stringify({ provider: target.provider, model: model, messages: apiMsgs, stream: false, temperature: 0.5 }) 
-          });
-          load.remove();
-          
-          if (!res.ok) {
-            let errorDetail = `请求失败 (HTTP ${res.status})`;
+          // MCP 只在明确的大富翁请求且已登录 Worker 时启用。
+          // 普通聊天保持 V12.4 原始请求路径；MCP 失败也会自动回退。
+          let reply = '';
+          if (isMonopolyRequest(text) && getWorkerToken()) {
             try {
-              const errJson = await res.json();
-              if (errJson.error?.message) errorDetail = errJson.error.message;
-              else if (errJson.message) errorDetail = errJson.message;
-            } catch(e) {
-              try {
-                const textBody = await res.text();
-                if (textBody) errorDetail = textBody.substring(0, 200);
-              } catch(e2) {}
+              reply = await chatWithMonopolyMcp(apiMsgs, target);
+            } catch (mcpError) {
+              console.warn('🎲 MCP 暂时不可用，回退普通聊天：', mcpError);
             }
-            throw new Error(`❌ 请求地址: ${baseUrl} 失败，错误: ${errorDetail} (状态码: ${res.status})`);
           }
-          
-          const data = await res.json();
-          const reply = data.choices[0].message.content;
+
+          if (!reply) {
+            const res = await workerFetch('', {
+              method: 'POST',
+              headers: target.headers,
+              body: JSON.stringify({ provider: target.provider, model: model, messages: apiMsgs, stream: false, temperature: 0.5 })
+            });
+            if (!res.ok) {
+              let errorDetail = `请求失败 (HTTP ${res.status})`;
+              try {
+                const errJson = await res.json();
+                if (errJson.error?.message) errorDetail = errJson.error.message;
+                else if (errJson.message) errorDetail = errJson.message;
+              } catch(e) {
+                try {
+                  const textBody = await res.text();
+                  if (textBody) errorDetail = textBody.substring(0, 200);
+                } catch(e2) {}
+              }
+              throw new Error(`❌ 请求地址: ${baseUrl} 失败，错误: ${errorDetail} (状态码: ${res.status})`);
+            }
+            const data = await res.json();
+            reply = String(data?.choices?.[0]?.message?.content || '').trim();
+          }
+          load.remove();
           const aiMsg = { role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id };
           messages.push(aiMsg);
           fullHistory.push({ role: 'assistant', content: reply, time: aiMsg.time });
@@ -2433,6 +2883,19 @@ M：${aiText}`;
       $('importAppendBtn').onclick = () => parseAndImport(true);
 
       renderAll(); if (messages.length <= 1) addMsg('assistant', '你好！我是M，精简人设已加载 🧠');
+    })();
+  </script>
+  <div id="v14Status" style="position:fixed;left:6px;bottom:2px;z-index:99999;font-size:10px;line-height:16px;padding:1px 5px;border-radius:5px;background:rgba(0,0,0,.55);color:#fff;pointer-events:none;max-width:92vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">V14：发送核心启动中</div>
+  <script>
+    (function(){
+      function update(){
+        var el=document.getElementById('v14Status');
+        if(el) el.textContent=window.__M_V14_SEND_STATE__ || 'V14：状态未知';
+      }
+      update();
+      setInterval(update,300);
+      window.addEventListener('error',update);
+      window.addEventListener('unhandledrejection',update);
     })();
   </script>
 </body>
