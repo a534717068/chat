@@ -2290,9 +2290,49 @@ M：${aiText}`;
       }
 
       async function chatWithMonopolyMcp(apiMsgs, target) {
+        // V12.6：真实 MCP Tool Call + 无 tool_calls 时的结构化兜底。
+        // 重要：兜底不是“假装调用”，仍然由本函数真正执行 tools/call。
         const tools = await ensureMcp();
-        let conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
         const modelTools = mcpToolsForModel(tools);
+        let conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
+
+        // 首次进入大富翁时，真实读取规则；不让模型凭空编规则。
+        let helpResult = null;
+        try {
+          helpResult = await executeMcpTool('monopoly_help', {});
+          conversation.push({
+            role: 'system',
+            content: '你正在使用真实的大富翁 MCP。下面是刚刚从 MCP 服务器读取的帮助信息。只能依据 MCP 返回的状态、规则和工具结果作答，绝不能编造骰子、资金、棋盘、任务或胜负。\nMCP monopoly_help:\n' + helpResult
+          });
+        } catch (e) {
+          console.warn('MCP monopoly_help 读取失败：', e);
+        }
+
+        const callTool = async (name, args) => {
+          if (!tools.some(t => t && t.name === name)) throw new Error('MCP 不存在工具：' + name);
+          console.log('🎲 V12.6 真正执行 MCP tools/call:', name, args || {});
+          return await executeMcpTool(name, args || {});
+        };
+
+        const appendCalls = async (msg) => {
+          const calls = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
+          if (!calls.length) return false;
+          conversation.push(msg);
+          for (const call of calls) {
+            const name = call?.function?.name;
+            if (!name) throw new Error('模型返回了无效的 MCP 工具调用。');
+            let args = {};
+            try { args = call?.function?.arguments ? JSON.parse(call.function.arguments) : {}; }
+            catch (_) { throw new Error(`MCP 工具 ${name} 的参数不是有效 JSON。`); }
+            const result = await callTool(name, args);
+            conversation.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: result
+            });
+          }
+          return true;
+        };
 
         for (let round = 0; round < 8; round++) {
           const res = await workerFetch('', {
@@ -2305,31 +2345,55 @@ M：${aiText}`;
               tools: modelTools,
               tool_choice: 'auto',
               stream: false,
-              temperature: 0.5
+              temperature: 0.2
             })
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data?.error?.message || `模型请求失败 HTTP ${res.status}`);
           const msg = data?.choices?.[0]?.message;
           if (!msg) throw new Error('模型没有返回有效消息。');
+          if (await appendCalls(msg)) continue;
 
-          const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
-          if (!calls.length) return String(msg.content || '').trim();
+          const content = String(msg.content || '').trim();
+          if (!content) throw new Error('模型返回空内容。');
 
-          conversation.push(msg);
-          for (const call of calls) {
-            const name = call?.function?.name;
-            if (!name) throw new Error('模型返回了无效的 MCP 工具调用。');
-            let args = {};
-            try { args = call?.function?.arguments ? JSON.parse(call.function.arguments) : {}; }
-            catch (_) { throw new Error(`MCP 工具 ${name} 的参数不是有效 JSON。`); }
-            const result = await executeMcpTool(name, args);
-            conversation.push({
-              role: 'tool',
-              tool_call_id: call.id,
-              content: result
-            });
-          }
+          // 有些 OpenAI-compatible 上游会接受 tools 参数，但不会返回 tool_calls。
+          // 此时再请求一次“严格 JSON 工具计划”。只有合法 JSON 才会真的执行 MCP。
+          const plannerMessages = [
+            ...conversation,
+            { role: 'assistant', content },
+            {
+              role: 'system',
+              content: '你现在是 MCP 工具规划器。判断用户当前请求是否需要调用大富翁工具。必须只输出一行 JSON，不要 Markdown，不要解释。格式：{"tool":"工具名","arguments":{...}}；如果不需要任何工具则输出 {"tool":null}. 只能选择提供给你的 MCP 工具，参数必须符合工具 schema。不要虚构工具或结果。'
+            }
+          ];
+          const planRes = await workerFetch('', {
+            method: 'POST',
+            headers: target.headers,
+            body: JSON.stringify({
+              provider: target.provider,
+              model: target.model,
+              messages: plannerMessages,
+              tools: modelTools,
+              tool_choice: 'none',
+              stream: false,
+              temperature: 0
+            })
+          });
+          const planData = await planRes.json().catch(() => ({}));
+          if (!planRes.ok) return content;
+          const planText = String(planData?.choices?.[0]?.message?.content || '').trim();
+          let plan = null;
+          try {
+            const m = planText.match(/\{[\s\S]*\}/);
+            if (m) plan = JSON.parse(m[0]);
+          } catch (_) { plan = null; }
+
+          if (!plan || !plan.tool) return content;
+          if (!tools.some(t => t && t.name === plan.tool)) throw new Error('模型规划了不存在的 MCP 工具：' + plan.tool);
+          const result = await callTool(plan.tool, plan.arguments || {});
+          conversation.push({ role: 'assistant', content });
+          conversation.push({ role: 'tool', content: result, name: plan.tool });
         }
         throw new Error('MCP 工具调用超过 8 轮，已停止。');
       }
