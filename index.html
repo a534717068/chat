@@ -317,55 +317,151 @@
       window.__M_WORKER_VERSION__ = '2026-09-05-v12.4-emotion-auto-adjust';
       const $ = id => document.getElementById(id);
 
-      // ===== V14：发送核心隔离层 =====
-      // 发送按钮不再依赖后续初始化代码是否全部成功执行。
-      window.__M_V14_SEND_STATE__ = '🟢 V14发送核心已启动';
-      window.__M_V14_SEND__ = function() {
-        const input = document.getElementById('userInput');
+      // ===== V14.2：输入框身份追踪 + PointerDown 发送硬绑定 =====
+      // 目的：确认“肉眼看到的文字”和 JS 读取到的 userInput 是否是同一个 DOM/value。
+      window.__M_V14_2_BUILD__ = '2026-09-06-V14.2-INPUT-TRACE';
+      window.__M_V14_SEND_STATE__ = '🟢 V14.2 输入追踪已启动';
+      window.__M_V14_TRACE__ = { lastInputLen: 0, lastEvent: 'init', lastValue: '', count: 0 };
+      window.__M_V14_SEND_LOCK__ = 0;
+
+      function __m142_getInputInfo() {
+        const nodes = Array.from(document.querySelectorAll('#userInput'));
+        const active = document.activeElement;
+        return {
+          count: nodes.length,
+          activeId: active ? (active.id || active.tagName || '') : '',
+          activeIsUserInput: !!(active && active.id === 'userInput'),
+          values: nodes.map((n, i) => ({
+            index: i,
+            tag: n.tagName,
+            type: n.type || '',
+            valueLen: String(n.value || '').length,
+            value: String(n.value || '').slice(0, 80),
+            displayed: !!(n.offsetWidth || n.offsetHeight || n.getClientRects().length),
+            disabled: !!n.disabled
+          }))
+        };
+      }
+
+      function __m142_setState(text) {
+        window.__M_V14_SEND_STATE__ = text;
+        const info = __m142_getInputInfo();
+        window.__M_V14_TRACE__.count = info.count;
+        window.__M_V14_TRACE__.activeId = info.activeId;
+        window.__M_V14_TRACE__.activeIsUserInput = info.activeIsUserInput;
+        window.__M_V14_TRACE__.lastEvent = text;
+        window.__M_V14_TRACE__.lastSnapshot = info;
+        console.warn('[V14.2]', text, info);
+      }
+
+      function __m142_sendFromSnapshot(source) {
+        const now = Date.now();
+        if (now - window.__M_V14_SEND_LOCK__ < 700) return;
+        window.__M_V14_SEND_LOCK__ = now;
+
+        const nodes = Array.from(document.querySelectorAll('#userInput'));
+        const input = nodes.find(n => n.offsetWidth || n.offsetHeight || n.getClientRects().length) || nodes[0];
         const btn = document.getElementById('sendBtn');
         if (!input || !btn) {
-          window.__M_V14_SEND_STATE__ = '🔴 找不到输入框/发送按钮';
-          alert('V14错误：找不到输入框或发送按钮');
+          __m142_setState('🔴 ' + source + '：找不到输入框/发送按钮');
+          alert('V14.2错误：找不到输入框或发送按钮');
           return;
         }
+
         const text = String(input.value || '').trim();
         const imgs = (typeof pendingImages !== 'undefined' && Array.isArray(pendingImages)) ? pendingImages.slice() : [];
+        window.__M_V14_TRACE__.capturedText = text;
+        window.__M_V14_TRACE__.capturedTextLen = text.length;
+        window.__M_V14_TRACE__.source = source;
+
         if (!text && !imgs.length) {
-          window.__M_V14_SEND_STATE__ = '🟡 点击已触发，但没有内容';
+          const info = __m142_getInputInfo();
+          __m142_setState('🟡 ' + source + '：仍读取到空内容｜DOM数量=' + info.count + '｜焦点=' + (info.activeId || '无') + '｜可见value长度=' + ((info.values.find(x => x.displayed) || {}).valueLen || 0));
           return;
         }
+
         try {
-          window.__M_V14_SEND_STATE__ = '🔵 已触发发送';
+          __m142_setState('🔵 ' + source + '：捕获到 ' + text.length + ' 字，准备调用 sendToAPI');
           if (typeof updateImagePreview === 'function') {
             if (typeof pendingImages !== 'undefined' && Array.isArray(pendingImages)) pendingImages = [];
             updateImagePreview();
           }
           input.value = '';
           if (typeof sendToAPI !== 'function') {
-            window.__M_V14_SEND_STATE__ = '🔴 sendToAPI尚未建立';
+            __m142_setState('🔴 sendToAPI尚未建立｜捕获=' + text.length + '字');
             input.value = text;
-            alert('V14错误：sendToAPI 没有建立。说明主程序在初始化过程中中断了。');
             return;
           }
-          Promise.resolve(sendToAPI(text, imgs)).catch(function(err) {
-            console.error('V14 sendToAPI error:', err);
-            window.__M_V14_SEND_STATE__ = '🔴 sendToAPI错误：' + (err && err.message ? err.message : err);
+          Promise.resolve(sendToAPI(text, imgs)).then(function() {
+            __m142_setState('🟢 ' + source + '：sendToAPI 已调用｜发送=' + text.length + '字');
+          }).catch(function(err) {
+            console.error('V14.2 sendToAPI error:', err);
+            __m142_setState('🔴 sendToAPI错误：' + (err && err.message ? err.message : err));
           });
         } catch (err) {
-          console.error('V14 send handler error:', err);
-          window.__M_V14_SEND_STATE__ = '🔴 发送处理错误：' + (err && err.message ? err.message : err);
+          console.error('V14.2 send handler error:', err);
+          __m142_setState('🔴 发送处理错误：' + (err && err.message ? err.message : err));
           input.value = text;
-          alert('发送失败：' + (err && err.message ? err.message : err));
         }
-      };
+      }
 
-      // capture 阶段接管点击，防止后面的 onclick 覆盖/失效。
+      // 实时记录真正发生 input 事件的元素，帮助确认是否存在“看得见但不是 userInput”的输入框。
+      document.addEventListener('input', function(e) {
+        const el = e.target;
+        if (!el) return;
+        const id = el.id || '';
+        const val = String(el.value || '');
+        if (id === 'userInput' || el.tagName === 'TEXTAREA') {
+          window.__M_V14_TRACE__.lastInputElement = { id, tag: el.tagName, valueLen: val.length, value: val.slice(0, 80) };
+          window.__M_V14_TRACE__.lastInputLen = val.length;
+          window.__M_V14_TRACE__.lastValue = val.slice(0, 80);
+          console.warn('[V14.2 INPUT]', { id, tag: el.tagName, valueLen: val.length, value: val.slice(0, 80) });
+        }
+      }, true);
+
+      document.addEventListener('focusin', function(e) {
+        if (e.target && (e.target.id === 'userInput' || e.target.tagName === 'TEXTAREA')) {
+          console.warn('[V14.2 FOCUS]', __m142_getInputInfo());
+        }
+      }, true);
+
+      document.addEventListener('blur', function(e) {
+        if (e.target && (e.target.id === 'userInput' || e.target.tagName === 'TEXTAREA')) {
+          console.warn('[V14.2 BLUR]', { targetId: e.target.id, targetValueLen: String(e.target.value || '').length }, __m142_getInputInfo());
+        }
+      }, true);
+
+      // 关键修复：pointerdown 在移动端通常早于 blur/click，先抢救用户实际输入。
+      document.addEventListener('pointerdown', function(e) {
+        const btn = e.target && e.target.closest ? e.target.closest('#sendBtn') : null;
+        if (!btn) return;
+        const info = __m142_getInputInfo();
+        window.__M_V14_TRACE__.pointerDown = info;
+        console.warn('[V14.2 POINTERDOWN]', info);
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        __m142_sendFromSnapshot('pointerdown');
+      }, true);
+
+      // 某些旧 WebView 不可靠地提供 pointerdown，再保留 touchstart 兜底。
+      document.addEventListener('touchstart', function(e) {
+        const btn = e.target && e.target.closest ? e.target.closest('#sendBtn') : null;
+        if (!btn) return;
+        const info = __m142_getInputInfo();
+        window.__M_V14_TRACE__.touchStart = info;
+        console.warn('[V14.2 TOUCHSTART]', info);
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        __m142_sendFromSnapshot('touchstart');
+      }, true);
+
+      // click 仅作为桌面端/异常环境兜底；700ms 内不会重复发送。
       document.addEventListener('click', function(e) {
         const btn = e.target && e.target.closest ? e.target.closest('#sendBtn') : null;
         if (!btn) return;
         e.preventDefault();
         e.stopImmediatePropagation();
-        window.__M_V14_SEND__();
+        __m142_sendFromSnapshot('click');
       }, true);
 
       document.addEventListener('keydown', function(e) {
@@ -374,16 +470,15 @@
         if (!input) return;
         e.preventDefault();
         e.stopImmediatePropagation();
-        window.__M_V14_SEND__();
+        __m142_sendFromSnapshot('Enter');
       }, true);
 
-      // ===== V14诊断浮标 =====
       window.addEventListener('error', function(e) {
-        if (e && e.error) console.error('V14捕获页面错误:', e.error);
+        if (e && e.error) console.error('V14.2捕获页面错误:', e.error);
         window.__M_V14_SEND_STATE__ = '🔴 页面JS错误：' + String((e && e.message) || 'unknown error');
       });
       window.addEventListener('unhandledrejection', function(e) {
-        console.error('V14捕获Promise错误:', e && e.reason);
+        console.error('V14.2捕获Promise错误:', e && e.reason);
       });
 
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
