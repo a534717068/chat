@@ -1,0 +1,584 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大富翁 MCP 真实测试</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 20px;
+  background: #111;
+  color: #eee;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Microsoft YaHei",
+    sans-serif;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+h1 {
+  margin: 0 0 10px;
+  font-size: 25px;
+}
+
+.description {
+  color: #aaa;
+  line-height: 1.7;
+  margin-bottom: 20px;
+}
+
+.card {
+  background: #1b1b1b;
+  border: 1px solid #333;
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+label {
+  display: block;
+  margin-top: 14px;
+  margin-bottom: 6px;
+  color: #bbb;
+  font-size: 14px;
+}
+
+input,
+select,
+button {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #444;
+  background: #222;
+  color: #eee;
+  font-size: 15px;
+}
+
+button {
+  margin-top: 20px;
+  background: #fff;
+  color: #111;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #222;
+  line-height: 1.5;
+}
+
+.status.ok {
+  border: 1px solid #26734d;
+  color: #72e6a8;
+}
+
+.status.error {
+  border: 1px solid #7a3030;
+  color: #ff7777;
+}
+
+.status.wait {
+  border: 1px solid #66551d;
+  color: #ffd166;
+}
+
+pre {
+  margin: 0;
+  padding: 15px;
+  background: #080808;
+  border: 1px solid #333;
+  border-radius: 10px;
+  color: #ddd;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  line-height: 1.55;
+  font-size: 12px;
+}
+
+.small {
+  margin-top: 10px;
+  color: #777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.section-title {
+  font-size: 17px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>🎲 大富翁 MCP 真实连接测试</h1>
+
+  <div class="description">
+    这个页面用于测试你的 Cloudflare Worker 是否能够真正调用
+    <b>spicy-monopoly MCP</b> 并创建一局游戏。
+    <br><br>
+    测试链路：
+    <b>浏览器 → Cloudflare Worker → MCP → monopoly_help → new_game → game_info</b>
+  </div>
+
+  <div class="card">
+
+    <div class="section-title">Worker 设置</div>
+
+    <label>Cloudflare Worker 地址</label>
+
+    <input
+      id="workerUrl"
+      value="https://solitary-water-3b2a.534717068.workers.dev"
+    >
+
+    <label>玩家 1 名称</label>
+
+    <input
+      id="p1Name"
+      value="测试A"
+    >
+
+    <label>玩家 2 名称</label>
+
+    <input
+      id="p2Name"
+      value="测试B"
+    >
+
+    <label>玩家 1 性别</label>
+
+    <select id="p1Sex">
+      <option value="女">女</option>
+      <option value="男">男</option>
+    </select>
+
+    <label>玩家 2 性别</label>
+
+    <select id="p2Sex">
+      <option value="女">女</option>
+      <option value="男">男</option>
+    </select>
+
+    <label>玩家 1 角色</label>
+
+    <select id="p1Role">
+      <option value="攻">攻</option>
+      <option value="受">受</option>
+    </select>
+
+    <label>玩家 2 角色</label>
+
+    <select id="p2Role">
+      <option value="受">受</option>
+      <option value="攻">攻</option>
+    </select>
+
+    <label>游戏风格</label>
+
+    <select id="flavor">
+      <option value="light">light（推荐测试）</option>
+      <option value="medium">medium</option>
+      <option value="heavy">heavy</option>
+    </select>
+
+    <label>游戏长度</label>
+
+    <select id="gameLength">
+      <option value="4">4（推荐测试）</option>
+      <option value="8">8</option>
+      <option value="12">12</option>
+    </select>
+
+    <label>身份模式</label>
+
+    <select id="identityMode">
+      <option value="off">off（推荐测试）</option>
+      <option value="mixed">mixed</option>
+      <option value="nsfw_only">nsfw_only</option>
+    </select>
+
+    <button id="testButton">
+      🎲 开始真实大富翁测试
+    </button>
+
+    <div id="status" class="status">
+      等待测试……
+    </div>
+
+    <div class="small">
+      注意：点击按钮后会真实调用 Worker 的
+      /mcp-test/monopoly-game，并创建测试游戏。
+    </div>
+
+  </div>
+
+  <div class="card">
+
+    <div class="section-title">
+      📋 测试返回结果
+    </div>
+
+    <pre id="result">尚未开始测试。</pre>
+
+  </div>
+
+</div>
+
+
+<script>
+
+const $ = id => document.getElementById(id);
+
+
+/* =========================
+   状态显示
+========================= */
+
+function setStatus(text, type) {
+
+  const el = $("status");
+
+  el.textContent = text;
+
+  el.className = "status";
+
+  if (type) {
+    el.classList.add(type);
+  }
+}
+
+
+/* =========================
+   JSON 美化
+========================= */
+
+function prettyJSON(value) {
+
+  try {
+
+    return JSON.stringify(value, null, 2);
+
+  } catch (e) {
+
+    return String(value);
+
+  }
+
+}
+
+
+/* =========================
+   开始测试
+========================= */
+
+async function startTest() {
+
+  const button = $("testButton");
+  const resultBox = $("result");
+
+  button.disabled = true;
+
+  setStatus(
+    "⏳ 正在向 Worker 发送 POST 请求……",
+    "wait"
+  );
+
+  resultBox.textContent =
+    "正在执行真实 MCP 测试，请稍候……";
+
+
+  /* =========================
+     Worker 地址
+  ========================= */
+
+  let workerUrl =
+    $("workerUrl").value.trim();
+
+  workerUrl =
+    workerUrl.replace(/\/+$/, "");
+
+
+  const endpoint =
+    workerUrl +
+    "/mcp-test/monopoly-game";
+
+
+  /* =========================
+     玩家参数
+  ========================= */
+
+  const p1Name =
+    $("p1Name").value.trim() || "测试A";
+
+  const p2Name =
+    $("p2Name").value.trim() || "测试B";
+
+  const p1Sex =
+    $("p1Sex").value;
+
+  const p2Sex =
+    $("p2Sex").value;
+
+  const p1Role =
+    $("p1Role").value;
+
+  const p2Role =
+    $("p2Role").value;
+
+
+  /* =========================
+     setup
+  ========================= */
+
+  const setup = {
+
+    p1_name: p1Name,
+
+    p2_name: p2Name,
+
+    p1_sex: p1Sex,
+
+    p2_sex: p2Sex,
+
+    p1_role: p1Role,
+
+    p2_role: p2Role,
+
+    lineup:
+      p1Sex + p2Sex,
+
+    flavor:
+      $("flavor").value,
+
+    redline: [],
+
+    reverse_chance: 0,
+
+    game_length:
+      Number($("gameLength").value),
+
+    identity_mode:
+      $("identityMode").value,
+
+    first_player:
+      p1Name
+
+  };
+
+
+  /* =========================
+     请求记录
+  ========================= */
+
+  const requestInfo = {
+
+    url: endpoint,
+
+    method: "POST",
+
+    body: {
+      setup: setup
+    }
+
+  };
+
+
+  try {
+
+    console.log(
+      "🎲 MCP TEST REQUEST",
+      requestInfo
+    );
+
+
+    /* =========================
+       真正 POST
+    ========================= */
+
+    const response = await fetch(
+      endpoint,
+      {
+
+        method: "POST",
+
+        headers: {
+
+          "Content-Type":
+            "application/json",
+
+          "Accept":
+            "application/json"
+
+        },
+
+        body:
+          JSON.stringify({
+            setup: setup
+          }),
+
+        cache:
+          "no-store"
+
+      }
+    );
+
+
+    /* =========================
+       读取返回
+    ========================= */
+
+    const raw =
+      await response.text();
+
+
+    let data;
+
+
+    try {
+
+      data =
+        JSON.parse(raw);
+
+    } catch (e) {
+
+      data = {
+
+        raw: raw
+
+      };
+
+    }
+
+
+    /* =========================
+       最终结果
+    ========================= */
+
+    const finalResult = {
+
+      http_status:
+        response.status,
+
+      http_ok:
+        response.ok,
+
+      request:
+        requestInfo,
+
+      response:
+        data
+
+    };
+
+
+    resultBox.textContent =
+      prettyJSON(finalResult);
+
+
+    /* =========================
+       判断成功
+    ========================= */
+
+    if (
+      response.ok &&
+      data &&
+      data.ok === true
+    ) {
+
+      setStatus(
+        "✅ 测试成功！真实大富翁游戏已经创建，并成功读取游戏状态。",
+        "ok"
+      );
+
+    } else {
+
+      setStatus(
+        "❌ MCP 测试失败，请查看下面的完整返回结果。",
+        "error"
+      );
+
+    }
+
+  } catch (error) {
+
+    console.error(
+      "🎲 MCP TEST ERROR",
+      error
+    );
+
+
+    resultBox.textContent =
+      prettyJSON({
+
+        request:
+          requestInfo,
+
+        error:
+          error &&
+          error.message
+            ? error.message
+            : String(error),
+
+        hint:
+          "如果这里出现 Failed to fetch，通常需要检查 Worker 的 CORS / ALLOWED_ORIGIN，或者确认 Worker 已部署 V3.2。"
+
+      });
+
+
+    setStatus(
+      "❌ 浏览器没有成功完成 POST 请求。",
+      "error"
+    );
+
+  } finally {
+
+    button.disabled = false;
+
+  }
+
+}
+
+
+/* =========================
+   按钮绑定
+========================= */
+
+$("testButton")
+  .addEventListener(
+    "click",
+    startTest
+  );
+
+</script>
+
+</body>
+</html>
+```
