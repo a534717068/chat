@@ -314,7 +314,7 @@
 
   <script>
     (function() {
-      window.__M_WORKER_VERSION__ = '2026-09-06-v12.7-force-real-mcp-route';
+      window.__M_WORKER_VERSION__ = '2026-09-06-v12.8-hard-mcp-route';
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
@@ -2264,7 +2264,7 @@ M：${aiText}`;
         await mcpRequest('initialize', {
           protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: {},
-          clientInfo: { name: 'M-Companion', version: '12.7' }
+          clientInfo: { name: 'M-Companion', version: '12.8' }
         });
         await mcpRequest('notifications/initialized', undefined, true).catch(() => {});
         const result = await mcpRequest('tools/list', {});
@@ -2289,8 +2289,28 @@ M：${aiText}`;
         return JSON.stringify(result);
       }
 
+      async function finalMcpReply(conversation, target, toolName) {
+        const finalRes = await workerFetch('', {
+          method: 'POST',
+          headers: target.headers,
+          body: JSON.stringify({
+            provider: target.provider,
+            model: target.model,
+            messages: conversation,
+            stream: false,
+            temperature: 0.2
+          })
+        });
+        const finalData = await finalRes.json().catch(() => ({}));
+        if (!finalRes.ok) throw new Error(finalData?.error?.message || `MCP 结果解读请求失败 HTTP ${finalRes.status}`);
+        const finalContent = String(finalData?.choices?.[0]?.message?.content || '').trim();
+        if (!finalContent) throw new Error('MCP 已执行，但 AI 没有返回有效的结果解读。');
+        console.log('🎲 V12.8 MCP FINAL OK:', toolName);
+        return finalContent;
+      }
+
       async function chatWithMonopolyMcp(apiMsgs, target) {
-        // V12.7：强制真实 MCP 路由版。
+        // V12.8：前端 MCP 路由硬验证版。
         // 核心原则：大富翁请求不再先让模型“自由回答”。
         // 流程固定为：MCP initialize/tools/list -> monopoly_help -> JSON 路由规划 -> 真实 tools/call -> AI 依据真实结果生成回复。
         // 因此“我调用了 MCP”这句话本身永远不能代替真正的 tools/call。
@@ -2305,12 +2325,35 @@ M：${aiText}`;
 
         // 1. 每次进入大富翁路由，先真实读取帮助信息，作为规则锚点。
         requireTool('monopoly_help');
-        console.log('🎲 V12.7 MCP → tools/call monopoly_help');
+        console.log('🎲 V12.8 MCP → tools/call monopoly_help');
         const helpResult = await executeMcpTool('monopoly_help', {});
         conversation.push({
           role: 'system',
-          content: '【真实 MCP 规则锚点】以下内容刚刚由大富翁 MCP 返回。只能依据 MCP 返回的规则、状态和工具结果作答；禁止编造骰子、资金、棋盘位置、地产、卡牌、任务、胜负或任何游戏事件。\nMCP monopoly_help 返回：\n' + helpResult
+          content: '【真实 MCP 规则锚点】以下内容刚刚由大富翁 MCP 返回。只能依据 MCP 返回的规则、状态和工具结果作答；禁止编造骰子、资金、棋盘位置、地产、卡牌、任务、胜负或任何游戏事件。\\nMCP monopoly_help 返回：\\n' + helpResult
         });
+
+        // V12.8：对最明确的游戏动作进行本地硬路由。
+        // 这样“掷骰子”等请求不依赖模型是否会正确输出 JSON，必须直接进入真实 MCP。
+        const latestUserText = String(
+          [...conversation].reverse().find(m => m.role === 'user')?.content || ''
+        ).toLowerCase();
+
+        let hardTool = null;
+        if (/(掷骰|骰子|roll)/i.test(latestUserText) && hasTool('roll')) {
+          hardTool = 'roll';
+        } else if (/(游戏信息|当前状态|棋盘|资产|现金|位置|回合状态|game.?info)/i.test(latestUserText) && hasTool('game_info')) {
+          hardTool = 'game_info';
+        }
+
+        if (hardTool) {
+          console.log('🎲 V12.8 HARD ROUTE → tools/call ' + hardTool);
+          const hardResult = await executeMcpTool(hardTool, {});
+          conversation.push({
+            role: 'system',
+            content: '【V12.8 真实 MCP 工具结果】刚刚已真实执行工具 ' + hardTool + '。只能依据以下结果回答，禁止补造任何游戏状态：\\n' + hardResult
+          });
+          return await finalMcpReply(conversation, target, hardTool);
+        }
 
         // 2. 强制 JSON 路由器：不发送 tools/tool_choice，不依赖 OpenCode Go 的原生 tool_calls 能力。
         //    它只能“决定调用什么”，不能伪造调用结果；真正执行由 executeMcpTool 完成。
@@ -2368,7 +2411,7 @@ M：${aiText}`;
         }
 
         // 3. 这里才是真正的 MCP tools/call。
-        console.log('🎲 V12.7 强制真实 MCP tools/call:', plan.tool, plan.arguments);
+        console.log('🎲 V12.8 强制真实 MCP tools/call:', plan.tool, plan.arguments);
         const toolResult = await executeMcpTool(plan.tool, plan.arguments);
 
         // 4. 把真实 MCP 结果交给 AI 做最终自然语言回复。
@@ -2378,22 +2421,7 @@ M：${aiText}`;
           content: `【真实 MCP 工具执行结果】\n本次已经真实执行 MCP tools/call：${plan.tool}\n参数：${JSON.stringify(plan.arguments)}\n返回：\n${toolResult}\n\n你现在只能依据这份真实返回结果回答用户。不要自行补充没有返回的数据。若工具返回错误，直接说明工具拒绝/失败及其原因，不要猜测成功。`
         });
 
-        const finalRes = await workerFetch('', {
-          method: 'POST',
-          headers: target.headers,
-          body: JSON.stringify({
-            provider: target.provider,
-            model: target.model,
-            messages: conversation,
-            stream: false,
-            temperature: 0.2
-          })
-        });
-        const finalData = await finalRes.json().catch(() => ({}));
-        if (!finalRes.ok) throw new Error(finalData?.error?.message || `MCP 结果解读请求失败 HTTP ${finalRes.status}`);
-        const finalContent = String(finalData?.choices?.[0]?.message?.content || '').trim();
-        if (!finalContent) throw new Error('MCP 已执行，但 AI 没有返回有效的结果解读。');
-        return finalContent;
+        return await finalMcpReply(conversation, target, plan.tool);
       }
 
       // ========== 核心发送函数（带调试日志） ==========
@@ -2442,13 +2470,15 @@ M：${aiText}`;
           console.log(`📉 本次请求上下文约 ${approxChars} 字符（仅为粗略估算，不等于实际计费 Token）`);
           if (isMonopolyRequest(text)) console.log('🎲 V12.7：检测到大富翁请求，将强制进入真实 MCP 路由，不允许普通聊天回退。');
 
-          // V12.7：明确的大富翁请求进入强制真实 MCP 路由。
+          // V12.8：明确的大富翁请求进入强制真实 MCP 路由。
           // MCP 失败时绝不回退普通聊天，否则模型可能在没有真实状态的情况下编造骰子/棋盘。
           let reply = '';
           const monopolyMode = isMonopolyRequest(text);
           if (monopolyMode) {
+            console.warn('🚨 V12.8 HARD MCP MODE: 用户请求已锁定到真实 MCP，禁止普通聊天路径。', text);
             if (!getWorkerToken()) throw new Error('请先登录 Worker，才能使用真实大富翁 MCP。');
             reply = await chatWithMonopolyMcp(apiMsgs, target);
+            if (!reply) throw new Error('V12.8 MCP 路由异常：真实 MCP 路由没有返回结果，已阻止普通聊天回退。');
           }
 
           if (!reply) {
