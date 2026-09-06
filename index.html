@@ -316,6 +316,50 @@
     (function() {
       window.__M_WORKER_VERSION__ = '2026-09-05-v12.4-emotion-auto-adjust';
       const $ = id => document.getElementById(id);
+
+      // ===== V13.1：发送键前置硬绑定 =====
+      // 必须在后续任何初始化代码之前绑定，避免某个非核心初始化异常导致发送键没有事件。
+      window.__M_SEND_V131__ = function() {
+        try {
+          const input = $('userInput');
+          const btn = $('sendBtn');
+          if (!input || !btn) {
+            alert('发送组件加载失败：找不到输入框或发送按钮');
+            return;
+          }
+          const t = input.value.trim();
+          const imgs = Array.isArray(window.__M_PENDING_IMAGES__) ? window.__M_PENDING_IMAGES__.slice() : [];
+          if (!t && !imgs.length) return;
+          if (typeof pendingImages !== 'undefined') {
+            const realImgs = pendingImages.slice();
+            pendingImages = [];
+            if (typeof updateImagePreview === 'function') updateImagePreview();
+            input.value = '';
+            sendToAPI(t, realImgs);
+          } else {
+            input.value = '';
+            sendToAPI(t, imgs);
+          }
+        } catch (e) {
+          console.error('V13.1 SEND ERROR', e);
+          alert('发送按钮执行失败：' + (e && e.message ? e.message : e));
+        }
+      };
+      const __earlySendBtn = $('sendBtn');
+      if (__earlySendBtn) {
+        __earlySendBtn.type = 'button';
+        __earlySendBtn.disabled = false;
+        __earlySendBtn.addEventListener('click', window.__M_SEND_V131__, true);
+      }
+      const __earlyInput = $('userInput');
+      if (__earlyInput) {
+        __earlyInput.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            window.__M_SEND_V131__();
+          }
+        }, true);
+      }
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
       const SETTING_KEY = 'deepseek_global_setting', MEMORY_KEY = 'deepseek_compressed_memory';
@@ -2204,7 +2248,7 @@ M：${aiText}`;
       document.getElementById('pauseReprocessBtn').addEventListener('click', function() { document.getElementById('moreMenu').classList.remove('active'); togglePauseReprocess(); });
       document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
-      // V13 BUILD: SEND-BUTTON-SAFE-MCP-ISOLATED 2026-09-06
+      // V13.1 BUILD: SEND-BUTTON-EARLY-BIND 2026-09-06
       // ========== MCP：大富翁专用（与普通聊天完全隔离） ==========
       const MCP_GATEWAY_PATH = '/mcp/monopoly';
       const MCP_PROTOCOL_VERSION = '2025-06-18';
@@ -2509,29 +2553,7 @@ M：${aiText}`;
         e.target.value = '';
       });
 
-      $('sendBtn').onclick = () => {
-        const t = $('userInput').value.trim();
-        if (!t && !pendingImages.length) return;
-
-        if(pendingImages.length && !isVisionModel(getSelectedModel())){
-          alert('当前模型不支持图片输入，请先切换到 Vision 模型。');
-          return;
-        }
-
-        const imgs = pendingImages.slice();
-        pendingImages = [];
-        updateImagePreview();
-
-        $('userInput').value = '';
-        sendToAPI(t, imgs);
-      };
-
-      $('userInput').onkeydown = e => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          $('sendBtn').click();
-        }
-      };
+      // V13.1：发送键已经在脚本最前面绑定，这里不再重复绑定。
 
       
       $('exportBtn').onclick = () => {
