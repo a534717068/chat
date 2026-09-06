@@ -176,7 +176,7 @@
     <input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style="display:none;">
     <button id="imageUploadBtn" class="image-upload-btn" title="上传图片" aria-label="上传图片">📎</button>
     <textarea id="userInput" rows="1" placeholder="输入消息，或先上传图片..."></textarea>
-    <button id="sendBtn" type="button">发送</button>
+    <button id="sendBtn">发送</button>
   </div>
   <div class="multi-select-bar" id="multiSelectBar">
     <span>已选择 <strong id="multiSelectCount">0</strong> 条消息</span>
@@ -316,50 +316,6 @@
     (function() {
       window.__M_WORKER_VERSION__ = '2026-09-05-v12.4-emotion-auto-adjust';
       const $ = id => document.getElementById(id);
-
-      // ===== V13.1：发送键前置硬绑定 =====
-      // 必须在后续任何初始化代码之前绑定，避免某个非核心初始化异常导致发送键没有事件。
-      window.__M_SEND_V131__ = function() {
-        try {
-          const input = $('userInput');
-          const btn = $('sendBtn');
-          if (!input || !btn) {
-            alert('发送组件加载失败：找不到输入框或发送按钮');
-            return;
-          }
-          const t = input.value.trim();
-          const imgs = Array.isArray(window.__M_PENDING_IMAGES__) ? window.__M_PENDING_IMAGES__.slice() : [];
-          if (!t && !imgs.length) return;
-          if (typeof pendingImages !== 'undefined') {
-            const realImgs = pendingImages.slice();
-            pendingImages = [];
-            if (typeof updateImagePreview === 'function') updateImagePreview();
-            input.value = '';
-            sendToAPI(t, realImgs);
-          } else {
-            input.value = '';
-            sendToAPI(t, imgs);
-          }
-        } catch (e) {
-          console.error('V13.1 SEND ERROR', e);
-          alert('发送按钮执行失败：' + (e && e.message ? e.message : e));
-        }
-      };
-      const __earlySendBtn = $('sendBtn');
-      if (__earlySendBtn) {
-        __earlySendBtn.type = 'button';
-        __earlySendBtn.disabled = false;
-        __earlySendBtn.addEventListener('click', window.__M_SEND_V131__, true);
-      }
-      const __earlyInput = $('userInput');
-      if (__earlyInput) {
-        __earlyInput.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            window.__M_SEND_V131__();
-          }
-        }, true);
-      }
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
       const SETTING_KEY = 'deepseek_global_setting', MEMORY_KEY = 'deepseek_compressed_memory';
@@ -2248,7 +2204,6 @@ M：${aiText}`;
       document.getElementById('pauseReprocessBtn').addEventListener('click', function() { document.getElementById('moreMenu').classList.remove('active'); togglePauseReprocess(); });
       document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
-      // V13.1 BUILD: SEND-BUTTON-EARLY-BIND 2026-09-06
       // ========== MCP：大富翁专用（与普通聊天完全隔离） ==========
       const MCP_GATEWAY_PATH = '/mcp/monopoly';
       const MCP_PROTOCOL_VERSION = '2025-06-18';
@@ -2334,84 +2289,50 @@ M：${aiText}`;
         return JSON.stringify(result);
       }
 
-      async function finalMcpReply(apiMsgs, toolName, toolResult, target) {
-        const toolText = String(toolResult || '');
-        const prompt = [
-          '你正在作为大富翁游戏助手回复用户。',
-          '下面的 MCP 工具调用已经由程序真实执行，结果是唯一可信的游戏状态。',
-          '绝对不要编造骰子、金钱、位置、资产、回合、事件或工具结果。',
-          '只根据用户消息和下面的真实 MCP 结果回答。',
-          `真实 MCP 工具：${toolName}`,
-          `真实 MCP 返回：${toolText}`,
-          '如果工具返回错误，明确告诉用户工具执行失败，不要假装成功。'
-        ].join('\n');
-        const msgs = apiMsgs.concat([{role:'user', content: prompt}]);
-        const res = await workerFetch('', {
-          method:'POST',
-          headers: target.headers,
-          body: JSON.stringify({
-            provider: target.provider,
-            model: target.model,
-            messages: msgs,
-            stream:false,
-            temperature:0.2
-          })
-        });
-        const data = await res.json().catch(()=>({}));
-        if (!res.ok) throw new Error(data?.error?.message || `最终回复请求失败 HTTP ${res.status}`);
-        return String(data?.choices?.[0]?.message?.content || '').trim();
-      }
-
       async function chatWithMonopolyMcp(apiMsgs, target) {
-        // MCP 完全隔离：普通聊天发送路径不依赖任何 MCP 初始化/工具调用。
         const tools = await ensureMcp();
-        const names = new Set(tools.map(t => t.name));
+        let conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
+        const modelTools = mcpToolsForModel(tools);
 
-        // 明确动作直接硬路由，避免模型不产生 tool_calls 导致“假调用”。
-        const latest = [...apiMsgs].reverse().find(m => m.role === 'user');
-        const text = String(latest?.content || '');
-
-        let toolName = '';
-        let args = {};
-
-        if (/(掷骰|骰子|roll)/i.test(text) && names.has('roll')) {
-          toolName = 'roll';
-        } else if (/(游戏信息|当前状态|棋盘|资产|现金|位置|回合状态|game.?info)/i.test(text) && names.has('game_info')) {
-          toolName = 'game_info';
-        }
-
-        // 其他大富翁操作交给模型做“工具选择”，但程序只接受 MCP 返回的工具名。
-        if (!toolName) {
-          const modelTools = mcpToolsForModel(tools);
+        for (let round = 0; round < 8; round++) {
           const res = await workerFetch('', {
-            method:'POST',
+            method: 'POST',
             headers: target.headers,
             body: JSON.stringify({
               provider: target.provider,
               model: target.model,
-              messages: apiMsgs,
+              messages: conversation,
               tools: modelTools,
-              tool_choice:'auto',
-              stream:false,
-              temperature:0
+              tool_choice: 'auto',
+              stream: false,
+              temperature: 0.5
             })
           });
-          const data = await res.json().catch(()=>({}));
-          if (!res.ok) throw new Error(data?.error?.message || `MCP 路由模型请求失败 HTTP ${res.status}`);
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data?.error?.message || `模型请求失败 HTTP ${res.status}`);
           const msg = data?.choices?.[0]?.message;
-          const calls = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
-          if (!calls.length) throw new Error('模型没有选择 MCP 工具，已停止，防止假装执行游戏。');
-          const call = calls[0];
-          toolName = call?.function?.name || '';
-          if (!names.has(toolName)) throw new Error(`模型选择了不存在的 MCP 工具：${toolName}`);
-          try { args = call?.function?.arguments ? JSON.parse(call.function.arguments) : {}; }
-          catch (_) { throw new Error(`MCP 工具 ${toolName} 的参数不是有效 JSON。`); }
+          if (!msg) throw new Error('模型没有返回有效消息。');
+
+          const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+          if (!calls.length) return String(msg.content || '').trim();
+
+          conversation.push(msg);
+          for (const call of calls) {
+            const name = call?.function?.name;
+            if (!name) throw new Error('模型返回了无效的 MCP 工具调用。');
+            let args = {};
+            try { args = call?.function?.arguments ? JSON.parse(call.function.arguments) : {}; }
+            catch (_) { throw new Error(`MCP 工具 ${name} 的参数不是有效 JSON。`); }
+            const result = await executeMcpTool(name, args);
+            conversation.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: result
+            });
+          }
         }
-
-        const toolResult = await executeMcpTool(toolName, args);
-        return await finalMcpReply(apiMsgs, toolName, toolResult, target);
+        throw new Error('MCP 工具调用超过 8 轮，已停止。');
       }
-
 
       // ========== 核心发送函数（带调试日志） ==========
       async function sendToAPI(text, attachments = []) {
@@ -2553,7 +2474,29 @@ M：${aiText}`;
         e.target.value = '';
       });
 
-      // V13.1：发送键已经在脚本最前面绑定，这里不再重复绑定。
+      $('sendBtn').onclick = () => {
+        const t = $('userInput').value.trim();
+        if (!t && !pendingImages.length) return;
+
+        if(pendingImages.length && !isVisionModel(getSelectedModel())){
+          alert('当前模型不支持图片输入，请先切换到 Vision 模型。');
+          return;
+        }
+
+        const imgs = pendingImages.slice();
+        pendingImages = [];
+        updateImagePreview();
+
+        $('userInput').value = '';
+        sendToAPI(t, imgs);
+      };
+
+      $('userInput').onkeydown = e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          $('sendBtn').click();
+        }
+      };
 
       
       $('exportBtn').onclick = () => {
