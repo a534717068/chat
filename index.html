@@ -2670,21 +2670,6 @@ M：${aiText}`;
           return 'other';
         }
 
-        // 在 schema 的合法枚举中，找出“两名女性”对应的值（女女/两女/FF 等）。
-        function twoFemaleEnum(enums) {
-          const vals = enums.filter(v => typeof v === 'string' || typeof v === 'number');
-          const patterns = [
-            /^女女$|两女|双女|全女|二女|两位女|俩女/,
-            /^ff$/i,
-            /female[\s_\-]*female|female[\s_\-]*2|2[\s_\-]*female/i
-          ];
-          for (const re of patterns) {
-            const hit = vals.find(v => re.test(String(v)));
-            if (hit !== undefined) return hit;
-          }
-          return null;
-        }
-
         for (const key of Object.keys(props)) {
           const def = props[key];
           if (!def || typeof def !== 'object') continue;
@@ -2723,9 +2708,7 @@ M：${aiText}`;
           }
 
           if (kind === 'lineup') {
-            const twoFemale = twoFemaleEnum(enumOf(def));
-            if (twoFemale !== null) args[key] = twoFemale;
-            // 没有“两女”合法枚举值时，不写入错误的“男女”默认值，留待用户确认。
+            args[key] = '女女';
             continue;
           }
 
