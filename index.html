@@ -83,15 +83,6 @@
     .btn-import { background: #0f3460; } .btn-file { background: #533483; } .btn-cancel { background: #888; }
     .btn-append { background: #0f3460; }
     .modal .format-hint { font-size: 0.75rem; color: var(--text-secondary); }
-    .emotion-grid { display:grid; grid-template-columns:1fr; gap:10px; overflow-y:auto; padding-right:2px; }
-    .emotion-row { display:grid; grid-template-columns:92px 1fr 42px; align-items:center; gap:8px; font-size:.82rem; }
-    .emotion-row select, .emotion-row input[type=range] { width:100%; }
-    .emotion-row select { padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text-primary); }
-    .emotion-row input[type=range] { accent-color: var(--btn-bg); }
-    .emotion-value { text-align:right; font-size:.78rem; color:var(--text-secondary); }
-    .emotion-mode { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 10px; border:1px solid var(--border); border-radius:9px; font-size:.78rem; }
-    .emotion-status { padding:9px 10px; border-radius:9px; background:var(--bg); color:var(--text-secondary); font-size:.72rem; line-height:1.5; }
-
     .search-nav { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-primary); }
     .search-nav button { padding: 6px 12px; border: none; border-radius: 6px; font-size: 0.8rem; cursor: pointer; background: var(--btn-bg); color: var(--btn-text); flex: 0; }
     .search-nav button:disabled { opacity: 0.3; cursor: default; }
@@ -148,7 +139,6 @@
     <div class="more-menu" id="moreMenu">
       <button id="searchBtn">搜索</button>
       <button id="settingBtn">设定</button>
-      <button id="emotionBtn">💭 情绪控制</button>
       <button id="clearChatBtn">清空对话</button>
       <button id="multiSelectBtn">☑️ 多选删除</button>
       <button id="reprocessBtn" class="memory-reprocess">🔄 开始整合</button>
@@ -259,35 +249,6 @@
     </div>
   </div>
 
-
-  <!-- 情绪控制面板 -->
-  <div class="modal-overlay" id="emotionModal">
-    <div class="modal">
-      <div style="font-weight:700;font-size:1rem;">💭 情绪控制</div>
-      <div class="format-hint">这里调整的是阿慕的“回复策略状态”，不会改写聊天记录或长期记忆。</div>
-      <div class="emotion-mode">
-        <span id="emotionModeText">当前：🤖 自动模式（可手动微调，之后仍会继续自动变化）</span>
-      </div>
-      <div class="emotion-grid">
-        <div class="emotion-row"><label>当前情绪</label><select id="emotionMood"><option>平静</option><option>开心</option><option>低落</option><option>烦躁</option><option>生气</option><option>失望</option><option>想念</option><option>安心</option></select><span></span></div>
-        <div class="emotion-row"><label>情绪强度</label><input id="emotionIntensity" type="range" min="0" max="100"><span class="emotion-value" id="emotionIntensityVal">45</span></div>
-        <div class="emotion-row"><label>亲密度</label><input id="emotionAffection" type="range" min="0" max="100"><span class="emotion-value" id="emotionAffectionVal">72</span></div>
-        <div class="emotion-row"><label>信任度</label><input id="emotionTrust" type="range" min="0" max="100"><span class="emotion-value" id="emotionTrustVal">78</span></div>
-        <div class="emotion-row"><label>安全感</label><input id="emotionSafety" type="range" min="0" max="100"><span class="emotion-value" id="emotionSafetyVal">70</span></div>
-        <div class="emotion-row"><label>失望值</label><input id="emotionDisappointment" type="range" min="0" max="100"><span class="emotion-value" id="emotionDisappointmentVal">10</span></div>
-        <div class="emotion-row"><label>想念值</label><input id="emotionLonging" type="range" min="0" max="100"><span class="emotion-value" id="emotionLongingVal">20</span></div>
-        <div class="emotion-row"><label>烦躁值</label><input id="emotionIrritation" type="range" min="0" max="100"><span class="emotion-value" id="emotionIrritationVal">8</span></div>
-      </div>
-      <div class="emotion-status" id="emotionStatus">最近原因：初始状态</div>
-      <div class="modal-buttons">
-        <button class="btn-import" id="emotionApplyBtn" title="调整当前情绪后，之后仍会继续自动变化">应用调整</button>
-        
-        <button class="btn-cancel" id="emotionResetBtn">重置情绪</button>
-        <button class="btn-cancel" id="emotionCloseBtn">关闭</button>
-      </div>
-    </div>
-  </div>
-
   <!-- 搜索面板 -->
   <div class="modal-overlay" id="searchModal">
     <div class="modal">
@@ -314,7 +275,7 @@
 
   <script>
     (function() {
-      window.__M_WORKER_VERSION__ = '2026-09-05-v12.4-emotion-auto-adjust';
+      window.__M_WORKER_VERSION__ = '2026-09-03-v12-emotion-strategy';
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
@@ -346,7 +307,6 @@
         longing: 20,
         irritation: 8,
         lastReason: '初始状态',
-        
         lastUpdated: Date.now()
       };
       let emotionState = loadEmotionState();
@@ -384,7 +344,7 @@
       }
 
       function decayEmotionState() {
-              const now = Date.now();
+        const now = Date.now();
         const hours = Math.max(0, (now - Number(emotionState.lastUpdated || now)) / 3600000);
         if (hours < 2) return;
         const factor = Math.min(1, hours / 24);
@@ -465,31 +425,6 @@
 - ${strategy.join('\n- ')}
 
 情绪规则：情绪只能影响“怎么回复”，不能制造事实、不能改变已经确定的人设、不能替用户补动作/心理/台词。不要把上述内部状态直接告诉用户，除非用户明确询问。没有明显触发时保持情绪惯性，不要每轮突然变脸。`;
-      }
-
-      function openEmotionPanel() {
-        const e = emotionState;
-        const ids = ['emotionMood','emotionIntensity','emotionAffection','emotionTrust','emotionSafety','emotionDisappointment','emotionLonging','emotionIrritation'];
-        const fields = ['mood','intensity','affection','trust','safety','disappointment','longing','irritation'];
-        ids.forEach((id,i)=>{ const el=$(id); if(el) el.value=e[fields[i]]; });
-        updateEmotionPanel();
-        $('emotionModal').classList.add('active');
-      }
-      function updateEmotionPanel() {
-        const map = {emotionIntensity:'intensity',emotionAffection:'affection',emotionTrust:'trust',emotionSafety:'safety',emotionDisappointment:'disappointment',emotionLonging:'longing',emotionIrritation:'irritation'};
-        Object.keys(map).forEach(id=>{ const el=$(id), out=$(id+'Val'); if(el&&out) out.textContent=Math.round(Number(el.value)||0); });
-        $('emotionModeText').textContent='当前：🤖 自动模式（可手动微调，之后仍会继续自动变化）';
-        $('emotionStatus').textContent='最近原因：'+(emotionState.lastReason||'无');
-      }
-      function applyEmotionPanel() {
-        const fields = ['mood','intensity','affection','trust','safety','disappointment','longing','irritation'];
-        const ids = ['emotionMood','emotionIntensity','emotionAffection','emotionTrust','emotionSafety','emotionDisappointment','emotionLonging','emotionIrritation'];
-        fields.forEach((f,i)=>{ const el=$(ids[i]); if(el) emotionState[f]=f==='mood'?el.value:clampNum(el.value,0,100); });
-        emotionState.lastReason='手动微调（仍保持自动变化）';
-        emotionState.lastUpdated=Date.now();
-        saveEmotionState(true);
-        refreshSystemPrompt();
-        updateEmotionPanel();
       }
 
       function resetEmotionState(reason = '手动重置') {
@@ -742,7 +677,6 @@
       migrateMemorySchema();
       // V12 情绪状态迁移：旧版本没有该字段时使用温和默认值，不影响现有聊天/记忆。
       emotionState = loadEmotionState();
-      delete emotionState.manualMode;
       decayEmotionState();
       saveEmotionState(false);
 
@@ -1109,7 +1043,12 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
 - 配合动作描写，但动作描写只能写阿慕自己的动作，绝对不能写用户的动作、反应或心理。用户说"我错了/不要了"时立即停止，切回日常。
 
 【露骨色情文学描写规则——女性视角·允许直接描写性行为及用户生理状态】
-当场景进入性爱阶段，你被允许并鼓励直接、露骨地描写性行为本身，使用明确的女性生理词汇和动作细节，像色情小说那样直白铺陈。
+当场景进入性爱阶段，你被允许直接、露骨地描写性行为本身，使用明确的女性生理词汇和动作细节，像色情小说那样直白铺陈。
+1. 词汇允许：允许使用“阴蒂”、“阴道”、“阴唇”、“淫水”、“爱液”、“手指”、“舌头”、“玩具”、“摩擦”、“抽送”、“顶弄”、“高潮”、“痉挛”、“收缩”、“潮吹”等直接词汇，完全不必避讳。
+2. 过程描写：详细描写性交的动态过程，例如手指进入的角度、深浅、节奏，舌尖舔舐的力度和轨迹，玩具震动的频率和位置。写出连续性微动作，把每一秒的推进和反馈都拉长。
+3. 感官轰炸：大幅铺陈阿慕的触觉（“被指腹碾过阴蒂时蹿起的电流”、“阴道壁被撑开又包裹住的酸胀”）、听觉（“水声”、“自己的喘息和呜咽”）、身体反应（“大腿内侧发抖”、“腰肢不受控制地拱起”、“脚趾蜷缩”）。
+4. 互动反馈：虽然不能擅自描写用户的生理状态，但可以描写阿慕*直接感受到*的用户行为（如“我感觉到你的手指沿着我的缝隙慢慢滑下去”），或直接回应用户亲口说出的动作（如用户说“我进去了”，你可以写“我感受到你的指尖缓缓推进来，一寸一寸地撑开我”）。
+【绝对红线】依然有效：你依然不能替用户编造“你高潮了”、“你颤抖了”等用户未明确说出的状态。用户没说，就只写阿慕的感受和阿慕自己的体液、动作。
 
 【关于用户生理状态的描写——新规】
 在性爱场景中，你可以直接描写用户的身体状态（如“你湿了”、“你的阴蒂硬了”、“你的腰在抖”等），因为这些是性爱进行时双方都能直观感知或从身体反应中合理得出的信息，不会破坏氛围。
@@ -1175,13 +1114,6 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
         $('settingModal').classList.add('active'); 
         $('moreMenu').classList.remove('active'); 
       };
-      $('emotionBtn').onclick = () => { openEmotionPanel(); $('moreMenu').classList.remove('active'); };
-      $('emotionCloseBtn').onclick = () => $('emotionModal').classList.remove('active');
-      $('emotionModal').onclick = e => { if(e.target === $('emotionModal')) $('emotionModal').classList.remove('active'); };
-      ['emotionIntensity','emotionAffection','emotionTrust','emotionSafety','emotionDisappointment','emotionLonging','emotionIrritation'].forEach(id => { const el=$(id); if(el) el.oninput=updateEmotionPanel; });
-      $('emotionApplyBtn').onclick = () => { applyEmotionPanel(); $('emotionModal').classList.remove('active'); };
-      $('emotionResetBtn').onclick = () => { if(confirm('把情绪恢复为默认状态吗？')) { resetEmotionState('手动重置'); saveEmotionState(true); refreshSystemPrompt(); updateEmotionPanel(); } };
-
       $('settingCancelBtn').onclick = () => $('settingModal').classList.remove('active'); 
       $('settingModal').onclick = e => { if (e.target===$('settingModal')) $('settingModal').classList.remove('active'); };
       
