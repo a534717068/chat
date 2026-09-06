@@ -176,7 +176,7 @@
     <input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style="display:none;">
     <button id="imageUploadBtn" class="image-upload-btn" title="上传图片" aria-label="上传图片">📎</button>
     <textarea id="userInput" rows="1" placeholder="输入消息，或先上传图片..."></textarea>
-    <button id="sendBtn" type="button">发送</button>
+    <button id="sendBtn">发送</button>
   </div>
   <div class="multi-select-bar" id="multiSelectBar">
     <span>已选择 <strong id="multiSelectCount">0</strong> 条消息</span>
@@ -316,50 +316,6 @@
     (function() {
       window.__M_WORKER_VERSION__ = '2026-09-05-v12.4-emotion-auto-adjust';
       const $ = id => document.getElementById(id);
-
-      // ===== V13.1：发送键前置硬绑定 =====
-      // 必须在后续任何初始化代码之前绑定，避免某个非核心初始化异常导致发送键没有事件。
-      window.__M_SEND_V131__ = function() {
-        try {
-          const input = $('userInput');
-          const btn = $('sendBtn');
-          if (!input || !btn) {
-            alert('发送组件加载失败：找不到输入框或发送按钮');
-            return;
-          }
-          const t = input.value.trim();
-          const imgs = Array.isArray(window.__M_PENDING_IMAGES__) ? window.__M_PENDING_IMAGES__.slice() : [];
-          if (!t && !imgs.length) return;
-          if (typeof pendingImages !== 'undefined') {
-            const realImgs = pendingImages.slice();
-            pendingImages = [];
-            if (typeof updateImagePreview === 'function') updateImagePreview();
-            input.value = '';
-            sendToAPI(t, realImgs);
-          } else {
-            input.value = '';
-            sendToAPI(t, imgs);
-          }
-        } catch (e) {
-          console.error('V13.1 SEND ERROR', e);
-          alert('发送按钮执行失败：' + (e && e.message ? e.message : e));
-        }
-      };
-      const __earlySendBtn = $('sendBtn');
-      if (__earlySendBtn) {
-        __earlySendBtn.type = 'button';
-        __earlySendBtn.disabled = false;
-        __earlySendBtn.addEventListener('click', window.__M_SEND_V131__, true);
-      }
-      const __earlyInput = $('userInput');
-      if (__earlyInput) {
-        __earlyInput.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            window.__M_SEND_V131__();
-          }
-        }, true);
-      }
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
       const SETTING_KEY = 'deepseek_global_setting', MEMORY_KEY = 'deepseek_compressed_memory';
@@ -550,6 +506,167 @@
       const BACKUP_ENABLED_KEY = 'm_cloud_backup_enabled_v1';
       const DEFAULT_GO_MODEL = 'deepseek-v4-flash';
       const DEFAULT_DS_MODEL = 'deepseek-v4-flash';
+
+      // ===== V12.5：MCP 客户端（通过 Worker Gateway 调用外部 MCP） =====
+      // MCP Server 不存入 KV；这里只保存 Gateway 地址和当前 MCP 会话。
+      const MCP_GATEWAY_URL = workerPath => workerUrl(workerPath);
+      const MCP_MONOPOLY_PATH = '/mcp/monopoly';
+      const MCP_PROTOCOL_VERSION = '2025-06-18';
+      const MCP_CLIENT_NAME = 'M-阿慕';
+      const MCP_CLIENT_VERSION = '12.5';
+      let mcpSessionId = '';
+      let mcpRequestId = 1000;
+      let mcpTools = [];
+      let mcpReady = false;
+
+      function nextMcpId(){ return ++mcpRequestId; }
+
+      async function parseMcpResponse(res){
+        const text = await res.text();
+        if(!text) return {};
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        if(ct.includes('text/event-stream')){
+          // Streamable HTTP 可能返回 SSE；把最后一个 data JSON 作为本次 RPC 结果。
+          const chunks = [];
+          for(const line of text.split(/\r?\n/)){
+            if(line.startsWith('data:')) chunks.push(line.slice(5).trim());
+          }
+          for(let i=chunks.length-1;i>=0;i--){
+            if(!chunks[i] || chunks[i]==='[DONE]') continue;
+            try{return JSON.parse(chunks[i]);}catch(e){}
+          }
+        }
+        try{return JSON.parse(text);}catch(e){
+          return {raw:text.slice(0,12000)};
+        }
+      }
+
+      async function mcpRpc(method, params={}, {allowRetry=true}={}){
+        const token=getWorkerToken();
+        if(!token) throw new Error('MCP 需要先登录 Worker。');
+        const headers={
+          'Content-Type':'application/json',
+          'Accept':'application/json, text/event-stream',
+          'MCP-Protocol-Version':MCP_PROTOCOL_VERSION,
+          'Authorization':'Bearer '+token
+        };
+        if(mcpSessionId) headers['Mcp-Session-Id']=mcpSessionId;
+        const body={jsonrpc:'2.0',id:nextMcpId(),method,params};
+        const res=await fetch(MCP_GATEWAY_URL(MCP_MONOPOLY_PATH),{
+          method:'POST',headers,body:JSON.stringify(body),cache:'no-store'
+        });
+        const newSession=res.headers.get('Mcp-Session-Id');
+        if(newSession) mcpSessionId=newSession;
+        const data=await parseMcpResponse(res);
+        if(!res.ok){
+          if((res.status===404 || res.status===400) && allowRetry && mcpSessionId){
+            mcpSessionId=''; mcpReady=false;
+          }
+          throw new Error(data?.error?.message || data?.message || `MCP HTTP ${res.status}`);
+        }
+        if(data?.error) throw new Error(data.error.message || 'MCP RPC 错误');
+        return data?.result ?? data;
+      }
+
+      async function mcpInitialize(){
+        if(mcpReady && mcpTools.length) return mcpTools;
+        if(!getWorkerToken()) throw new Error('请先登录 Worker，再使用大富翁 MCP。');
+        mcpSessionId='';
+        const init=await mcpRpc('initialize',{
+          protocolVersion:MCP_PROTOCOL_VERSION,
+          capabilities:{},
+          clientInfo:{name:MCP_CLIENT_NAME,version:MCP_CLIENT_VERSION}
+        },{allowRetry:false});
+        if(init?.protocolVersion) console.log('🎲 MCP 协议版本:',init.protocolVersion);
+        // initialized 是 notification，没有 id；Gateway 会原样转发。
+        await mcpRpc('notifications/initialized',{}, {allowRetry:false}).catch(e=>{
+          // 某些服务器会把 notification 当作普通 RPC 拒绝；这不影响继续 tools/list。
+          console.debug('MCP initialized notification:',e.message);
+        });
+        const list=await mcpRpc('tools/list',{});
+        mcpTools=Array.isArray(list?.tools)?list.tools:[];
+        mcpReady=true;
+        console.log('🎲 MCP 工具已加载:',mcpTools.map(t=>t.name));
+        return mcpTools;
+      }
+
+      function mcpToolName(name){
+        // 避免与模型自身工具同名，并保证后续可反向映射。
+        return 'mcp_monopoly_' + String(name||'').replace(/[^a-zA-Z0-9_]/g,'_');
+      }
+
+      function getMcpOpenAITools(tools){
+        return (tools||[]).map(t=>({
+          type:'function',
+          function:{
+            name:mcpToolName(t.name),
+            description:String(t.description||`大富翁 MCP 工具：${t.name}`),
+            parameters:(t.inputSchema && typeof t.inputSchema==='object') ? t.inputSchema : {type:'object',properties:{}}
+          }
+        }));
+      }
+
+      function findMcpToolByOpenAIName(name){
+        return mcpTools.find(t=>mcpToolName(t.name)===name) || null;
+      }
+
+      function stringifyToolResult(result){
+        try{return JSON.stringify(result);}catch(e){return String(result??'');}
+      }
+
+      async function callMcpToolFromModel(toolCall){
+        const fn=toolCall?.function || {};
+        const tool=findMcpToolByOpenAIName(fn.name);
+        if(!tool) throw new Error(`未知 MCP 工具：${fn.name}`);
+        let args={};
+        try{args=fn.arguments ? JSON.parse(fn.arguments) : {};}catch(e){
+          throw new Error(`MCP 工具参数不是有效 JSON：${fn.arguments}`);
+        }
+        console.log('🎲 MCP 调用:',tool.name,args);
+        const result=await mcpRpc('tools/call',{name:tool.name,arguments:args});
+        return result;
+      }
+
+      async function runChatWithMcp(initialMessages,target){
+        const tools=await mcpInitialize();
+        if(!tools.length) throw new Error('MCP 已连接，但没有返回任何工具。');
+        let convo=initialMessages.map(m=>({role:m.role,content:m.content}));
+        const toolDefs=getMcpOpenAITools(tools);
+        const maxRounds=8;
+        for(let round=0; round<maxRounds; round++){
+          const res=await workerFetch('',{
+            method:'POST',
+            headers:target.headers,
+            body:JSON.stringify({
+              provider:target.provider,
+              model:target.model,
+              messages:convo,
+              tools:toolDefs,
+              tool_choice:'auto',
+              stream:false,
+              temperature:0.5
+            })
+          });
+          const data=await res.json().catch(()=>({}));
+          if(!res.ok) throw new Error(data?.error?.message || `AI 请求失败 HTTP ${res.status}`);
+          const msg=data?.choices?.[0]?.message;
+          if(!msg) throw new Error('AI 返回中没有 message。');
+          if(Array.isArray(msg.tool_calls) && msg.tool_calls.length){
+            convo.push(msg);
+            for(const tc of msg.tool_calls){
+              try{
+                const result=await callMcpToolFromModel(tc);
+                convo.push({role:'tool',tool_call_id:tc.id,content:stringifyToolResult(result)});
+              }catch(e){
+                convo.push({role:'tool',tool_call_id:tc.id,content:JSON.stringify({error:e.message||String(e)})});
+              }
+            }
+            continue;
+          }
+          return String(msg.content||'').trim();
+        }
+        throw new Error('MCP 工具调用超过 8 轮，已停止，避免无限循环。');
+      }
 
       let workerAuthenticated = false;
       let backupSyncTimer = null;
@@ -2248,171 +2365,6 @@ M：${aiText}`;
       document.getElementById('pauseReprocessBtn').addEventListener('click', function() { document.getElementById('moreMenu').classList.remove('active'); togglePauseReprocess(); });
       document.getElementById('pauseResumeBtn').addEventListener('click', togglePauseReprocess);
 
-      // V13.1 BUILD: SEND-BUTTON-EARLY-BIND 2026-09-06
-      // ========== MCP：大富翁专用（与普通聊天完全隔离） ==========
-      const MCP_GATEWAY_PATH = '/mcp/monopoly';
-      const MCP_PROTOCOL_VERSION = '2025-06-18';
-      let mcpSessionId = '';
-      let mcpNextId = 1;
-      let mcpTools = [];
-
-      function isMonopolyRequest(text) {
-        const s = String(text || '').toLowerCase();
-        return ['大富翁','monopoly','掷骰','骰子','棋盘','买地','房子','地产','银行','破产','回合','开始游戏','玩游戏'].some(k => s.includes(k));
-      }
-
-      function mcpUrl() {
-        return workerUrl(MCP_GATEWAY_PATH);
-      }
-
-      function mcpParseResponse(raw) {
-        const text = String(raw || '').trim();
-        if (!text) return {};
-        try { return JSON.parse(text); } catch (_) {}
-        const lines = text.split(/\r?\n/);
-        const dataLines = lines.filter(x => x.startsWith('data:')).map(x => x.slice(5).trim()).filter(Boolean);
-        for (let i = dataLines.length - 1; i >= 0; i--) {
-          try { return JSON.parse(dataLines[i]); } catch (_) {}
-        }
-        return { raw: text };
-      }
-
-      async function mcpRequest(method, params, notification = false) {
-        const body = { jsonrpc: '2.0', method };
-        if (!notification) body.id = mcpNextId++;
-        if (params !== undefined) body.params = params;
-        const headers = {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json, text/event-stream',
-          'MCP-Protocol-Version': MCP_PROTOCOL_VERSION
-        };
-        if (mcpSessionId) headers['Mcp-Session-Id'] = mcpSessionId;
-        const res = await workerFetch(MCP_GATEWAY_PATH, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-          cache: 'no-store'
-        });
-        const session = res.headers.get('Mcp-Session-Id');
-        if (session) mcpSessionId = session;
-        const raw = await res.text();
-        if (!res.ok) throw new Error(`MCP HTTP ${res.status}: ${raw.slice(0, 300)}`);
-        const out = mcpParseResponse(raw);
-        if (out.error) throw new Error(out.error.message || 'MCP 返回错误');
-        return out.result !== undefined ? out.result : out;
-      }
-
-      async function ensureMcp() {
-        if (mcpTools.length) return mcpTools;
-        if (!getWorkerToken()) throw new Error('Worker 尚未登录，无法使用大富翁 MCP。');
-        mcpSessionId = '';
-        await mcpRequest('initialize', {
-          protocolVersion: MCP_PROTOCOL_VERSION,
-          capabilities: {},
-          clientInfo: { name: 'M-Companion', version: '12.5.2' }
-        });
-        await mcpRequest('notifications/initialized', undefined, true).catch(() => {});
-        const result = await mcpRequest('tools/list', {});
-        mcpTools = Array.isArray(result.tools) ? result.tools : [];
-        if (!mcpTools.length) throw new Error('MCP 未返回可用工具。');
-        return mcpTools;
-      }
-
-      function mcpToolsForModel(tools) {
-        return tools.map(t => ({
-          type: 'function',
-          function: {
-            name: t.name,
-            description: t.description || '',
-            parameters: t.inputSchema || { type: 'object', properties: {} }
-          }
-        }));
-      }
-
-      async function executeMcpTool(name, args) {
-        const result = await mcpRequest('tools/call', { name, arguments: args || {} });
-        return JSON.stringify(result);
-      }
-
-      async function finalMcpReply(apiMsgs, toolName, toolResult, target) {
-        const toolText = String(toolResult || '');
-        const prompt = [
-          '你正在作为大富翁游戏助手回复用户。',
-          '下面的 MCP 工具调用已经由程序真实执行，结果是唯一可信的游戏状态。',
-          '绝对不要编造骰子、金钱、位置、资产、回合、事件或工具结果。',
-          '只根据用户消息和下面的真实 MCP 结果回答。',
-          `真实 MCP 工具：${toolName}`,
-          `真实 MCP 返回：${toolText}`,
-          '如果工具返回错误，明确告诉用户工具执行失败，不要假装成功。'
-        ].join('\n');
-        const msgs = apiMsgs.concat([{role:'user', content: prompt}]);
-        const res = await workerFetch('', {
-          method:'POST',
-          headers: target.headers,
-          body: JSON.stringify({
-            provider: target.provider,
-            model: target.model,
-            messages: msgs,
-            stream:false,
-            temperature:0.2
-          })
-        });
-        const data = await res.json().catch(()=>({}));
-        if (!res.ok) throw new Error(data?.error?.message || `最终回复请求失败 HTTP ${res.status}`);
-        return String(data?.choices?.[0]?.message?.content || '').trim();
-      }
-
-      async function chatWithMonopolyMcp(apiMsgs, target) {
-        // MCP 完全隔离：普通聊天发送路径不依赖任何 MCP 初始化/工具调用。
-        const tools = await ensureMcp();
-        const names = new Set(tools.map(t => t.name));
-
-        // 明确动作直接硬路由，避免模型不产生 tool_calls 导致“假调用”。
-        const latest = [...apiMsgs].reverse().find(m => m.role === 'user');
-        const text = String(latest?.content || '');
-
-        let toolName = '';
-        let args = {};
-
-        if (/(掷骰|骰子|roll)/i.test(text) && names.has('roll')) {
-          toolName = 'roll';
-        } else if (/(游戏信息|当前状态|棋盘|资产|现金|位置|回合状态|game.?info)/i.test(text) && names.has('game_info')) {
-          toolName = 'game_info';
-        }
-
-        // 其他大富翁操作交给模型做“工具选择”，但程序只接受 MCP 返回的工具名。
-        if (!toolName) {
-          const modelTools = mcpToolsForModel(tools);
-          const res = await workerFetch('', {
-            method:'POST',
-            headers: target.headers,
-            body: JSON.stringify({
-              provider: target.provider,
-              model: target.model,
-              messages: apiMsgs,
-              tools: modelTools,
-              tool_choice:'auto',
-              stream:false,
-              temperature:0
-            })
-          });
-          const data = await res.json().catch(()=>({}));
-          if (!res.ok) throw new Error(data?.error?.message || `MCP 路由模型请求失败 HTTP ${res.status}`);
-          const msg = data?.choices?.[0]?.message;
-          const calls = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
-          if (!calls.length) throw new Error('模型没有选择 MCP 工具，已停止，防止假装执行游戏。');
-          const call = calls[0];
-          toolName = call?.function?.name || '';
-          if (!names.has(toolName)) throw new Error(`模型选择了不存在的 MCP 工具：${toolName}`);
-          try { args = call?.function?.arguments ? JSON.parse(call.function.arguments) : {}; }
-          catch (_) { throw new Error(`MCP 工具 ${toolName} 的参数不是有效 JSON。`); }
-        }
-
-        const toolResult = await executeMcpTool(toolName, args);
-        return await finalMcpReply(apiMsgs, toolName, toolResult, target);
-      }
-
-
       // ========== 核心发送函数（带调试日志） ==========
       async function sendToAPI(text, attachments = []) {
         const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
@@ -2458,41 +2410,36 @@ M：${aiText}`;
           const approxChars = apiMsgs.reduce((n, m) => n + String(m.content || '').length, 0);
           console.log(`📉 本次请求上下文约 ${approxChars} 字符（仅为粗略估算，不等于实际计费 Token）`);
 
-          // MCP 只在明确的大富翁请求且已登录 Worker 时启用。
-          // 普通聊天保持 V12.4 原始请求路径；MCP 失败也会自动回退。
           let reply = '';
-          if (isMonopolyRequest(text) && getWorkerToken()) {
-            try {
-              reply = await chatWithMonopolyMcp(apiMsgs, target);
-            } catch (mcpError) {
-              console.warn('🎲 MCP 暂时不可用，回退普通聊天：', mcpError);
-            }
-          }
-
-          if (!reply) {
-            const res = await workerFetch('', {
-              method: 'POST',
-              headers: target.headers,
-              body: JSON.stringify({ provider: target.provider, model: model, messages: apiMsgs, stream: false, temperature: 0.5 })
-            });
-            if (!res.ok) {
-              let errorDetail = `请求失败 (HTTP ${res.status})`;
+          try {
+            // 已登录 Worker 时，优先加载大富翁 MCP；如果 MCP 暂时不可用，普通聊天仍可继续。
+            if(getWorkerToken()) {
               try {
-                const errJson = await res.json();
-                if (errJson.error?.message) errorDetail = errJson.error.message;
-                else if (errJson.message) errorDetail = errJson.message;
-              } catch(e) {
-                try {
-                  const textBody = await res.text();
-                  if (textBody) errorDetail = textBody.substring(0, 200);
-                } catch(e2) {}
+                reply = await runChatWithMcp(apiMsgs, target);
+              } catch(mcpError) {
+                console.warn('🎲 MCP 暂时不可用，回退普通聊天：',mcpError);
+                const res = await workerFetch('', {
+                  method:'POST',
+                  headers:target.headers,
+                  body:JSON.stringify({provider:target.provider,model:model,messages:apiMsgs,stream:false,temperature:0.5})
+                });
+                const data=await res.json().catch(()=>({}));
+                if(!res.ok) throw new Error(data?.error?.message || `请求失败 HTTP ${res.status}`);
+                reply=String(data?.choices?.[0]?.message?.content||'').trim();
               }
-              throw new Error(`❌ 请求地址: ${baseUrl} 失败，错误: ${errorDetail} (状态码: ${res.status})`);
+            } else {
+              const res = await workerFetch('', {
+                method:'POST',
+                headers:target.headers,
+                body:JSON.stringify({provider:target.provider,model:model,messages:apiMsgs,stream:false,temperature:0.5})
+              });
+              const data=await res.json().catch(()=>({}));
+              if(!res.ok) throw new Error(data?.error?.message || `请求失败 HTTP ${res.status}`);
+              reply=String(data?.choices?.[0]?.message?.content||'').trim();
             }
-            const data = await res.json();
-            reply = String(data?.choices?.[0]?.message?.content || '').trim();
+          } finally {
+            load.remove();
           }
-          load.remove();
           const aiMsg = { role: 'assistant', content: reply, id: nextId++, time: Date.now(), parentId: userMsg.id };
           messages.push(aiMsg);
           fullHistory.push({ role: 'assistant', content: reply, time: aiMsg.time });
@@ -2553,7 +2500,29 @@ M：${aiText}`;
         e.target.value = '';
       });
 
-      // V13.1：发送键已经在脚本最前面绑定，这里不再重复绑定。
+      $('sendBtn').onclick = () => {
+        const t = $('userInput').value.trim();
+        if (!t && !pendingImages.length) return;
+
+        if(pendingImages.length && !isVisionModel(getSelectedModel())){
+          alert('当前模型不支持图片输入，请先切换到 Vision 模型。');
+          return;
+        }
+
+        const imgs = pendingImages.slice();
+        pendingImages = [];
+        updateImagePreview();
+
+        $('userInput').value = '';
+        sendToAPI(t, imgs);
+      };
+
+      $('userInput').onkeydown = e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          $('sendBtn').click();
+        }
+      };
 
       
       $('exportBtn').onclick = () => {
@@ -2700,108 +2669,6 @@ M：${aiText}`;
 
       renderAll(); if (messages.length <= 1) addMsg('assistant', '你好！我是M，精简人设已加载 🧠');
     })();
-  </script>
-
-  <!-- V13.2：发送键最终隔离层。即使上面的主脚本在初始化过程中报错，也尝试重新绑定发送按钮。 -->
-  <script>
-  (function(){
-    'use strict';
-    window.__M_V132_SEND_DIAG__ = { boot: Date.now(), bound: false, clicks: 0 };
-
-    function diag(msg) {
-      try { console.warn('[V13.2]', msg); } catch (_) {}
-      try {
-        var el = document.getElementById('v132SendDiag');
-        if (el) el.textContent = msg;
-      } catch (_) {}
-    }
-
-    function bindSend() {
-      var btn = document.getElementById('sendBtn');
-      var input = document.getElementById('userInput');
-      if (!btn || !input) {
-        diag('🔴 找不到发送按钮或输入框');
-        return false;
-      }
-
-      btn.type = 'button';
-      btn.disabled = false;
-      btn.removeAttribute('disabled');
-
-      function fireSend() {
-        window.__M_V132_SEND_DIAG__.clicks++;
-        diag('🔵 已触发发送');
-        var text = String(input.value || '').trim();
-        var imgs = Array.isArray(window.__M_PENDING_IMAGES__) ? window.__M_PENDING_IMAGES__.slice() : [];
-
-        try {
-          if (typeof pendingImages !== 'undefined' && Array.isArray(pendingImages)) {
-            imgs = pendingImages.slice();
-            pendingImages = [];
-            if (typeof updateImagePreview === 'function') updateImagePreview();
-          }
-        } catch (_) {}
-
-        if (!text && !imgs.length) {
-          diag('🟡 输入框为空');
-          return;
-        }
-
-        input.value = '';
-        diag('🟢 已调用发送函数');
-
-        try {
-          if (typeof sendToAPI === 'function') {
-            sendToAPI(text, imgs);
-            return;
-          }
-          if (typeof window.sendToAPI === 'function') {
-            window.sendToAPI(text, imgs);
-            return;
-          }
-          input.value = text;
-          diag('🔴 sendToAPI 未加载：主脚本初始化失败');
-          alert('发送模块没有加载成功。\n\nV13.2 已确认：发送按钮本身可以点击，但主聊天函数 sendToAPI 没有加载。');
-        } catch (e) {
-          input.value = text;
-          diag('🔴 发送函数错误：' + (e && e.message ? e.message : e));
-          alert('发送函数执行失败：' + (e && e.message ? e.message : e));
-        }
-      }
-
-      btn.onclick = fireSend;
-      input.onkeydown = function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          fireSend();
-        }
-      };
-
-      window.__M_V132_SEND_DIAG__.bound = true;
-      diag('🟢 V13.2 发送键已绑定');
-      return true;
-    }
-
-    function boot() {
-      var old = document.getElementById('v132SendDiag');
-      if (!old) {
-        var d = document.createElement('div');
-        d.id = 'v132SendDiag';
-        d.textContent = '🟢 V13.2 发送修复层已加载';
-        d.style.cssText = 'position:fixed;left:8px;bottom:76px;z-index:99999;font:11px/1.3 sans-serif;padding:3px 7px;border-radius:6px;background:rgba(0,0,0,.65);color:#fff;pointer-events:none;opacity:.75;';
-        document.body.appendChild(d);
-      }
-      bindSend();
-      setTimeout(bindSend, 100);
-      setTimeout(bindSend, 500);
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', boot, { once:true });
-    } else {
-      boot();
-    }
-  })();
   </script>
 </body>
 </html>
