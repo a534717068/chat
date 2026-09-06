@@ -1837,9 +1837,9 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
           if (msg.role === 'system') return;
           const row = document.createElement('div'); row.className = `message-row ${msg.role}`; row.dataset.index = idx;
           const timeStr = formatTime(msg.time || Date.now());
-          let content = typeof msg.content === 'string' ? msg.content : ''; if (!content && Array.isArray(msg.attachments) && msg.attachments.length) content = '<span style="opacity:.7;">图片</span>';
+          let content = typeof msg.content === 'string' ? msg.content : ''; if (msg.role === 'user') content = escapeHtml(content); if (!content && Array.isArray(msg.attachments) && msg.attachments.length) content = '<span style="opacity:.7;">图片</span>';
           if (msg.role === 'assistant') { content = formatAssistantContent(content); }
-          if (searchKeyword) { const escaped = searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); content = content.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>'); }
+          if (searchKeyword) { const kw = msg.role === 'user' ? escapeHtml(searchKeyword) : searchKeyword; const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); content = content.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>'); }
           let btns = '';
           if (!multiSelectMode && currentInlineEditIdx !== idx) {
             if (msg.role === 'user') btns += `<button onclick="_editMsg(${idx})">✎</button>`; else btns += `<button onclick="_regenMsg(${idx})">↻</button>`;
