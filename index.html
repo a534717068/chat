@@ -2635,32 +2635,101 @@ M：${aiText}`;
       function buildNewGameArgs(tool) {
         const schema = (tool && tool.inputSchema && typeof tool.inputSchema === 'object') ? tool.inputSchema : {};
         const props = (schema.properties && typeof schema.properties === 'object') ? schema.properties : {};
-        const playerNames = ['城月', '阿慕'];
-        let nameIdx = 0;
+
+        // 应用固定身份：P1=城月(受)，P2=阿慕(攻)，均为女性。身份字段必须覆盖 schema 的默认值。
+        const players = [
+          { name: '城月', sex: '女', role: '受' },
+          { name: '阿慕', sex: '女', role: '攻' }
+        ];
+
         const args = {};
+        let seqName = 0;
+        let seqSex = 0;
+        let seqRole = 0;
+
+        const getTypes = (d) => Array.isArray(d.type) ? d.type : (d.type ? [d.type] : []);
+        const isString = (d) => getTypes(d).includes('string');
+        const isStringArray = (d) => getTypes(d).includes('array') &&
+          d.items && (d.items.type === 'string' || (Array.isArray(d.items.type) && d.items.type.includes('string')));
+        const enumOf = (d) => Array.isArray(d.enum) ? d.enum : [];
+        const hasDefault = (d) => d.default !== undefined;
+
+        // 提取玩家序号（1/2）：p1_xxx、player1_xxx、玩家1_xxx 等。
+        function playerIndex(key) {
+          const m = String(key).match(/(?:^|[_\-\s])(?:p|player|玩家|角色)[_\-\s]*([12])(?:[_\-\s]|$)/i);
+          return m ? Number(m[1]) : 0;
+        }
+
+        // 依据字段名判断语义，不依赖默认值。
+        function fieldKind(key) {
+          const k = String(key);
+          if (/sex|gender|性别/i.test(k)) return 'sex';
+          if (/role|角色|攻受|定位/i.test(k)) return 'role';
+          if (/lineup|组合|配对|搭配|阵容|队伍/i.test(k)) return 'lineup';
+          if (/name|名字|名称|昵称|player|玩家/i.test(k)) return 'name';
+          return 'other';
+        }
+
+        // 在 schema 的合法枚举中，找出“两名女性”对应的值（女女/两女/FF 等）。
+        function twoFemaleEnum(enums) {
+          const vals = enums.filter(v => typeof v === 'string' || typeof v === 'number');
+          const patterns = [
+            /^女女$|两女|双女|全女|二女|两位女|俩女/,
+            /^ff$/i,
+            /female[\s_\-]*female|female[\s_\-]*2|2[\s_\-]*female/i
+          ];
+          for (const re of patterns) {
+            const hit = vals.find(v => re.test(String(v)));
+            if (hit !== undefined) return hit;
+          }
+          return null;
+        }
 
         for (const key of Object.keys(props)) {
           const def = props[key];
           if (!def || typeof def !== 'object') continue;
 
-          if (def.default !== undefined) { args[key] = def.default; continue; }
+          const kind = fieldKind(key);
+          const idx = playerIndex(key);
 
-          const isNameField = /name|player|角色|玩家|名字|名称/i.test(key);
-          if (!isNameField) continue;
-
-          const types = Array.isArray(def.type) ? def.type : [def.type];
-          const isString = types.includes('string');
-          const isStringArray = types.includes('array') &&
-            def.items && (def.items.type === 'string' || (Array.isArray(def.items.type) && def.items.type.includes('string')));
-
-          if (isStringArray) {
-            args[key] = playerNames.slice();
+          if (kind === 'name') {
+            const pi = (idx === 1 || idx === 2) ? idx - 1 : (seqName < players.length ? seqName : -1);
+            if (pi >= 0) {
+              if (isString(def)) args[key] = players[pi].name;
+              else if (isStringArray(def)) args[key] = players.map(p => p.name);
+              if (idx === 0) seqName++;
+            }
             continue;
           }
-          if (isString && nameIdx < playerNames.length) {
-            args[key] = playerNames[nameIdx++];
+
+          if (kind === 'sex') {
+            const pi = (idx === 1 || idx === 2) ? idx - 1 : (seqSex < players.length ? seqSex : -1);
+            if (pi >= 0) {
+              if (isString(def)) args[key] = players[pi].sex;
+              else if (isStringArray(def)) args[key] = players.map(p => p.sex);
+              if (idx === 0) seqSex++;
+            }
             continue;
           }
+
+          if (kind === 'role') {
+            const pi = (idx === 1 || idx === 2) ? idx - 1 : (seqRole < players.length ? seqRole : -1);
+            if (pi >= 0) {
+              if (isString(def)) args[key] = players[pi].role;
+              else if (isStringArray(def)) args[key] = players.map(p => p.role);
+              if (idx === 0) seqRole++;
+            }
+            continue;
+          }
+
+          if (kind === 'lineup') {
+            const twoFemale = twoFemaleEnum(enumOf(def));
+            if (twoFemale !== null) args[key] = twoFemale;
+            // 没有“两女”合法枚举值时，不写入错误的“男女”默认值，留待用户确认。
+            continue;
+          }
+
+          if (hasDefault(def)) args[key] = def.default;
         }
 
         return args;
