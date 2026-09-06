@@ -2737,6 +2737,23 @@ M：${aiText}`;
           if (isMonopolyRequest(text) && getWorkerToken()) {
             console.log('🎲 MCP: 已进入大富翁 MCP 分支');
             const isStart = isMonopolyStartRequest(text);
+            console.log('🎲 MCP: 开始请求判断结果', {
+              text,
+              isStart,
+              matchedKeywords: [
+                '开始大富翁',
+                '开始一个大富翁',
+                '开始游戏',
+                '开始一局',
+                '新开一局',
+                '新建游戏',
+                '新建一局',
+                '开启游戏',
+                '开启一局',
+                '玩大富翁',
+                '玩游戏'
+              ].filter(k => String(text || '').toLowerCase().includes(k))
+            });
             try {
               if (isStart) {
                 console.log('🎲 MCP: 开始游戏请求', { text });
