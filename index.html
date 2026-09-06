@@ -2450,6 +2450,7 @@ M：${aiText}`;
       let mcpSessionId = '';
       let mcpNextId = 1;
       let mcpTools = [];
+      let pendingMonopolySetup = null;
 
       function isMonopolyRequest(text) {
         const s = String(text || '').toLowerCase();
@@ -2476,6 +2477,22 @@ M：${aiText}`;
 
         return startWords.some(a => s.includes(a)) &&
                gameWords.some(b => s.includes(b));
+      }
+
+      function isMonopolySetupConfirmRequest(text) {
+        const s = String(text || '').trim().toLowerCase();
+        return [
+          '确认',
+          '我确认',
+          '可以',
+          '可以开始',
+          '开始吧',
+          '同意',
+          '同意这些设置',
+          '没问题',
+          '就这样',
+          '都可以'
+        ].some(k => s === k || s.includes(k));
       }
 
       function mcpUrl() {
@@ -2649,23 +2666,116 @@ M：${aiText}`;
         return args;
       }
 
+      // 根据 MCP 真实返回判断 new_game 是否真的失败（ok:false / success:false）。
+      function mcpNewGameFailed(result) {
+        const text = String(result || '');
+        let obj = null;
+        try { obj = JSON.parse(text); } catch (_) {}
+        if (obj && typeof obj === 'object') {
+          if (obj.ok === false || obj.success === false) {
+            return obj.error || obj.message || obj.reason || obj.detail || 'MCP 返回 ok:false';
+          }
+          const content = Array.isArray(obj.content) ? obj.content : null;
+          if (content) {
+            const ctext = content.map(c => (c && (c.text || c.content)) || '').join('\n');
+            if (/ok\s*[:：]\s*false/i.test(ctext)) return ctext;
+          }
+        }
+        if (/ok\s*[:：]\s*false/i.test(text)) return text;
+        return null;
+      }
+
       async function startMonopolyGame(apiMsgs, target) {
         const tools = await ensureMcp();
+
+        // 1) 必须先阅读 MCP 荷官规则，不能跳过 monopoly_help。
+        const helpTool = tools.find(t => t && t.name === 'monopoly_help');
+        if (!helpTool) throw new Error('MCP 没有提供 monopoly_help 工具');
+        console.log('🎲 MCP: monopoly_help 开始');
+        let helpResult;
+        try {
+          helpResult = await executeMcpTool('monopoly_help', {});
+        } catch (e) {
+          throw new Error('🎲 大富翁规则读取失败：' + (e.message || e));
+        }
+        console.log('🎲 MCP: monopoly_help 成功', helpResult);
+
+        // 2) 找到 new_game 并读取其真实 inputSchema。
         const newGameTool = tools.find(t => t && t.name === 'new_game');
         if (!newGameTool) throw new Error('MCP 没有提供 new_game 工具');
         console.log('🎲 MCP: new_game inputSchema', newGameTool.inputSchema);
 
-        const args = buildNewGameArgs(newGameTool);
-        console.log('🎲 MCP: 强制调用 new_game', { args });
+        // 3) 第一阶段：只保存“待确认开局”状态，绝不调用 new_game。
+        //    不能因为 new_game schema 存在 setup_confirmed 字段就自动置为 true。
+        const originalText = apiMsgs.length ? String(apiMsgs[apiMsgs.length - 1].content || '') : '';
+        pendingMonopolySetup = { helpResult, newGameTool, originalText };
+        console.log('🎲 MCP: 等待用户确认', {
+          hasNewGameTool: !!newGameTool,
+          originalText
+        });
 
-        const result = await executeMcpTool('new_game', args);
-        console.log('🎲 MCP: new_game 成功', result);
-
-        // 把真实 MCP 结果交给模型，让模型基于真实状态回复，避免编造。
+        // 4) 让模型根据 monopoly_help 的真实返回，向用户说明需要确认的设置。
         const conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
         conversation.push({
           role: 'user',
-          content: '【大富翁系统消息】客户端已真实执行 new_game，下面是 MCP 返回的真实游戏状态（JSON）。请只用这份数据，用中文告诉用户游戏已创建，并说明真实的先手、位置、金币等信息；严禁编造这份 JSON 里没有的数据。\n' + result
+          content: '【大富翁系统消息】客户端已真实调用 monopoly_help 并读取了规则，现在处于“等待用户确认设置”阶段，还没有调用 new_game。请只用下面的 monopoly_help 真实返回内容，用中文向用户说明需要确认的游戏设置，并明确告诉用户“规则已读取。请确认以下设置后，我才能正式创建游戏。”；严禁编造 monopoly_help 中没有的规则、先手、位置、金币或棋盘状态。\n\nmonopoly_help 返回：\n' + helpResult
+        });
+
+        const res = await workerFetch('', {
+          method: 'POST',
+          headers: target.headers,
+          body: JSON.stringify({
+            provider: target.provider,
+            model: target.model,
+            messages: conversation,
+            stream: false,
+            temperature: 0.5
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error?.message || `模型请求失败 HTTP ${res.status}`);
+        const msg = data?.choices?.[0]?.message;
+        if (!msg) throw new Error('模型没有返回有效消息。');
+        return String(msg.content || '').trim();
+      }
+
+      async function confirmMonopolyGame(apiMsgs, target) {
+        const setup = pendingMonopolySetup;
+        if (!setup || !setup.newGameTool) {
+          throw new Error('没有找到待确认的开局信息，请重新发起大富翁游戏。');
+        }
+        const newGameTool = setup.newGameTool;
+        const helpResult = setup.helpResult;
+
+        // 1) 根据 new_game 的真实 inputSchema 构造参数：只传 inputSchema 中存在的字段。
+        const args = buildNewGameArgs(newGameTool);
+        const schema = (newGameTool.inputSchema && typeof newGameTool.inputSchema === 'object') ? newGameTool.inputSchema : {};
+        const props = (schema.properties && typeof schema.properties === 'object') ? schema.properties : {};
+
+        // 2) 只有现在用户已经明确确认，才设置确认字段。
+        if (Object.prototype.hasOwnProperty.call(props, 'setup_confirmed')) args.setup_confirmed = true;
+        if (Object.prototype.hasOwnProperty.call(props, 'rules_ack')) args.rules_ack = 'mcp-host-v2026-07-06';
+
+        console.log('🎲 MCP: new_game 参数', { args });
+        const result = await executeMcpTool('new_game', args);
+        console.log('🎲 MCP: new_game 返回', result);
+
+        // 3) 失败：保留待确认状态，把真实失败原因告诉用户。
+        const failReason = mcpNewGameFailed(result);
+        if (failReason) {
+          console.log('🎲 MCP: new_game 失败，保留待确认状态', failReason);
+          throw new Error('🎲 大富翁开局失败：' + failReason);
+        }
+
+        // 4) 成功：清除待确认状态。
+        pendingMonopolySetup = null;
+        console.log('🎲 MCP: 游戏创建成功');
+
+        // 5) 把 monopoly_help 和 new_game 的真实结果交给模型，禁止编造。
+        const conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
+        conversation.push({
+          role: 'user',
+          content: '【大富翁系统消息】客户端已真实执行 monopoly_help 并完成设置确认，然后执行 new_game。下面是 MCP 返回的真实数据。请只用这些数据，用中文告诉用户游戏已创建，并说明真实的先手、位置、金币等信息，同时简要说明游戏规则与安全规则；严禁编造这些数据里没有的内容。\n\nmonopoly_help 返回：\n' + helpResult + '\n\nnew_game 返回（真实游戏状态 JSON）：\n' + result
         });
 
         const res = await workerFetch('', {
@@ -2739,7 +2849,25 @@ M：${aiText}`;
             hasWorkerToken: !!getWorkerToken()
           });
           let reply = '';
-          if (isMonopolyRequest(text) && getWorkerToken()) {
+          const pendingActive = !!pendingMonopolySetup;
+
+          // 两阶段开局：存在“待确认开局”状态时优先处理，绝不能在未确认时调用 new_game。
+          if (pendingActive) {
+            if (isMonopolySetupConfirmRequest(text)) {
+              console.log('🎲 MCP: 用户确认开局', { text });
+              try {
+                reply = await confirmMonopolyGame(apiMsgs, target);
+              } catch (mcpError) {
+                console.error('🎲 MCP FAILED:', mcpError);
+                throw new Error('🎲 大富翁游戏创建失败：' + (mcpError.message || mcpError));
+              }
+            } else {
+              // 用户未确认：不调用 new_game，也不进入 MCP 分支，作为普通对话处理。
+              console.log('🎲 MCP: 等待用户确认（用户未确认，不调用 new_game）', { text });
+            }
+          }
+
+          if (!reply && !pendingActive && isMonopolyRequest(text) && getWorkerToken()) {
             console.log('🎲 MCP: 已进入大富翁 MCP 分支');
             const isStart = isMonopolyStartRequest(text);
             console.log('🎲 MCP: 开始请求判断结果', {
