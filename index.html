@@ -2451,6 +2451,7 @@ M：${aiText}`;
       let mcpNextId = 1;
       let mcpTools = [];
       let pendingMonopolySetup = null;
+      let activeMonopolyGame = null; // 进行中的游戏：{ game_id, waitingContinue }
 
       function isMonopolyRequest(text) {
         const s = String(text || '').toLowerCase();
@@ -2493,6 +2494,14 @@ M：${aiText}`;
           '就这样',
           '都可以'
         ].some(k => s === k || s.includes(k));
+      }
+
+      // 等待继续：roll 返回需要玩家完成任务后，用户明确表示“完成/继续”等。
+      // 只在 activeMonopolyGame.waitingContinue 为 true 时才命中，普通“继续”不会触发。
+      function isMonopolyContinueRequest(text) {
+        const s = String(text || '').trim().toLowerCase();
+        if (['继续', '下一回合', '下一步', '继续吧', '完成', '完成了', '完成了继续', '准备好', '准备好了', '好了', '完事了', '弄好了', '做完了', 'done', 'next', 'continue'].includes(s)) return true;
+        return ['完成了继续', '下一回合', '准备好了', '完成', '继续'].some(k => s.includes(k));
       }
 
       function mcpUrl() {
@@ -2575,6 +2584,37 @@ M：${aiText}`;
         return JSON.stringify(result);
       }
 
+      // 从 new_game / roll 的返回字符串里提取 game_id（兼容 game_id / gameId / id 等写法）。
+      function extractGameId(resultStr) {
+        const s = String(resultStr || '');
+        const m = s.match(/game[_\-]?id["']?\s*[:=]\s*["']?([A-Za-z0-9\-_]+)["']?/i);
+        return m ? m[1] : null;
+      }
+
+      // 从模型给出的工具参数对象里提取 game_id。
+      function extractGameIdFromArgs(args) {
+        if (!args || typeof args !== 'object') return null;
+        for (const key of Object.keys(args)) {
+          if (/game[_\-]?id|^id$/i.test(key) && typeof args[key] === 'string') return args[key];
+        }
+        return null;
+      }
+
+      // 判断 roll 返回是否处于“等待玩家完成任务”状态。
+      function mcpWaitingForContinue(resultStr) {
+        const s = String(resultStr || '');
+        return /等待玩家|等待你|等待用户|等待输入|等待继续|等待操作|需要玩家|需要你|需要用户|请完成|请执行|完成任务|待完成|待操作|等待.*任务|需要.*任务|waiting_for|requires_action|needs_player|player_action|pending_task/i.test(s);
+      }
+
+      // 找出 roll 工具里表示 game_id 的参数字段名。
+      function rollGameIdField(tool) {
+        const props = (tool && tool.inputSchema && typeof tool.inputSchema === 'object' && tool.inputSchema.properties) ? tool.inputSchema.properties : {};
+        for (const key of Object.keys(props)) {
+          if (/game[_\-]?id|^id$/i.test(key)) return key;
+        }
+        return 'game_id';
+      }
+
       async function chatWithMonopolyMcp(apiMsgs, target) {
         const tools = await ensureMcp();
         let conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
@@ -2620,6 +2660,14 @@ M：${aiText}`;
               args
             });
             const result = await executeMcpTool(name, args);
+            // 跟踪进行中的游戏与“等待继续”状态：roll 返回需要玩家完成任务时，记录 game_id 并置等待。
+            if (name === 'roll') {
+              if (!activeMonopolyGame) activeMonopolyGame = { game_id: null, waitingContinue: false };
+              const gid = extractGameIdFromArgs(args);
+              if (gid) activeMonopolyGame.game_id = gid;
+              activeMonopolyGame.waitingContinue = mcpWaitingForContinue(result);
+              console.log('🎲 MCP: roll 状态更新', activeMonopolyGame);
+            }
             conversation.push({
               role: 'tool',
               tool_call_id: call.id,
@@ -2761,6 +2809,7 @@ M：${aiText}`;
         //    不能因为 new_game schema 存在 setup_confirmed 字段就自动置为 true。
         const originalText = apiMsgs.length ? String(apiMsgs[apiMsgs.length - 1].content || '') : '';
         pendingMonopolySetup = { helpResult, newGameTool, originalText };
+        activeMonopolyGame = null; // 开启新一局时丢弃上一局状态。
         console.log('🎲 MCP: 等待用户确认', {
           hasNewGameTool: !!newGameTool,
           originalText
@@ -2819,15 +2868,58 @@ M：${aiText}`;
           throw new Error('🎲 大富翁开局失败：' + failReason);
         }
 
-        // 4) 成功：清除待确认状态。
+        // 4) 成功：清除待确认状态，并记录进行中的游戏。
         pendingMonopolySetup = null;
-        console.log('🎲 MCP: 游戏创建成功');
+        const newGameId = extractGameId(result);
+        activeMonopolyGame = newGameId ? { game_id: newGameId, waitingContinue: false } : null;
+        console.log('🎲 MCP: 游戏创建成功', { game_id: newGameId });
 
         // 5) 把 monopoly_help 和 new_game 的真实结果交给模型，禁止编造。
         const conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
         conversation.push({
           role: 'user',
           content: '【大富翁系统消息】客户端已真实执行 monopoly_help 并完成设置确认，然后执行 new_game。下面是 MCP 返回的真实数据。请只用这些数据，用中文告诉用户游戏已创建，并说明真实的先手、位置、金币等信息，同时简要说明游戏规则与安全规则；严禁编造这些数据里没有的内容。\n\nmonopoly_help 返回：\n' + helpResult + '\n\nnew_game 返回（真实游戏状态 JSON）：\n' + result
+        });
+
+        const res = await workerFetch('', {
+          method: 'POST',
+          headers: target.headers,
+          body: JSON.stringify({
+            provider: target.provider,
+            model: target.model,
+            messages: conversation,
+            stream: false,
+            temperature: 0.5
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error?.message || `模型请求失败 HTTP ${res.status}`);
+        const msg = data?.choices?.[0]?.message;
+        if (!msg) throw new Error('模型没有返回有效消息。');
+        return String(msg.content || '').trim();
+      }
+
+      // 等待继续状态下的“继续/完成”：直接对当前 game_id 调用 roll，再用真实结果叙述。
+      async function continueMonopolyGame(apiMsgs, target) {
+        const game = activeMonopolyGame;
+        if (!game || !game.game_id) throw new Error('没有进行中的大富翁游戏。');
+        const tools = await ensureMcp();
+        const rollTool = tools.find(t => t && t.name === 'roll');
+        if (!rollTool) throw new Error('MCP 没有提供 roll 工具');
+
+        const gameIdField = rollGameIdField(rollTool);
+        const args = { [gameIdField]: game.game_id };
+        console.log('🎲 MCP: 继续回合 roll 参数', { args });
+        const result = await executeMcpTool('roll', args);
+        console.log('🎲 MCP: roll 返回', result);
+
+        game.waitingContinue = mcpWaitingForContinue(result);
+
+        // 只用 roll 真实返回 + 用户这条消息里明确说出的动作来叙述，严禁编造。
+        const conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
+        conversation.push({
+          role: 'user',
+          content: '【大富翁系统消息】客户端已对当前 game_id 调用 roll 并得到真实结果。请只用下面的 roll 真实返回，以及用户这条消息里明确说出的动作，用中文叙述本回合结果；用户没有明确说出的动作、以及 roll 返回里没有的内容，一律不得编造。\n\nroll 返回（真实 JSON）：\n' + result
         });
 
         const res = await workerFetch('', {
@@ -2916,6 +3008,17 @@ M：${aiText}`;
             } else {
               // 用户未确认：不调用 new_game，也不进入 MCP 分支，作为普通对话处理。
               console.log('🎲 MCP: 等待用户确认（用户未确认，不调用 new_game）', { text });
+            }
+          }
+
+          // 等待继续：roll 返回需要玩家完成任务后，用户明确“完成/继续”则直接对当前 game_id 调用 roll。
+          if (!reply && !pendingActive && activeMonopolyGame && activeMonopolyGame.waitingContinue && isMonopolyContinueRequest(text) && getWorkerToken()) {
+            console.log('🎲 MCP: 等待继续状态下用户请求继续', { text, game_id: activeMonopolyGame.game_id });
+            try {
+              reply = await continueMonopolyGame(apiMsgs, target);
+            } catch (mcpError) {
+              console.error('🎲 MCP FAILED:', mcpError);
+              throw new Error('🎲 大富翁继续回合失败：' + (mcpError.message || mcpError));
             }
           }
 
