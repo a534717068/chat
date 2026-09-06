@@ -2080,7 +2080,6 @@ M：${aiText}`;
           const baseUrl = target.url;
           const res = await fetch(baseUrl, {
             method: 'POST',
-            credentials: 'include',
             headers: target.headers,
             body: JSON.stringify({
               provider: target.provider,
