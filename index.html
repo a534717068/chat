@@ -2453,6 +2453,18 @@ M：${aiText}`;
       let pendingMonopolySetup = null;
       let activeMonopolyGame = null; // 进行中的游戏：{ game_id, waitingContinue }
 
+      // 大富翁进行中标记（localStorage 持久化，刷新后仍可恢复上一局）。
+      const MONOPOLY_MODE_KEY = 'monopolyMode';
+      function isMonopolyModeActive() {
+        return localStorage.getItem(MONOPOLY_MODE_KEY) === 'active';
+      }
+      function setMonopolyModeActive() {
+        localStorage.setItem(MONOPOLY_MODE_KEY, 'active');
+      }
+      function clearMonopolyModeActive() {
+        localStorage.removeItem(MONOPOLY_MODE_KEY);
+      }
+
       function isMonopolyRequest(text) {
         const s = String(text || '').toLowerCase();
         return ['大富翁','monopoly','掷骰','骰子','棋盘','买地','房子','地产','银行','破产','回合','开始游戏','玩游戏'].some(k => s.includes(k));
@@ -2509,6 +2521,20 @@ M：${aiText}`;
       function isMonopolyAdvanceRequest(text) {
         const s = String(text || '').trim().toLowerCase();
         return ['开始', '开始回合', '下一回合', '掷骰子', '掷骰', '继续游戏', '继续玩', '走', '走一步', '行动', '轮到', '该你', '该我', '下一步', 'roll'].some(k => s.includes(k));
+      }
+
+      // 主动退出大富翁：仅在大富翁进行中才识别，避免误伤普通聊天。
+      function isMonopolyExitRequest(text) {
+        const s = String(text || '').trim().toLowerCase();
+        return [
+          '不玩了',
+          '退出大富翁',
+          '结束大富翁',
+          '退出游戏',
+          '结束游戏',
+          'quit monopoly',
+          'exit monopoly'
+        ].some(k => s === k || s.includes(k));
       }
 
       function mcpUrl() {
@@ -2624,6 +2650,21 @@ M：${aiText}`;
         return /等待玩家|等待你|等待用户|等待输入|等待继续|等待操作|需要玩家|需要你|需要用户|请完成|请执行|完成任务|待完成|待操作|等待.*任务|需要.*任务|waiting_for|requires_action|needs_player|player_action|pending_task/i.test(s);
       }
 
+      // 判断 MCP 返回是否明确表示游戏已结束（game_over === true）。
+      function mcpGameOver(resultStr) {
+        const s = String(resultStr || '');
+        let obj = null;
+        try { obj = JSON.parse(s); } catch (_) {}
+        if (obj && typeof obj === 'object') {
+          let sc = obj.structuredContent;
+          if (typeof sc === 'string') { try { sc = JSON.parse(sc); } catch (_) {} }
+          if (sc && typeof sc === 'object') {
+            return sc.game_over === true || sc.game_over === 'true';
+          }
+        }
+        return /game[_\s]?over["']?\s*[:=]\s*true/i.test(s);
+      }
+
       // 找出 roll 工具里表示 game_id 的参数字段名。
       function rollGameIdField(tool) {
         const props = (tool && tool.inputSchema && typeof tool.inputSchema === 'object' && tool.inputSchema.properties) ? tool.inputSchema.properties : {};
@@ -2684,6 +2725,11 @@ M：${aiText}`;
               const gid = extractGameIdFromArgs(args);
               if (gid) activeMonopolyGame.game_id = gid;
               activeMonopolyGame.waitingContinue = mcpWaitingForContinue(result);
+              if (mcpGameOver(result)) {
+                clearMonopolyModeActive();
+                activeMonopolyGame = null;
+                console.log('🎲 MCP: 游戏结束，已退出大富翁模式');
+              }
               console.log('🎲 MCP: roll 状态更新', activeMonopolyGame);
             }
             conversation.push({
@@ -2886,11 +2932,12 @@ M：${aiText}`;
           throw new Error('🎲 大富翁开局失败：' + failReason);
         }
 
-        // 4) 成功：清除待确认状态，并记录进行中的游戏。
+        // 4) 成功：清除待确认状态，并记录进行中的游戏，标记进入大富翁模式。
         pendingMonopolySetup = null;
         const newGameId = extractGameId(result);
         activeMonopolyGame = newGameId ? { game_id: newGameId, waitingContinue: false } : null;
-        console.log('🎲 MCP: 游戏创建成功', { game_id: newGameId });
+        if (newGameId) setMonopolyModeActive();
+        console.log('🎲 MCP: 游戏创建成功', { game_id: newGameId, monopolyMode: isMonopolyModeActive() });
 
         // 5) 把 monopoly_help 和 new_game 的真实结果交给模型，禁止编造。
         const conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
@@ -2933,6 +2980,13 @@ M：${aiText}`;
 
         game.waitingContinue = mcpWaitingForContinue(result);
 
+        // 游戏真正结束时清除大富翁模式与前端游戏状态。
+        if (mcpGameOver(result)) {
+          clearMonopolyModeActive();
+          activeMonopolyGame = null;
+          console.log('🎲 MCP: 游戏结束，已退出大富翁模式');
+        }
+
         // 只用 roll 真实返回 + 用户这条消息里明确说出的动作来叙述，严禁编造。
         const conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
         conversation.push({
@@ -2956,6 +3010,38 @@ M：${aiText}`;
         const msg = data?.choices?.[0]?.message;
         if (!msg) throw new Error('模型没有返回有效消息。');
         return String(msg.content || '').trim();
+      }
+
+      // 刷新后恢复上一局：仅在大富翁模式下、且前端没有 game_id 时，才查询 game_info。
+      async function restoreActiveMonopolyGame() {
+        if (!isMonopolyModeActive()) return false;
+        if (activeMonopolyGame && activeMonopolyGame.game_id) return true;
+        try {
+          const tools = await ensureMcp();
+          const infoTool = tools.find(t => t && t.name === 'game_info');
+          if (!infoTool) {
+            console.log('🎲 MCP: 未找到 game_info 工具，无法恢复');
+            return false;
+          }
+          const result = await executeMcpTool('game_info', {});
+          let obj = null;
+          try { obj = JSON.parse(String(result || '')); } catch (_) {}
+          let sc = obj && typeof obj === 'object' ? obj.structuredContent : null;
+          if (typeof sc === 'string') { try { sc = JSON.parse(sc); } catch (_) {} }
+          if (!sc || typeof sc !== 'object') return false;
+          const inProgress = sc.last_game_in_progress === true || sc.last_game_in_progress === 'true';
+          const lastGameId = sc.last_game_id;
+          if (inProgress && lastGameId) {
+            activeMonopolyGame = { game_id: String(lastGameId), waitingContinue: false };
+            console.log('🎲 MCP: 已从 game_info 恢复进行中的游戏', activeMonopolyGame);
+            return true;
+          }
+          console.log('🎲 MCP: game_info 无进行中的游戏', sc);
+          return false;
+        } catch (e) {
+          console.error('🎲 MCP: 恢复进行中游戏失败', e);
+          return false;
+        }
       }
 
       // ========== 核心发送函数（带调试日志） ==========
@@ -3029,6 +3115,15 @@ M：${aiText}`;
             }
           }
 
+          // 主动退出大富翁：仅在大富翁模式下识别，只清本地状态，不调用 MCP、不删除服务器游戏。
+          if (!reply && isMonopolyModeActive() && isMonopolyExitRequest(text)) {
+            console.log('🎲 MCP: 用户主动退出大富翁', { text });
+            clearMonopolyModeActive();
+            activeMonopolyGame = null;
+            pendingMonopolySetup = null;
+            reply = '已退出这局大富翁，回到普通聊天。';
+          }
+
           // 等待继续：roll 返回需要玩家完成任务后，用户明确“完成/继续”则直接对当前 game_id 调用 roll。
           if (!reply && !pendingActive && activeMonopolyGame && activeMonopolyGame.waitingContinue && isMonopolyContinueRequest(text) && getWorkerToken()) {
             console.log('🎲 MCP: 等待继续状态下用户请求继续', { text, game_id: activeMonopolyGame.game_id });
@@ -3040,14 +3135,29 @@ M：${aiText}`;
             }
           }
 
-          // 推进回合：进行中且未等待任务时，用户明确“开始/下一回合/掷骰”等，直接对当前 game_id 调用 roll。
-          if (!reply && !pendingActive && activeMonopolyGame && activeMonopolyGame.game_id && activeMonopolyGame.waitingContinue === false && isMonopolyAdvanceRequest(text) && getWorkerToken()) {
-            console.log('🎲 MCP: 进行中游戏用户请求推进回合', { text, game_id: activeMonopolyGame.game_id });
-            try {
-              reply = await continueMonopolyGame(apiMsgs, target);
-            } catch (mcpError) {
-              console.error('🎲 MCP FAILED:', mcpError);
-              throw new Error('🎲 大富翁推进回合失败：' + (mcpError.message || mcpError));
+          // 推进回合：大富翁模式下用户明确“开始/下一回合/掷骰”等，直接对当前 game_id 调用 roll。
+          if (!reply && !pendingActive && isMonopolyModeActive() && isMonopolyAdvanceRequest(text) && getWorkerToken()) {
+            if (activeMonopolyGame && activeMonopolyGame.game_id) {
+              console.log('🎲 MCP: 进行中游戏用户请求推进回合', { text, game_id: activeMonopolyGame.game_id });
+              try {
+                reply = await continueMonopolyGame(apiMsgs, target);
+              } catch (mcpError) {
+                console.error('🎲 MCP FAILED:', mcpError);
+                throw new Error('🎲 大富翁推进回合失败：' + (mcpError.message || mcpError));
+              }
+            } else {
+              console.log('🎲 MCP: 推进请求，当前没有前端游戏状态，尝试恢复');
+              const restored = await restoreActiveMonopolyGame();
+              if (restored) {
+                console.log('🎲 MCP: 进行中游戏用户请求推进回合', { text, game_id: activeMonopolyGame.game_id });
+                try {
+                  reply = await continueMonopolyGame(apiMsgs, target);
+                } catch (mcpError) {
+                  console.error('🎲 MCP FAILED:', mcpError);
+                  throw new Error('🎲 大富翁推进回合失败：' + (mcpError.message || mcpError));
+                }
+              }
+              // 恢复失败：不 new_game、不 roll，继续走普通聊天。
             }
           }
 
