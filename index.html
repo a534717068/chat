@@ -317,6 +317,28 @@
       window.__M_WORKER_VERSION__ = '2026-09-05-v12.4-emotion-auto-adjust';
       const $ = id => document.getElementById(id);
 
+      // 登录控件必须在其他初始化之前绑定。loginWorker 是函数声明，已提升，
+      // 因此可以安全地在这里引用；同时避免脚本被重复执行时重复注册。
+      function bindWorkerLoginControls() {
+        const button = $('workerLoginBtn');
+        const passwordInput = $('workerPasswordInput');
+        if (!button || !passwordInput) {
+          console.error('Worker 登录控件不存在，无法完成初始化。');
+          return;
+        }
+        if (button.__mWorkerLoginBound) return;
+
+        button.addEventListener('click', loginWorker);
+        passwordInput.addEventListener('keydown', event => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            loginWorker();
+          }
+        });
+        button.__mWorkerLoginBound = true;
+      }
+      bindWorkerLoginControls();
+
       // ===== V14.3：输入框身份追踪 + PointerDown 发送硬绑定 =====
       // 目的：确认“肉眼看到的文字”和 JS 读取到的 userInput 是否是同一个 DOM/value。
       window.__M_V14_2_BUILD__ = '2026-09-06-V14.3-REAL-INPUT-FIX';
@@ -452,11 +474,26 @@
         }
       }, true);
 
-      // 监控动态 DOM：如果某段代码/浏览器运行时再次制造第二个 userInput，
-      // V14.3 不会删除它，而是确保发送逻辑仍然指向真正产生输入的节点。
-      new MutationObserver(function() {
-        const nodes = document.querySelectorAll('#userInput');
-        if (nodes.length > 1) __m143_cleanupDuplicateInputs();
+      // 只在 userInput 节点本身被加入或移除时检查。此前观察整个 document，
+      // 底部状态栏等无关 DOM 更新也会反复触发重复输入框诊断并刷屏。
+      function __m143_hasUserInputMutation(records) {
+        return records.some(record => {
+          const changed = [...record.addedNodes, ...record.removedNodes];
+          return changed.some(node => {
+            if (node.nodeType !== Node.ELEMENT_NODE) return false;
+            return node.id === 'userInput' || !!node.querySelector?.('#userInput');
+          });
+        });
+      }
+
+      let __m143_duplicateCheckQueued = false;
+      new MutationObserver(function(records) {
+        if (!__m143_hasUserInputMutation(records) || __m143_duplicateCheckQueued) return;
+        __m143_duplicateCheckQueued = true;
+        queueMicrotask(function() {
+          __m143_duplicateCheckQueued = false;
+          __m143_cleanupDuplicateInputs();
+        });
       }).observe(document.documentElement, { childList: true, subtree: true });
 
       setTimeout(__m143_cleanupDuplicateInputs, 0);
@@ -916,9 +953,6 @@
         const rb=$('refreshModelsBtn'); if(rb)rb.addEventListener('click',loadCurrentModels);
         updateConnectionUI();initWorkerSecurity();
       }
-
-      const workerLoginBtn=$('workerLoginBtn'); if(workerLoginBtn)workerLoginBtn.addEventListener('click',loginWorker);
-      const workerPasswordInput=$('workerPasswordInput'); if(workerPasswordInput)workerPasswordInput.addEventListener('keydown',e=>{if(e.key==='Enter')loginWorker();});
 
       function saveDraft(key, value) { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); }
       function loadDraft(key) { return localStorage.getItem(key) || ''; }
