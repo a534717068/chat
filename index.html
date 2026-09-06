@@ -2500,15 +2500,18 @@ M：${aiText}`;
       async function ensureMcp() {
         if (mcpTools.length) return mcpTools;
         if (!getWorkerToken()) throw new Error('Worker 尚未登录，无法使用大富翁 MCP。');
+        console.log('🎲 MCP: ensureMcp 开始');
         mcpSessionId = '';
         await mcpRequest('initialize', {
           protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: {},
           clientInfo: { name: 'M-Companion', version: '12.5.2' }
         });
+        console.log('🎲 MCP: initialize 成功');
         await mcpRequest('notifications/initialized', undefined, true).catch(() => {});
         const result = await mcpRequest('tools/list', {});
         mcpTools = Array.isArray(result.tools) ? result.tools : [];
+        console.log('🎲 MCP: tools/list 成功', mcpTools.map(t => t.name));
         if (!mcpTools.length) throw new Error('MCP 未返回可用工具。');
         return mcpTools;
       }
@@ -2526,6 +2529,10 @@ M：${aiText}`;
 
       async function executeMcpTool(name, args) {
         const result = await mcpRequest('tools/call', { name, arguments: args || {} });
+        console.log('🎲 MCP: 工具返回', {
+          name,
+          result
+        });
         return JSON.stringify(result);
       }
 
@@ -2553,6 +2560,12 @@ M：${aiText}`;
           const msg = data?.choices?.[0]?.message;
           if (!msg) throw new Error('模型没有返回有效消息。');
 
+          console.log('🎲 MCP: 模型响应', {
+            hasContent: !!msg.content,
+            toolCallCount: Array.isArray(msg.tool_calls) ? msg.tool_calls.length : 0,
+            toolCalls: msg.tool_calls || []
+          });
+
           const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
           if (!calls.length) return String(msg.content || '').trim();
 
@@ -2563,6 +2576,10 @@ M：${aiText}`;
             let args = {};
             try { args = call?.function?.arguments ? JSON.parse(call.function.arguments) : {}; }
             catch (_) { throw new Error(`MCP 工具 ${name} 的参数不是有效 JSON。`); }
+            console.log('🎲 MCP: 准备调用工具', {
+              name,
+              args
+            });
             const result = await executeMcpTool(name, args);
             conversation.push({
               role: 'tool',
@@ -2621,12 +2638,22 @@ M：${aiText}`;
 
           // MCP 只在明确的大富翁请求且已登录 Worker 时启用。
           // 普通聊天保持 V12.4 原始请求路径；MCP 失败也会自动回退。
+          console.log('🎲 MCP: 请求检测', {
+            text,
+            isMonopoly: isMonopolyRequest(text),
+            hasWorkerToken: !!getWorkerToken()
+          });
           let reply = '';
           if (isMonopolyRequest(text) && getWorkerToken()) {
+            console.log('🎲 MCP: 已进入大富翁 MCP 分支');
             try {
               reply = await chatWithMonopolyMcp(apiMsgs, target);
             } catch (mcpError) {
-              console.warn('🎲 MCP 暂时不可用，回退普通聊天：', mcpError);
+              console.error('🎲 MCP FAILED:', mcpError);
+
+              // 明确的大富翁请求如果 MCP 失败，不允许静默回退到普通聊天，
+              // 避免 AI 在没有真实游戏状态的情况下自行编造游戏规则或游戏状态。
+              throw new Error(`🎲 大富翁 MCP 不可用：${mcpError.message || mcpError}`);
             }
           }
 
