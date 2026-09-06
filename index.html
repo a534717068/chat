@@ -2456,6 +2456,23 @@ M：${aiText}`;
         return ['大富翁','monopoly','掷骰','骰子','棋盘','买地','房子','地产','银行','破产','回合','开始游戏','玩游戏'].some(k => s.includes(k));
       }
 
+      function isMonopolyStartRequest(text) {
+        const s = String(text || '').toLowerCase();
+        return [
+          '开始大富翁',
+          '开始一个大富翁',
+          '开始游戏',
+          '开始一局',
+          '新开一局',
+          '新建游戏',
+          '新建一局',
+          '开启游戏',
+          '开启一局',
+          '玩大富翁',
+          '玩游戏'
+        ].some(k => s.includes(k));
+      }
+
       function mcpUrl() {
         return workerUrl(MCP_GATEWAY_PATH);
       }
@@ -2591,6 +2608,79 @@ M：${aiText}`;
         throw new Error('MCP 工具调用超过 8 轮，已停止。');
       }
 
+      // 玩家身份是应用的固定上下文：城月=用户，阿慕=AI。
+      // 用户输入的"玩家A/玩家B"只是临时称呼，不用于游戏参数。
+      function buildNewGameArgs(tool) {
+        const schema = (tool && tool.inputSchema && typeof tool.inputSchema === 'object') ? tool.inputSchema : {};
+        const props = (schema.properties && typeof schema.properties === 'object') ? schema.properties : {};
+        const playerNames = ['城月', '阿慕'];
+        let nameIdx = 0;
+        const args = {};
+
+        for (const key of Object.keys(props)) {
+          const def = props[key];
+          if (!def || typeof def !== 'object') continue;
+
+          if (def.default !== undefined) { args[key] = def.default; continue; }
+
+          const isNameField = /name|player|角色|玩家|名字|名称/i.test(key);
+          if (!isNameField) continue;
+
+          const types = Array.isArray(def.type) ? def.type : [def.type];
+          const isString = types.includes('string');
+          const isStringArray = types.includes('array') &&
+            def.items && (def.items.type === 'string' || (Array.isArray(def.items.type) && def.items.type.includes('string')));
+
+          if (isStringArray) {
+            args[key] = playerNames.slice();
+            continue;
+          }
+          if (isString && nameIdx < playerNames.length) {
+            args[key] = playerNames[nameIdx++];
+            continue;
+          }
+        }
+
+        return args;
+      }
+
+      async function startMonopolyGame(apiMsgs, target) {
+        const tools = await ensureMcp();
+        const newGameTool = tools.find(t => t && t.name === 'new_game');
+        if (!newGameTool) throw new Error('MCP 没有提供 new_game 工具');
+        console.log('🎲 MCP: new_game inputSchema', newGameTool.inputSchema);
+
+        const args = buildNewGameArgs(newGameTool);
+        console.log('🎲 MCP: 强制调用 new_game', { args });
+
+        const result = await executeMcpTool('new_game', args);
+        console.log('🎲 MCP: new_game 成功', result);
+
+        // 把真实 MCP 结果交给模型，让模型基于真实状态回复，避免编造。
+        const conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
+        conversation.push({
+          role: 'user',
+          content: '【大富翁系统消息】客户端已真实执行 new_game，下面是 MCP 返回的真实游戏状态（JSON）。请只用这份数据，用中文告诉用户游戏已创建，并说明真实的先手、位置、金币等信息；严禁编造这份 JSON 里没有的数据。\n' + result
+        });
+
+        const res = await workerFetch('', {
+          method: 'POST',
+          headers: target.headers,
+          body: JSON.stringify({
+            provider: target.provider,
+            model: target.model,
+            messages: conversation,
+            stream: false,
+            temperature: 0.5
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error?.message || `模型请求失败 HTTP ${res.status}`);
+        const msg = data?.choices?.[0]?.message;
+        if (!msg) throw new Error('模型没有返回有效消息。');
+        return String(msg.content || '').trim();
+      }
+
       // ========== 核心发送函数（带调试日志） ==========
       async function sendToAPI(text, attachments = []) {
         const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
@@ -2646,14 +2736,21 @@ M：${aiText}`;
           let reply = '';
           if (isMonopolyRequest(text) && getWorkerToken()) {
             console.log('🎲 MCP: 已进入大富翁 MCP 分支');
+            const isStart = isMonopolyStartRequest(text);
             try {
-              reply = await chatWithMonopolyMcp(apiMsgs, target);
+              if (isStart) {
+                console.log('🎲 MCP: 开始游戏请求', { text });
+                reply = await startMonopolyGame(apiMsgs, target);
+              } else {
+                reply = await chatWithMonopolyMcp(apiMsgs, target);
+              }
             } catch (mcpError) {
               console.error('🎲 MCP FAILED:', mcpError);
 
               // 明确的大富翁请求如果 MCP 失败，不允许静默回退到普通聊天，
               // 避免 AI 在没有真实游戏状态的情况下自行编造游戏规则或游戏状态。
-              throw new Error(`🎲 大富翁 MCP 不可用：${mcpError.message || mcpError}`);
+              const prefix = isStart ? '🎲 大富翁新游戏创建失败' : '🎲 大富翁 MCP 不可用';
+              throw new Error(`${prefix}：${mcpError.message || mcpError}`);
             }
           }
 
