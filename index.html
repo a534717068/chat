@@ -314,7 +314,7 @@
 
   <script>
     (function() {
-      window.__M_WORKER_VERSION__ = '2026-09-05-v12.4-emotion-auto-adjust';
+      window.__M_WORKER_VERSION__ = '2026-09-06-v12.7-force-real-mcp-route';
       const $ = id => document.getElementById(id);
       const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
@@ -2264,7 +2264,7 @@ M：${aiText}`;
         await mcpRequest('initialize', {
           protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: {},
-          clientInfo: { name: 'M-Companion', version: '12.5.2' }
+          clientInfo: { name: 'M-Companion', version: '12.7' }
         });
         await mcpRequest('notifications/initialized', undefined, true).catch(() => {});
         const result = await mcpRequest('tools/list', {});
@@ -2290,112 +2290,110 @@ M：${aiText}`;
       }
 
       async function chatWithMonopolyMcp(apiMsgs, target) {
-        // V12.6：真实 MCP Tool Call + 无 tool_calls 时的结构化兜底。
-        // 重要：兜底不是“假装调用”，仍然由本函数真正执行 tools/call。
+        // V12.7：强制真实 MCP 路由版。
+        // 核心原则：大富翁请求不再先让模型“自由回答”。
+        // 流程固定为：MCP initialize/tools/list -> monopoly_help -> JSON 路由规划 -> 真实 tools/call -> AI 依据真实结果生成回复。
+        // 因此“我调用了 MCP”这句话本身永远不能代替真正的 tools/call。
         const tools = await ensureMcp();
-        const modelTools = mcpToolsForModel(tools);
+        const toolMap = new Map(tools.filter(t => t && t.name).map(t => [t.name, t]));
+        const hasTool = name => toolMap.has(name);
+        const requireTool = name => {
+          if (!hasTool(name)) throw new Error('MCP 不存在必需工具：' + name);
+        };
+
         let conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
 
-        // 首次进入大富翁时，真实读取规则；不让模型凭空编规则。
-        let helpResult = null;
-        try {
-          helpResult = await executeMcpTool('monopoly_help', {});
-          conversation.push({
+        // 1. 每次进入大富翁路由，先真实读取帮助信息，作为规则锚点。
+        requireTool('monopoly_help');
+        console.log('🎲 V12.7 MCP → tools/call monopoly_help');
+        const helpResult = await executeMcpTool('monopoly_help', {});
+        conversation.push({
+          role: 'system',
+          content: '【真实 MCP 规则锚点】以下内容刚刚由大富翁 MCP 返回。只能依据 MCP 返回的规则、状态和工具结果作答；禁止编造骰子、资金、棋盘位置、地产、卡牌、任务、胜负或任何游戏事件。\nMCP monopoly_help 返回：\n' + helpResult
+        });
+
+        // 2. 强制 JSON 路由器：不发送 tools/tool_choice，不依赖 OpenCode Go 的原生 tool_calls 能力。
+        //    它只能“决定调用什么”，不能伪造调用结果；真正执行由 executeMcpTool 完成。
+        const routerMessages = [
+          ...conversation,
+          {
             role: 'system',
-            content: '你正在使用真实的大富翁 MCP。下面是刚刚从 MCP 服务器读取的帮助信息。只能依据 MCP 返回的状态、规则和工具结果作答，绝不能编造骰子、资金、棋盘、任务或胜负。\nMCP monopoly_help:\n' + helpResult
-          });
-        } catch (e) {
-          console.warn('MCP monopoly_help 读取失败：', e);
-        }
+            content: `你现在是“大富翁 MCP 路由器”，不是聊天助手。
+用户的当前请求需要被路由到真实 MCP 工具。
+你只能从下面这些真实工具中选择：${tools.map(t => t.name).join(', ')}
 
-        const callTool = async (name, args) => {
-          if (!tools.some(t => t && t.name === name)) throw new Error('MCP 不存在工具：' + name);
-          console.log('🎲 V12.6 真正执行 MCP tools/call:', name, args || {});
-          return await executeMcpTool(name, args || {});
-        };
+【强制规则】
+1. 只输出一行合法 JSON，不要 Markdown，不要解释，不要自然语言。
+2. 需要开始/创建一局时优先选择 new_game，但只有用户已经提供/确认了工具要求的玩家设置时才传 setup_confirmed=true；否则可选择 monopoly_help，让系统先向用户询问缺失设置。
+3. 用户明确要求掷骰子时选择 roll。
+4. 用户询问当前棋盘、现金、位置、资产、回合等实时状态时选择 game_info。
+5. 用户明确要求买地、建房、交易、移动、结束回合等具体游戏动作时，按真实 schema 选择 game_action，并填写真实参数；不确定参数时不要猜，选择 monopoly_help。
+6. 用户询问规则、玩法、设置问题时选择 monopoly_help。
+7. 不允许选择不存在的工具。
+8. 不允许虚构任何工具结果。你只负责产生“工具名+参数”。
 
-        const appendCalls = async (msg) => {
-          const calls = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
-          if (!calls.length) return false;
-          conversation.push(msg);
-          for (const call of calls) {
-            const name = call?.function?.name;
-            if (!name) throw new Error('模型返回了无效的 MCP 工具调用。');
-            let args = {};
-            try { args = call?.function?.arguments ? JSON.parse(call.function.arguments) : {}; }
-            catch (_) { throw new Error(`MCP 工具 ${name} 的参数不是有效 JSON。`); }
-            const result = await callTool(name, args);
-            conversation.push({
-              role: 'tool',
-              tool_call_id: call.id,
-              content: result
-            });
+输出格式严格为：{"tool":"工具名","arguments":{...}}
+如果无法确定安全且符合 schema 的工具或参数，只输出：{"tool":"monopoly_help","arguments":{}}`
           }
-          return true;
-        };
+        ];
 
-        for (let round = 0; round < 8; round++) {
-          const res = await workerFetch('', {
-            method: 'POST',
-            headers: target.headers,
-            body: JSON.stringify({
-              provider: target.provider,
-              model: target.model,
-              messages: conversation,
-              tools: modelTools,
-              tool_choice: 'auto',
-              stream: false,
-              temperature: 0.2
-            })
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(data?.error?.message || `模型请求失败 HTTP ${res.status}`);
-          const msg = data?.choices?.[0]?.message;
-          if (!msg) throw new Error('模型没有返回有效消息。');
-          if (await appendCalls(msg)) continue;
+        const routerRes = await workerFetch('', {
+          method: 'POST',
+          headers: target.headers,
+          body: JSON.stringify({
+            provider: target.provider,
+            model: target.model,
+            messages: routerMessages,
+            stream: false,
+            temperature: 0
+          })
+        });
+        const routerData = await routerRes.json().catch(() => ({}));
+        if (!routerRes.ok) throw new Error(routerData?.error?.message || `MCP 路由器请求失败 HTTP ${routerRes.status}`);
+        const routerText = String(routerData?.choices?.[0]?.message?.content || '').trim();
+        let plan = null;
+        try {
+          const match = routerText.match(/\{[\s\S]*\}/);
+          if (match) plan = JSON.parse(match[0]);
+        } catch (_) { plan = null; }
 
-          const content = String(msg.content || '').trim();
-          if (!content) throw new Error('模型返回空内容。');
-
-          // 有些 OpenAI-compatible 上游会接受 tools 参数，但不会返回 tool_calls。
-          // 此时再请求一次“严格 JSON 工具计划”。只有合法 JSON 才会真的执行 MCP。
-          const plannerMessages = [
-            ...conversation,
-            { role: 'assistant', content },
-            {
-              role: 'system',
-              content: '你现在是 MCP 工具规划器。判断用户当前请求是否需要调用大富翁工具。必须只输出一行 JSON，不要 Markdown，不要解释。格式：{"tool":"工具名","arguments":{...}}；如果不需要任何工具则输出 {"tool":null}. 只能选择提供给你的 MCP 工具，参数必须符合工具 schema。不要虚构工具或结果。'
-            }
-          ];
-          const planRes = await workerFetch('', {
-            method: 'POST',
-            headers: target.headers,
-            body: JSON.stringify({
-              provider: target.provider,
-              model: target.model,
-              messages: plannerMessages,
-              tools: modelTools,
-              tool_choice: 'none',
-              stream: false,
-              temperature: 0
-            })
-          });
-          const planData = await planRes.json().catch(() => ({}));
-          if (!planRes.ok) return content;
-          const planText = String(planData?.choices?.[0]?.message?.content || '').trim();
-          let plan = null;
-          try {
-            const m = planText.match(/\{[\s\S]*\}/);
-            if (m) plan = JSON.parse(m[0]);
-          } catch (_) { plan = null; }
-
-          if (!plan || !plan.tool) return content;
-          if (!tools.some(t => t && t.name === plan.tool)) throw new Error('模型规划了不存在的 MCP 工具：' + plan.tool);
-          const result = await callTool(plan.tool, plan.arguments || {});
-          conversation.push({ role: 'assistant', content });
-          conversation.push({ role: 'tool', content: result, name: plan.tool });
+        if (!plan || typeof plan.tool !== 'string') {
+          throw new Error('MCP 路由器没有返回合法 JSON 工具计划，已拒绝执行任何伪造调用。');
         }
-        throw new Error('MCP 工具调用超过 8 轮，已停止。');
+        if (!hasTool(plan.tool)) {
+          throw new Error('MCP 路由器选择了不存在的工具：' + plan.tool);
+        }
+        if (!plan.arguments || typeof plan.arguments !== 'object' || Array.isArray(plan.arguments)) {
+          throw new Error(`MCP 工具 ${plan.tool} 的 arguments 无效。`);
+        }
+
+        // 3. 这里才是真正的 MCP tools/call。
+        console.log('🎲 V12.7 强制真实 MCP tools/call:', plan.tool, plan.arguments);
+        const toolResult = await executeMcpTool(plan.tool, plan.arguments);
+
+        // 4. 把真实 MCP 结果交给 AI 做最终自然语言回复。
+        //    AI 不再拥有“是否调用工具”的决定权，也不能脱离工具结果自行编游戏状态。
+        conversation.push({
+          role: 'system',
+          content: `【真实 MCP 工具执行结果】\n本次已经真实执行 MCP tools/call：${plan.tool}\n参数：${JSON.stringify(plan.arguments)}\n返回：\n${toolResult}\n\n你现在只能依据这份真实返回结果回答用户。不要自行补充没有返回的数据。若工具返回错误，直接说明工具拒绝/失败及其原因，不要猜测成功。`
+        });
+
+        const finalRes = await workerFetch('', {
+          method: 'POST',
+          headers: target.headers,
+          body: JSON.stringify({
+            provider: target.provider,
+            model: target.model,
+            messages: conversation,
+            stream: false,
+            temperature: 0.2
+          })
+        });
+        const finalData = await finalRes.json().catch(() => ({}));
+        if (!finalRes.ok) throw new Error(finalData?.error?.message || `MCP 结果解读请求失败 HTTP ${finalRes.status}`);
+        const finalContent = String(finalData?.choices?.[0]?.message?.content || '').trim();
+        if (!finalContent) throw new Error('MCP 已执行，但 AI 没有返回有效的结果解读。');
+        return finalContent;
       }
 
       // ========== 核心发送函数（带调试日志） ==========
@@ -2442,16 +2440,15 @@ M：${aiText}`;
           console.log('📦 请求体:', { model, messages: apiMsgs });
           const approxChars = apiMsgs.reduce((n, m) => n + String(m.content || '').length, 0);
           console.log(`📉 本次请求上下文约 ${approxChars} 字符（仅为粗略估算，不等于实际计费 Token）`);
+          if (isMonopolyRequest(text)) console.log('🎲 V12.7：检测到大富翁请求，将强制进入真实 MCP 路由，不允许普通聊天回退。');
 
-          // MCP 只在明确的大富翁请求且已登录 Worker 时启用。
-          // 普通聊天保持 V12.4 原始请求路径；MCP 失败也会自动回退。
+          // V12.7：明确的大富翁请求进入强制真实 MCP 路由。
+          // MCP 失败时绝不回退普通聊天，否则模型可能在没有真实状态的情况下编造骰子/棋盘。
           let reply = '';
-          if (isMonopolyRequest(text) && getWorkerToken()) {
-            try {
-              reply = await chatWithMonopolyMcp(apiMsgs, target);
-            } catch (mcpError) {
-              console.warn('🎲 MCP 暂时不可用，回退普通聊天：', mcpError);
-            }
+          const monopolyMode = isMonopolyRequest(text);
+          if (monopolyMode) {
+            if (!getWorkerToken()) throw new Error('请先登录 Worker，才能使用真实大富翁 MCP。');
+            reply = await chatWithMonopolyMcp(apiMsgs, target);
           }
 
           if (!reply) {
