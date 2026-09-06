@@ -320,8 +320,12 @@
       // 登录控件必须在其他初始化之前绑定。loginWorker 是函数声明，已提升，
       // 因此可以安全地在这里引用；同时避免脚本被重复执行时重复注册。
       function bindWorkerLoginControls() {
+        window.__M_BIND_LOGIN_ENTERED__ = true;
         const button = $('workerLoginBtn');
         const passwordInput = $('workerPasswordInput');
+        window.__M_BIND_LOGIN_BUTTON__ = !!button;
+        window.__M_BIND_LOGIN_PASSWORD__ = !!passwordInput;
+        window.__M_BIND_LOGIN_BEFORE_RETURN__ = true;
         if (!button || !passwordInput) {
           console.error('Worker 登录控件不存在，无法完成初始化。');
           return;
@@ -329,6 +333,7 @@
         if (button.__mWorkerLoginBound) return;
 
         button.addEventListener('click', loginWorker);
+        window.__M_BIND_LOGIN_AFTER_CLICK_BIND__ = true;
         passwordInput.addEventListener('keydown', event => {
           if (event.key === 'Enter') {
             event.preventDefault();
@@ -336,6 +341,7 @@
           }
         });
         button.__mWorkerLoginBound = true;
+        window.__M_BIND_LOGIN_COMPLETED__ = true;
       }
       bindWorkerLoginControls();
 
