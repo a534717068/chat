@@ -3510,18 +3510,5 @@ M：${aiText}`;
       renderAll(); if (messages.length <= 1) addMsg('assistant', '你好！我是M，精简人设已加载 🧠');
     })();
   </script>
-  <div id="v14Status" style="position:fixed;left:6px;bottom:2px;z-index:99999;font-size:10px;line-height:16px;padding:1px 5px;border-radius:5px;background:rgba(0,0,0,.55);color:#fff;pointer-events:none;max-width:92vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">V14：发送核心启动中</div>
-  <script>
-    (function(){
-      function update(){
-        var el=document.getElementById('v14Status');
-        if(el) el.textContent=window.__M_V14_SEND_STATE__ || 'V14：状态未知';
-      }
-      update();
-      setInterval(update,300);
-      window.addEventListener('error',update);
-      window.addEventListener('unhandledrejection',update);
-    })();
-  </script>
 </body>
 </html>
