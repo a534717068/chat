@@ -2504,6 +2504,13 @@ M：${aiText}`;
         return ['完成了继续', '下一回合', '准备好了', '完成', '继续'].some(k => s.includes(k));
       }
 
+      // 推进回合：进行中的游戏不等待任务时，用户明确要求开始/下一回合/掷骰等。
+      // 只在 activeMonopolyGame 存在且 waitingContinue === false 时才命中。
+      function isMonopolyAdvanceRequest(text) {
+        const s = String(text || '').trim().toLowerCase();
+        return ['开始', '开始回合', '下一回合', '掷骰子', '掷骰', '继续游戏', '继续玩', '走', '走一步', '行动', '轮到', '该你', '该我', '下一步', 'roll'].some(k => s.includes(k));
+      }
+
       function mcpUrl() {
         return workerUrl(MCP_GATEWAY_PATH);
       }
@@ -3030,6 +3037,17 @@ M：${aiText}`;
             } catch (mcpError) {
               console.error('🎲 MCP FAILED:', mcpError);
               throw new Error('🎲 大富翁继续回合失败：' + (mcpError.message || mcpError));
+            }
+          }
+
+          // 推进回合：进行中且未等待任务时，用户明确“开始/下一回合/掷骰”等，直接对当前 game_id 调用 roll。
+          if (!reply && !pendingActive && activeMonopolyGame && activeMonopolyGame.game_id && activeMonopolyGame.waitingContinue === false && isMonopolyAdvanceRequest(text) && getWorkerToken()) {
+            console.log('🎲 MCP: 进行中游戏用户请求推进回合', { text, game_id: activeMonopolyGame.game_id });
+            try {
+              reply = await continueMonopolyGame(apiMsgs, target);
+            } catch (mcpError) {
+              console.error('🎲 MCP FAILED:', mcpError);
+              throw new Error('🎲 大富翁推进回合失败：' + (mcpError.message || mcpError));
             }
           }
 
