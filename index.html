@@ -3012,6 +3012,62 @@ M：${aiText}`;
         return String(msg.content || '').trim();
       }
 
+      // 根据 game_info 的真实 inputSchema 构造参数：
+      // 查询类型用 pair_history；玩家姓名/性别用固定身份（P1=城月/女，P2=阿慕/女）；其余用 schema 默认值。
+      function buildGameInfoArgs(tool) {
+        const schema = (tool && tool.inputSchema && typeof tool.inputSchema === 'object') ? tool.inputSchema : {};
+        const props = (schema.properties && typeof schema.properties === 'object') ? schema.properties : {};
+        const players = [
+          { name: '城月', sex: '女' },
+          { name: '阿慕', sex: '女' }
+        ];
+        const args = {};
+        let seqName = 0;
+        let seqSex = 0;
+
+        const getTypes = (d) => Array.isArray(d.type) ? d.type : (d.type ? [d.type] : []);
+        const isString = (d) => getTypes(d).includes('string');
+
+        function playerIndex(key) {
+          const m = String(key).match(/(?:^|[_\-\s])(?:p|player|玩家|角色)[_\-\s]*([12])(?:[_\-\s]|$)/i);
+          return m ? Number(m[1]) : 0;
+        }
+        function fieldKind(key) {
+          const k = String(key);
+          if (/query|action|command|request|查询|操作/i.test(k)) return 'query';
+          if (/sex|gender|性别/i.test(k)) return 'sex';
+          if (/name|名字|名称|昵称|player|玩家/i.test(k)) return 'name';
+          return 'other';
+        }
+
+        for (const key of Object.keys(props)) {
+          const def = props[key];
+          if (!def || typeof def !== 'object') continue;
+          const kind = fieldKind(key);
+          const idx = playerIndex(key);
+
+          if (kind === 'query') {
+            if (isString(def)) args[key] = 'pair_history';
+            continue;
+          }
+          if (kind === 'name') {
+            const pi = (idx === 1 || idx === 2) ? idx - 1 : (seqName < players.length ? seqName : -1);
+            if (pi >= 0 && isString(def)) args[key] = players[pi].name;
+            if (idx === 0) seqName++;
+            continue;
+          }
+          if (kind === 'sex') {
+            const pi = (idx === 1 || idx === 2) ? idx - 1 : (seqSex < players.length ? seqSex : -1);
+            if (pi >= 0 && isString(def)) args[key] = players[pi].sex;
+            if (idx === 0) seqSex++;
+            continue;
+          }
+          if (def.default !== undefined) args[key] = def.default;
+        }
+
+        return args;
+      }
+
       // 刷新后恢复上一局：仅在大富翁模式下、且前端没有 game_id 时，才查询 game_info。
       async function restoreActiveMonopolyGame() {
         if (!isMonopolyModeActive()) return false;
@@ -3023,7 +3079,9 @@ M：${aiText}`;
             console.log('🎲 MCP: 未找到 game_info 工具，无法恢复');
             return false;
           }
-          const result = await executeMcpTool('game_info', {});
+          const args = buildGameInfoArgs(infoTool);
+          console.log('🎲 MCP: game_info 恢复参数', args);
+          const result = await executeMcpTool('game_info', args);
           let obj = null;
           try { obj = JSON.parse(String(result || '')); } catch (_) {}
           let sc = obj && typeof obj === 'object' ? obj.structuredContent : null;
