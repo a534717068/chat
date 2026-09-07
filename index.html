@@ -2537,6 +2537,24 @@ M：${aiText}`;
         ].some(k => s === k || s.includes(k));
       }
 
+      // 新开一局：只有明确输入「大富翁」或「开始游戏」才命中，绝不与续局混淆。
+      function isMonopolyNewGameRequest(text) {
+        const s = String(text || '').trim().toLowerCase();
+        return ['大富翁', '开始游戏'].includes(s);
+      }
+
+      // 续局：只有明确输入“继续上一局 / 继续昨天的大富翁”等关键词，才查询 game_info 恢复旧局。
+      function isMonopolyRestoreRequest(text) {
+        const s = String(text || '').trim().toLowerCase();
+        return [
+          '继续上一局',
+          '继续昨天的大富翁',
+          '继续昨天那局',
+          '继续大富翁',
+          '恢复上一局'
+        ].includes(s);
+      }
+
       function mcpUrl() {
         return workerUrl(MCP_GATEWAY_PATH);
       }
@@ -3102,6 +3120,65 @@ M：${aiText}`;
         }
       }
 
+      // 从 game_info 返回里尽力读取“当前轮到谁”，读不到就留空，绝不编造。
+      function extractCurrentPlayer(sc) {
+        if (!sc || typeof sc !== 'object') return '';
+        if (typeof sc.current_player_name === 'string' && sc.current_player_name) return sc.current_player_name;
+        if (typeof sc.current_player === 'string' && sc.current_player) return sc.current_player;
+        const keys = Object.keys(sc);
+        const turnKey = keys.find(k => /(current|whose|next|active|现在|轮到)[_\-\s]*(player|turn|角色|玩家|方)|player[_\-\s]*turn|turn[_\-\s]*player|^turn$/i.test(k));
+        if (!turnKey) return '';
+        const v = sc[turnKey];
+        if (typeof v === 'string' && v) return v;
+        if (v && typeof v === 'object') {
+          if (typeof v.name === 'string' && v.name) return v.name;
+          if (typeof v.player === 'string' && v.player) return v.player;
+        }
+        return '';
+      }
+
+      // 续局入口：明确请求“继续上一局”时，才查询 game_info 恢复旧局。
+      // 不 new_game、不自动 roll；恢复成功后只记录状态，等用户输入「开始」才调用 roll。
+      async function restoreMonopolyGameFromServer() {
+        let sc = null;
+        try {
+          const tools = await ensureMcp();
+          const infoTool = tools.find(t => t && t.name === 'game_info');
+          if (!infoTool) throw new Error('MCP 没有提供 game_info 工具');
+          const args = buildGameInfoArgs(infoTool);
+          console.log('🎲 MCP: 续局 game_info 参数', args);
+          const result = await executeMcpTool('game_info', args);
+          console.log('🎲 MCP: 续局 game_info 返回', result);
+          let obj = null;
+          try { obj = JSON.parse(String(result || '')); } catch (_) {}
+          sc = obj && typeof obj === 'object' ? obj.structuredContent : null;
+          if (typeof sc === 'string') { try { sc = JSON.parse(sc); } catch (_) {} }
+        } catch (e) {
+          console.error('🎲 MCP: 续局查询 game_info 失败', e);
+          throw new Error('🎲 续局查询失败：' + (e.message || e));
+        }
+
+        if (!sc || typeof sc !== 'object') {
+          return '没有找到可以继续的进行中大富翁。你可以输入「大富翁」重新开一局。';
+        }
+
+        const inProgress = sc.last_game_in_progress === true || sc.last_game_in_progress === 'true';
+        const lastGameId = sc.last_game_id;
+
+        if (inProgress && lastGameId) {
+          activeMonopolyGame = { game_id: String(lastGameId), waitingContinue: false };
+          pendingMonopolySetup = null;
+          setMonopolyModeActive();
+          console.log('🎲 MCP: 已恢复上一局大富翁', activeMonopolyGame);
+          const turnPlayer = extractCurrentPlayer(sc);
+          const turnText = turnPlayer ? '现在轮到 ' + turnPlayer + '，' : '';
+          return '已恢复上一局大富翁，当前游戏 ID 是 ' + lastGameId + '。' + turnText + '输入「开始」掷骰子。';
+        }
+
+        console.log('🎲 MCP: 续局：没有进行中的游戏', sc);
+        return '没有找到可以继续的进行中大富翁。你可以输入「大富翁」重新开一局。';
+      }
+
       // ========== 核心发送函数（带调试日志） ==========
       async function sendToAPI(text, attachments = []) {
         const isValidEdit = editingIdx >= 0 && editingIdx < messages.length && messages[editingIdx].role === 'user';
@@ -3156,6 +3233,28 @@ M：${aiText}`;
           });
           let reply = '';
           const pendingActive = !!pendingMonopolySetup;
+
+          // 优先级 1：新开一局 —— 只有明确「大富翁」/「开始游戏」才进入新游戏确认流程。
+          if (!reply && isMonopolyNewGameRequest(text) && getWorkerToken()) {
+            console.log('🎲 MCP: 新开一局请求', { text });
+            try {
+              reply = await startMonopolyGame(apiMsgs, target);
+            } catch (mcpError) {
+              console.error('🎲 MCP FAILED:', mcpError);
+              throw new Error('🎲 大富翁新游戏创建失败：' + (mcpError.message || mcpError));
+            }
+          }
+
+          // 优先级 2：续局 —— 只有明确「继续上一局/继续昨天的大富翁」等才调用 game_info 恢复旧局。
+          if (!reply && isMonopolyRestoreRequest(text) && getWorkerToken()) {
+            console.log('🎲 MCP: 续局请求', { text });
+            try {
+              reply = await restoreMonopolyGameFromServer();
+            } catch (mcpError) {
+              console.error('🎲 MCP FAILED:', mcpError);
+              throw new Error('🎲 大富翁续局失败：' + (mcpError.message || mcpError));
+            }
+          }
 
           // 两阶段开局：存在“待确认开局”状态时优先处理，绝不能在未确认时调用 new_game。
           if (pendingActive) {
