@@ -1,0 +1,66 @@
+async function testChat() {
+
+    const apiKey =
+        document.getElementById("apiKey").value.trim();
+
+    if (!apiKey) {
+        alert("请先输入 API Key");
+        return;
+    }
+
+    log(
+        "chatResult",
+        "正在请求 OpenCode Go ..."
+    );
+
+    try {
+
+        const response = await fetch(
+            GO_CHAT_URL,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + apiKey
+                },
+
+                body: JSON.stringify({
+
+                    model: "deepseek-v4-flash",
+
+                    messages: [
+                        {
+                            role: "user",
+                            content: "只回复：测试成功"
+                        }
+                    ],
+
+                    stream: false
+                })
+            }
+        );
+
+        const text = await response.text();
+
+        log(
+            "chatResult",
+
+            "HTTP 状态码："
+            + response.status
+            + "\n\n"
+            + text,
+
+            response.ok
+        );
+
+    } catch (error) {
+
+        log(
+            "chatResult",
+
+            "浏览器请求失败：\n\n"
+            + error
+        );
+    }
+}
