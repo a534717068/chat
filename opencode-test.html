@@ -1,66 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>OpenCode Go 直连测试</title>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        max-width: 900px;
+        margin: 30px auto;
+        padding: 20px;
+        line-height: 1.6;
+        background: #f7f7f7;
+        color: #222;
+    }
+
+    h1 {
+        margin-bottom: 10px;
+    }
+
+    .box {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+
+    label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 8px;
+    }
+
+    input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        font-size: 14px;
+        margin-bottom: 12px;
+    }
+
+    button {
+        padding: 10px 16px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-right: 8px;
+        margin-bottom: 8px;
+        background: #222;
+        color: white;
+    }
+
+    button:hover {
+        opacity: 0.85;
+    }
+
+    button.secondary {
+        background: #666;
+    }
+
+    pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #111;
+        color: #eee;
+        padding: 15px;
+        border-radius: 8px;
+        overflow-x: auto;
+        min-height: 80px;
+    }
+
+    .ok {
+        color: green;
+        font-weight: bold;
+    }
+
+    .error {
+        color: red;
+        font-weight: bold;
+    }
+
+    .hint {
+        color: #666;
+        font-size: 13px;
+    }
+</style>
+</head>
+
+<body>
+
+<h1>OpenCode Go 直连测试</h1>
+
+<div class="box">
+
+    <p>
+        这个页面测试浏览器能否直接访问 OpenCode Go API。
+        <br>
+        不经过你的 Cloudflare Worker。
+    </p>
+
+    <label for="apiKey">OpenCode Go API Key</label>
+
+    <input
+        id="apiKey"
+        type="password"
+        placeholder="输入你的 OpenCode Go API Key"
+    >
+
+    <button onclick="testModels()">
+        ① 测试 /models
+    </button>
+
+    <button onclick="testChat()">
+        ② 测试 /chat/completions
+    </button>
+
+    <button class="secondary" onclick="clearResult()">
+        清空结果
+    </button>
+
+</div>
+
+
+<div class="box">
+
+    <h2>测试结果</h2>
+
+    <pre id="result">等待测试……</pre>
+
+</div>
+
+
+<script>
+
+/*
+ * OpenCode Go API
+ */
+const GO_BASE_URL = "https://opencode.ai/zen/go/v1";
+
+const GO_MODELS_URL =
+    GO_BASE_URL + "/models";
+
+const GO_CHAT_URL =
+    GO_BASE_URL + "/chat/completions";
+
+
+function log(text) {
+
+    const result = document.getElementById("result");
+
+    result.textContent = text;
+}
+
+
+function clearResult() {
+
+    document.getElementById("result").textContent =
+        "等待测试……";
+}
+
+
+/*
+ * 把 Response Headers 全部读取出来
+ */
+function getHeaders(response) {
+
+    const headers = {};
+
+    response.headers.forEach((value, key) => {
+        headers[key] = value;
+    });
+
+    return headers;
+}
+
+
+/*
+ * ① 测试 GET /models
+ */
+async function testModels() {
+
+    const apiKey =
+        document.getElementById("apiKey").value.trim();
+
+    if (!apiKey) {
+
+        alert("请先输入 API Key");
+
+        return;
+    }
+
+
+    log(
+        "开始测试……\n\n" +
+        "========== ① GET /models ==========\n" +
+        "正在请求 OpenCode Go……"
+    );
+
+
+    try {
+
+        const response = await fetch(
+            GO_MODELS_URL,
+            {
+                method: "GET",
+
+                headers: {
+                    "Authorization":
+                        "Bearer " + apiKey
+                }
+            }
+        );
+
+
+        const text =
+            await response.text();
+
+
+        const headers =
+            getHeaders(response);
+
+
+        log(
+            "========== ① GET /models ==========\n\n" +
+
+            "HTTP 状态码： " +
+            response.status +
+            "\n\n" +
+
+            "HTTP 状态： " +
+            response.statusText +
+            "\n\n" +
+
+            "响应头：\n" +
+            JSON.stringify(
+                headers,
+                null,
+                2
+            ) +
+
+            "\n\n" +
+
+            "响应内容：\n" +
+            text
+        );
+
+    } catch (error) {
+
+        log(
+            "========== ① GET /models ==========\n\n" +
+
+            "浏览器请求失败：\n\n" +
+
+            error.name +
+            "\n" +
+
+            error.message +
+
+            "\n\n" +
+
+            "如果这里出现 Failed to fetch，" +
+            "请同时查看 F12 → Console 的完整错误。"
+        );
+    }
+}
+
+
+/*
+ * ② 测试 POST /chat/completions
+ */
 async function testChat() {
 
     const apiKey =
         document.getElementById("apiKey").value.trim();
 
     if (!apiKey) {
+
         alert("请先输入 API Key");
+
         return;
     }
 
+
     log(
-        "chatResult",
-        "正在请求 OpenCode Go ..."
+        "开始测试……\n\n" +
+
+        "========== ② POST /chat/completions ==========\n" +
+
+        "正在请求 OpenCode Go……"
     );
+
 
     try {
 
-        const response = await fetch(
-            GO_CHAT_URL,
-            {
-                method: "POST",
+        const requestBody = {
 
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer " + apiKey
-                },
+            model: "deepseek-v4-flash",
 
-                body: JSON.stringify({
+            messages: [
+                {
+                    role: "user",
+                    content: "只回复：测试成功"
+                }
+            ],
 
-                    model: "deepseek-v4-flash",
+            stream: false
+        };
 
-                    messages: [
-                        {
-                            role: "user",
-                            content: "只回复：测试成功"
-                        }
-                    ],
 
-                    stream: false
-                })
-            }
-        );
+        const response =
+            await fetch(
+                GO_CHAT_URL,
+                {
+                    method: "POST",
 
-        const text = await response.text();
+                    headers: {
+
+                        "Content-Type":
+                            "application/json",
+
+                        "Authorization":
+                            "Bearer " + apiKey
+                    },
+
+                    body:
+                        JSON.stringify(requestBody)
+                }
+            );
+
+
+        const text =
+            await response.text();
+
+
+        const headers =
+            getHeaders(response);
+
 
         log(
-            "chatResult",
 
-            "HTTP 状态码："
-            + response.status
-            + "\n\n"
-            + text,
+            "========== ② POST /chat/completions ==========\n\n" +
 
-            response.ok
+            "HTTP 状态码： " +
+            response.status +
+
+            "\n\n" +
+
+            "HTTP 状态： " +
+            response.statusText +
+
+            "\n\n" +
+
+            "请求 URL：\n" +
+            GO_CHAT_URL +
+
+            "\n\n" +
+
+            "请求 Body：\n" +
+            JSON.stringify(
+                requestBody,
+                null,
+                2
+            ) +
+
+            "\n\n" +
+
+            "响应头：\n" +
+            JSON.stringify(
+                headers,
+                null,
+                2
+            ) +
+
+            "\n\n" +
+
+            "响应内容：\n" +
+            text
         );
 
     } catch (error) {
 
         log(
-            "chatResult",
 
-            "浏览器请求失败：\n\n"
-            + error
+            "========== ② POST /chat/completions ==========\n\n" +
+
+            "浏览器请求失败：\n\n" +
+
+            "错误类型： " +
+            error.name +
+
+            "\n\n" +
+
+            "错误信息： " +
+            error.message +
+
+            "\n\n" +
+
+            "这通常意味着浏览器没有拿到正常的 HTTP Response。\n" +
+
+            "请打开 F12 → Console，查看是否存在 CORS policy 错误。"
         );
     }
 }
+
+</script>
+
+</body>
+</html>
