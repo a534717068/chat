@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Command Code CORS 测试</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+
+    button {
+      padding: 12px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    pre {
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .ok {
+      color: green;
+    }
+
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>Command Code CORS 测试</h1>
+
+<p>
+  这个页面只测试浏览器能不能访问 Command Code API。
+  不需要 API Key。
+</p>
+
+<button id="testBtn">开始测试</button>
+
+<h2>测试结果</h2>
+
+<pre id="result">等待测试……</pre>
+
+<script>
+const API_BASE = "https://api.commandcode.ai/provider/v1";
+
+const result = document.getElementById("result");
+const button = document.getElementById("testBtn");
+
+function log(text) {
+  result.textContent += "\n" + text;
+}
+
+button.onclick = async function () {
+
+  result.textContent = "开始测试……";
+
+  // =====================================================
+  // 1. 测试 GET /models
+  // =====================================================
+
+  log("\n========== ① GET /models ==========");
+
+  try {
+
+    const response = await fetch(`${API_BASE}/models`, {
+      method: "GET"
+    });
+
+    log("HTTP 状态码：" + response.status);
+    log("HTTP 状态：" + response.statusText);
+
+    const headers = {};
+
+    for (const [key, value] of response.headers.entries()) {
+      headers[key] = value;
+    }
+
+    log("响应头：");
+    log(JSON.stringify(headers, null, 2));
+
+    const text = await response.text();
+
+    log("响应内容：");
+    log(text.substring(0, 1000));
+
+  } catch (error) {
+
+    log("\n❌ GET /models 失败");
+    log("错误类型：" + error.name);
+    log("错误信息：" + error.message);
+
+  }
+
+
+  // =====================================================
+  // 2. 测试 OPTIONS 预检
+  // =====================================================
+
+  log("\n\n========== ② OPTIONS /chat/completions ==========");
+
+  try {
+
+    const response = await fetch(`${API_BASE}/chat/completions`, {
+      method: "OPTIONS",
+      headers: {
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "authorization,content-type"
+      }
+    });
+
+    log("HTTP 状态码：" + response.status);
+    log("HTTP 状态：" + response.statusText);
+
+    const headers = {};
+
+    for (const [key, value] of response.headers.entries()) {
+      headers[key] = value;
+    }
+
+    log("响应头：");
+    log(JSON.stringify(headers, null, 2));
+
+    const text = await response.text();
+
+    log("响应内容：");
+    log(text.substring(0, 1000));
+
+  } catch (error) {
+
+    log("\n❌ OPTIONS 失败");
+    log("错误类型：" + error.name);
+    log("错误信息：" + error.message);
+
+  }
+
+
+  // =====================================================
+  // 3. 测试一个没有 API Key 的 POST
+  // =====================================================
+
+  log("\n\n========== ③ POST /chat/completions（无 API Key） ==========");
+
+  try {
+
+    const response = await fetch(`${API_BASE}/chat/completions`, {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify({
+        model: "deepseek/deepseek-v4-flash",
+
+        messages: [
+          {
+            role: "user",
+            content: "你好"
+          }
+        ]
+      })
+    });
+
+    log("HTTP 状态码：" + response.status);
+    log("HTTP 状态：" + response.statusText);
+
+    const headers = {};
+
+    for (const [key, value] of response.headers.entries()) {
+      headers[key] = value;
+    }
+
+    log("响应头：");
+    log(JSON.stringify(headers, null, 2));
+
+    const text = await response.text();
+
+    log("响应内容：");
+    log(text.substring(0, 1000));
+
+  } catch (error) {
+
+    log("\n❌ POST 请求失败");
+    log("错误类型：" + error.name);
+    log("错误信息：" + error.message);
+
+  }
+
+
+  log("\n\n========== 测试结束 ==========");
+  log("请把上面的完整结果复制给我。");
+
+};
+</script>
+
+</body>
+</html>
