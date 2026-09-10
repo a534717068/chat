@@ -2984,6 +2984,12 @@ M：${aiText}`;
         return JSON.stringify(result);
       }
 
+      window.__MCP_DEBUG_GAME_INFO__ = (gameId, query) =>
+        executeMcpTool('game_info', {
+          query: query || 'state',
+          game_id: gameId
+        });
+
       // 从 new_game / roll 的返回字符串里提取 game_id（兼容 game_id / gameId / id 等写法）。
       function extractGameId(resultStr) {
         const s = String(resultStr || '');
