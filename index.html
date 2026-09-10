@@ -3428,6 +3428,8 @@ M：${aiText}`;
         console.log('🎲 MCP: game_action inputSchema', actionTool.inputSchema);
 
         const args = buildGameActionArgs(actionTool, { duel_winner: winner });
+        args.action = 'duel_result';
+        args.winner = winner;
         console.log('🎲 MCP: 准备调用工具', { name: 'game_action', args });
         const result = await executeMcpTool('game_action', args);
         console.log('🎲 MCP: game_action 返回', result);
