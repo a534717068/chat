@@ -2721,6 +2721,8 @@ M：${aiText}`;
         return ['大富翁','monopoly','掷骰','骰子','棋盘','买地','房子','地产','银行','破产','回合','开始游戏','玩游戏'].some(k => s.includes(k));
       }
 
+      // 开新局：必须同时出现启动动词和“大富翁/Monopoly”。
+      // 不再把裸“游戏”当作充分条件，避免“我想玩游戏”误启动大富翁。
       function isMonopolyStartRequest(text) {
         const s = String(text || '').toLowerCase();
 
@@ -2735,8 +2737,7 @@ M：${aiText}`;
 
         const gameWords = [
           '大富翁',
-          'monopoly',
-          '游戏'
+          'monopoly'
         ];
 
         return startWords.some(a => s.includes(a)) &&
@@ -2797,13 +2798,16 @@ M：${aiText}`;
       // 续局：只有明确输入“继续上一局 / 继续昨天的大富翁”等关键词，才查询 game_info 恢复旧局。
       function isMonopolyRestoreRequest(text) {
         const s = String(text || '').trim().toLowerCase();
-        return [
+        if ([
           '继续上一局',
           '继续昨天的大富翁',
           '继续昨天那局',
           '继续大富翁',
           '恢复上一局'
-        ].includes(s);
+        ].includes(s)) return true;
+        // 明确的“继续/恢复 + 大富翁/Monopoly”组合（如“继续这局大富翁”）。
+        return (s.includes('继续') || s.includes('恢复')) &&
+               (s.includes('大富翁') || s.includes('monopoly'));
       }
 
       // 局内待办的确切确认词：去掉标点后必须与整条消息完全相等。
@@ -2812,8 +2816,9 @@ M：${aiText}`;
       function isMonopolyPendingConfirm(text) {
         const raw = String(text || '').trim().toLowerCase().replace(/[。.!！?？~～,，、;；:：\s]/g, '');
         if (!raw) return false;
-        // 去掉句首主语/语气词后必须与指令词完全相等，避免“做完了”出现在长句里也误判。
-        const s = raw.replace(/^[我你他她它咱咱们您嗯哦噢诶哎]+/, '');
+        // 只去掉句首语气词和第一人称主语（我/咱），必须与指令词完全相等。
+        // 特意不去掉“你/您”，否则“你继续”会被误判为游戏确认。
+        const s = raw.replace(/^[嗯哦噢诶哎]+/, '').replace(/^(?:咱们|咱|我)/, '');
         return [
           '继续', '继续吧', '下一步', '下一回合', '下一轮', '下一个',
           '完成', '完成了', '已经完成', '已经完成了',
@@ -2838,21 +2843,33 @@ M：${aiText}`;
         ].some(k => s.includes(k));
       }
 
-      // 当前这条用户消息是否需要大富翁上下文。
-      // 只有明确的大富翁操作、或局内待办的确切确认，才返回 true；
+      // 用户是否明确表达大富翁意图（不依赖“房子/银行/破产/回合/游戏”等宽松词）。
+      // 用于任何“是否允许调用 Monopoly MCP / 注入权威状态”的准入判断。
+      function isExplicitMonopolyIntent(text) {
+        const s = String(text || '').trim().toLowerCase();
+        if (!s) return false;
+        // “大富翁 / Monopoly”本身就是明确意图，出现即算。
+        if (s.includes('大富翁') || s.includes('monopoly')) return true;
+        if (isMonopolyRestoreRequest(s)) return true;
+        if (isMonopolyNewGameRequest(s)) return true;   // 精确的“开始游戏”
+        if (isMonopolyStartRequest(s)) return true;
+        return false;
+      }
+
+      // 当前这条用户消息是否需要大富翁上下文 / 是否允许进入 Monopoly MCP。
+      // 规则：
+      //   1) 明确的大富翁整体意图 → true
+      //   2) 仅在已经存在大富翁游戏时，局内明确操作或待办确认 → true
       // 普通情绪聊天即使存在 activeMonopolyGame、monopolyMode=active、localStorage 有 game_id，也返回 false。
       function monopolyContextNeeded(text) {
         const s = String(text || '');
         if (!s.trim()) return false;
-        if (isMonopolyNewGameRequest(s)) return true;
-        if (isMonopolyStartRequest(s)) return true;
-        if (isMonopolyRestoreRequest(s)) return true;
-        if (isMonopolyExitRequest(s)) return true;
-        if (isMonopolyRequest(s)) return true;
-        if (hasExplicitMonopolyAction(s)) return true;
-        if (activeMonopolyGame && activeMonopolyGame.game_id &&
-            pendingActionNeedsChoice(activeMonopolyGame.pendingAction) &&
-            isMonopolyPendingConfirm(s)) return true;
+        if (isExplicitMonopolyIntent(s)) return true;
+        if (activeMonopolyGame && activeMonopolyGame.game_id) {
+          if (hasExplicitMonopolyAction(s)) return true;
+          if (pendingActionNeedsChoice(activeMonopolyGame.pendingAction) &&
+              isMonopolyPendingConfirm(s)) return true;
+        }
         return false;
       }
 
@@ -3609,7 +3626,7 @@ M：${aiText}`;
           // 普通聊天保持 V12.4 原始请求路径；MCP 失败也会自动回退。
           console.log('🎲 MCP: 请求检测', {
             text,
-            isMonopoly: isMonopolyRequest(text),
+            isExplicitMonopolyIntent: isExplicitMonopolyIntent(text),
             hasWorkerToken: !!getWorkerToken()
           });
           let reply = '';
@@ -3734,7 +3751,8 @@ M：${aiText}`;
             }
           }
 
-          if (!reply && !pendingActive && isMonopolyRequest(text) && getWorkerToken()) {
+          // 只有明确的大富翁意图才能进入 Monopoly MCP；宽松关键词不再单独承担准入权限。
+          if (!reply && !pendingActive && isExplicitMonopolyIntent(text) && getWorkerToken()) {
             console.log('🎲 MCP: 已进入大富翁 MCP 分支');
             const isStart = isMonopolyStartRequest(text);
             console.log('🎲 MCP: 开始请求判断结果', {
