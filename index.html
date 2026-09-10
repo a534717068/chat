@@ -2552,11 +2552,16 @@ M：${aiText}`;
       function detectPendingAction(sc) {
         if (!sc || typeof sc !== 'object') return 'none';
         if (sc.game_over === true || sc.game_over === 'true') return 'gameover';
-        const has = (k) => sc[k] !== undefined && sc[k] !== null && sc[k] !== '';
-        const an = typeof sc.action_needed === 'string' ? sc.action_needed.toLowerCase() : '';
-        if (has('toll') || an === 'toll') return 'toll';
-        if (has('duel') || an === 'duel') return 'duel';
-        if (has('super') || an === 'super') return 'super';
+        const has = (k) => !!sc[k];
+        // action_needed 是服务器的权威待办字段：有值且可识别时直接决定 pendingAction。
+        const an = typeof sc.action_needed === 'string' ? sc.action_needed.trim().toLowerCase() : '';
+        if (an === 'toll' || an === 'duel' || an === 'super' || an === 'task' || an === 'truth') {
+          return an === 'truth' ? 'task' : an;
+        }
+        // 只有 action_needed 缺失或不可识别时，才回退到旧字段判断。
+        if (has('toll')) return 'toll';
+        if (has('duel')) return 'duel';
+        if (has('super')) return 'super';
         if (has('task')) return 'task';
         // 真心话格同样需要玩家先回答，结算方式与普通任务相同（下一轮 roll 默认 done）。
         if (has('truth')) return 'task';
