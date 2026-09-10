@@ -2917,6 +2917,7 @@ M：${aiText}`;
       }
 
       async function mcpRequest(method, params, notification = false) {
+        console.log('🎲 MCP REQ', { method, params, notification, sessionBefore: mcpSessionId || '(none)' });
         const body = { jsonrpc: '2.0', method };
         if (!notification) body.id = mcpNextId++;
         if (params !== undefined) body.params = params;
@@ -2934,6 +2935,7 @@ M：${aiText}`;
         });
         const session = res.headers.get('Mcp-Session-Id');
         if (session) mcpSessionId = session;
+        console.log('🎲 MCP RES', { method, status: res.status, sessionHeader: session || '(none)', sessionAfter: mcpSessionId || '(none)' });
         const raw = await res.text();
         if (!res.ok) throw new Error(`MCP HTTP ${res.status}: ${raw.slice(0, 300)}`);
         const out = mcpParseResponse(raw);
@@ -2944,13 +2946,15 @@ M：${aiText}`;
       async function ensureMcp() {
         if (mcpTools.length) return mcpTools;
         if (!getWorkerToken()) throw new Error('Worker 尚未登录，无法使用大富翁 MCP。');
-        console.log('🎲 MCP: ensureMcp 开始');
+        console.log('🎲 MCP: ensureMcp 开始', { sessionBeforeReset: mcpSessionId || '(none)' });
         mcpSessionId = '';
+        console.log('🎲 MCP: initialize 前', { session: mcpSessionId || '(none)' });
         await mcpRequest('initialize', {
           protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: {},
           clientInfo: { name: 'M-Companion', version: '12.5.2' }
         });
+        console.log('🎲 MCP: initialize 后', { session: mcpSessionId || '(none)' });
         console.log('🎲 MCP: initialize 成功');
         await mcpRequest('notifications/initialized', undefined, true).catch(() => {});
         const result = await mcpRequest('tools/list', {});
