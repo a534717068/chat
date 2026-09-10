@@ -2111,7 +2111,7 @@ M：${aiText}`;
         try {
           const target = getRequestTarget();
           const baseUrl = target.url;
-          const res = await fetch(baseUrl, {
+          const res = await workerFetch('', {
             method: 'POST',
             headers: target.headers,
             body: JSON.stringify({
