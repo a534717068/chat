@@ -3358,8 +3358,31 @@ M：${aiText}`;
         // 不依赖引擎的默认值（避免"没说清就默认照做"这类静默结算）。
         if (game.pendingAction === 'task') args.task = 'done';
         console.log('🎲 MCP: 继续回合 roll 参数', { args });
+        console.log('🎲 MCP[roll-diag] 调用 roll 前', {
+          game_id: game.game_id,
+          args,
+          turn: game.next_turn,
+          positions: game.positions,
+          coins: game.coins,
+          board: game.lastBoard
+        });
         const result = await executeMcpTool('roll', args);
         console.log('🎲 MCP: roll 返回', result);
+        console.log('🎲 MCP[roll-diag] roll 原始返回 = ' + JSON.stringify(result));
+        console.log('🎲 MCP[roll-diag] roll structuredContent', (function(){
+          const sc = parseMcpStructured(result);
+          if (!sc || typeof sc !== 'object') return '(无法解析 structuredContent)';
+          return {
+            game_id: sc.game_id !== undefined ? sc.game_id : null,
+            turn: sc.turn !== undefined ? sc.turn : null,
+            positions: sc.positions !== undefined ? sc.positions : null,
+            coins: sc.coins !== undefined ? sc.coins : null,
+            board: sc.board !== undefined ? sc.board : null,
+            action_needed: sc.action_needed !== undefined ? sc.action_needed : null,
+            round: sc.round !== undefined ? sc.round : (sc.turn_count !== undefined ? sc.turn_count : (sc.turn_no !== undefined ? sc.turn_no : null)),
+            structuredContent: sc
+          };
+        })());
 
         // 用权威返回更新快照并持久化；游戏结束时在此统一清理。
         updateMonopolyStateFromResult('roll', result, args);
