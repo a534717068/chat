@@ -1789,10 +1789,12 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
         const latestUserText = [...messages].reverse().find(m => m.role === 'user')?.content || '';
         refreshSystemPrompt(latestUserText);
         let systemMsg = messages[0];
-        // 大富翁进行中：把 MCP 权威状态并入系统提示，禁止 AI 编造骰子/位置/金币/回合/胜负。
+        // 只有当前这条用户消息明确属于大富翁操作时，才把 MCP 权威状态并入系统提示。
+        // 普通聊天（即使存在 activeMonopolyGame / game_id）绝不注入，避免 AI 误进入游戏语境。
         // 这里（发送时）才读取 activeMonopolyGame，避开初始化前的 TDZ。
+        const needMonopolyContext = monopolyContextNeeded(latestUserText);
         try {
-          if (activeMonopolyGame && activeMonopolyGame.game_id) {
+          if (needMonopolyContext && activeMonopolyGame && activeMonopolyGame.game_id) {
             const summary = monopolyStateSummary();
             if (summary) {
               systemMsg = {
@@ -2804,6 +2806,56 @@ M：${aiText}`;
         ].includes(s);
       }
 
+      // 局内待办的确切确认词：去掉标点后必须与整条消息完全相等。
+      // 因此“继续靠在你怀里”“我做完了，现在抱抱你”这类情绪句不会命中，
+      // 只有“继续”“我做完了”“支付过路费”这类纯指令才会命中。
+      function isMonopolyPendingConfirm(text) {
+        const raw = String(text || '').trim().toLowerCase().replace(/[。.!！?？~～,，、;；:：\s]/g, '');
+        if (!raw) return false;
+        // 去掉句首主语/语气词后必须与指令词完全相等，避免“做完了”出现在长句里也误判。
+        const s = raw.replace(/^[我你他她它咱咱们您嗯哦噢诶哎]+/, '');
+        return [
+          '继续', '继续吧', '下一步', '下一回合', '下一轮', '下一个',
+          '完成', '完成了', '已经完成', '已经完成了',
+          '做完了', '做好了', '已经做完了', '好了', '弄好了', '完事了', '搞定', '搞定了',
+          '跳过', '跳过吧', '跳过任务', '完成任务', '任务完成',
+          '支付', '支付过路费', '付过路费', '交过路费', '过路费',
+          '服务', '服务过路费', '服务费', '接受', '接受对决', '拒绝对决', '对决',
+          '买', '买下', '购买', '购买地产', '买地',
+          'done', 'next', 'continue'
+        ].includes(s);
+      }
+
+      // 明确的大富翁动作词（局内推进：走一步/该我了/掷骰…），与普通情绪用语几乎不冲突。
+      function hasExplicitMonopolyAction(text) {
+        const s = String(text || '').trim().toLowerCase();
+        if (!s) return false;
+        return [
+          '掷骰', '骰子', '下一回合', '下一轮', '继续游戏', '继续大富翁', '继续上一局',
+          '走一步', '走一格', '该我了', '该你了', '轮到我了', '轮到你了',
+          '完成任务', '任务完成', '跳过任务', '支付过路费', '付过路费', '交过路费',
+          '服务过路费', '买地', '买下这块', '购买地产'
+        ].some(k => s.includes(k));
+      }
+
+      // 当前这条用户消息是否需要大富翁上下文。
+      // 只有明确的大富翁操作、或局内待办的确切确认，才返回 true；
+      // 普通情绪聊天即使存在 activeMonopolyGame、monopolyMode=active、localStorage 有 game_id，也返回 false。
+      function monopolyContextNeeded(text) {
+        const s = String(text || '');
+        if (!s.trim()) return false;
+        if (isMonopolyNewGameRequest(s)) return true;
+        if (isMonopolyStartRequest(s)) return true;
+        if (isMonopolyRestoreRequest(s)) return true;
+        if (isMonopolyExitRequest(s)) return true;
+        if (isMonopolyRequest(s)) return true;
+        if (hasExplicitMonopolyAction(s)) return true;
+        if (activeMonopolyGame && activeMonopolyGame.game_id &&
+            pendingActionNeedsChoice(activeMonopolyGame.pendingAction) &&
+            isMonopolyPendingConfirm(s)) return true;
+        return false;
+      }
+
       function mcpUrl() {
         return workerUrl(MCP_GATEWAY_PATH);
       }
@@ -3611,7 +3663,7 @@ M：${aiText}`;
 
           // 等待继续：存在待玩家选择的任务/过路费/对决/超强动作。
           // 任务(task)确认“完成/继续”才 roll；过路费/对决/超强必须先由用户明确选择，绝不静默结算。
-          if (!reply && !pendingActive && activeMonopolyGame && activeMonopolyGame.waitingContinue && isMonopolyContinueRequest(text) && getWorkerToken()) {
+          if (!reply && !pendingActive && activeMonopolyGame && activeMonopolyGame.waitingContinue && isMonopolyPendingConfirm(text) && getWorkerToken()) {
             const pc = activeMonopolyGame.pendingAction;
             console.log('🎲 MCP: 等待继续状态下用户请求继续', { text, game_id: activeMonopolyGame.game_id, pendingAction: pc });
             try {
@@ -3630,7 +3682,9 @@ M：${aiText}`;
           // 待选择类型的决策（任务/过路费/对决/超强）：用户任何跟决策相关的消息都交给 LLM，
           // 让 AI 依据权威状态调用正确的 game_action（done/skip/pay_toll/serve_toll/duel_result/buyout 等），
           // 绝不静默用 roll 默认成“付钱”或“完成”。（明确的“继续/完成”已在上一个分支确定性处理。）
+          // 普通情绪聊天即使存在待办动作，也不能调用 MCP；只有明确的游戏指令/确认才进入。
           if (!reply && !pendingActive && getWorkerToken() &&
+              monopolyContextNeeded(text) &&
               activeMonopolyGame && activeMonopolyGame.game_id &&
               activeMonopolyGame.pendingAction &&
               (activeMonopolyGame.pendingAction === 'task' || activeMonopolyGame.pendingAction === 'toll' || activeMonopolyGame.pendingAction === 'duel' || activeMonopolyGame.pendingAction === 'super') &&
@@ -3645,7 +3699,7 @@ M：${aiText}`;
           }
 
           // 推进回合：大富翁模式下用户明确“开始/下一回合/掷骰”等。
-          if (!reply && !pendingActive && isMonopolyModeActive() && isMonopolyAdvanceRequest(text) && getWorkerToken()) {
+          if (!reply && !pendingActive && isMonopolyModeActive() && monopolyContextNeeded(text) && isMonopolyAdvanceRequest(text) && getWorkerToken()) {
             const hasPendingChoice = !!(activeMonopolyGame && activeMonopolyGame.pendingAction && pendingActionNeedsChoice(activeMonopolyGame.pendingAction));
             if (hasPendingChoice) {
               // 有待选择动作时不能盲目 roll（roll 会静默结算），交给 LLM 先处理待办。
