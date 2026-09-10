@@ -3499,6 +3499,9 @@ M：${aiText}`;
       function buildGameInfoArgs(tool) {
         const schema = (tool && tool.inputSchema && typeof tool.inputSchema === 'object') ? tool.inputSchema : {};
         const props = (schema.properties && typeof schema.properties === 'object') ? schema.properties : {};
+        console.log('🎲 MCP[buildGameInfoArgs] inputSchema = ' + JSON.stringify(schema));
+        console.log('🎲 MCP[buildGameInfoArgs] property keys = ' + JSON.stringify(Object.keys(props)));
+        console.log('🎲 MCP[buildGameInfoArgs] required = ' + JSON.stringify(schema.required || null));
         const players = [
           { name: '城月', sex: '女' },
           { name: '阿慕', sex: '女' }
@@ -3547,6 +3550,7 @@ M：${aiText}`;
           if (def.default !== undefined) args[key] = def.default;
         }
 
+        console.log('🎲 MCP[buildGameInfoArgs] 生成 args = ' + JSON.stringify(args));
         return args;
       }
 
@@ -3608,6 +3612,7 @@ M：${aiText}`;
             const infoTool = tools.find(t => t && t.name === 'game_info');
             if (!infoTool) return false;
             const args = { query: 'state', game_id: gid };
+            console.log('🎲 MCP[sync] 实际发送 args = ' + JSON.stringify(args));
             console.log('🎲 MCP[sync] game_info 调用前', {
               scope: 'syncMonopolyStateFromServer',
               gid,
@@ -3615,8 +3620,10 @@ M：${aiText}`;
               activeBefore: (function(){ try { return JSON.parse(JSON.stringify(activeMonopolyGame)); } catch (_) { return String(activeMonopolyGame); } })()
             });
             const result = await executeMcpTool('game_info', args);
+            console.log('🎲 MCP[sync] 原始返回 result = ' + JSON.stringify(result));
             const sc = parseMcpStructured(result);
             if (!sc || typeof sc !== 'object') return false;
+            console.log('🎲 MCP[sync] 返回 sc = ' + JSON.stringify(sc));
             console.log('🎲 MCP[sync] game_info 返回 structuredContent', {
               scope: 'syncMonopolyStateFromServer',
               gid,
