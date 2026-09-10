@@ -3283,6 +3283,8 @@ M：${aiText}`;
         if (Object.prototype.hasOwnProperty.call(props, 'rules_ack')) args.rules_ack = 'mcp-host-v2026-07-06';
 
         console.log('🎲 MCP: new_game 参数', { args });
+        console.log('🎲 MCP[new_game] 即将调用 new_game（调用位置追踪）');
+        console.trace('🎲 MCP[new_game] 调用栈');
         const result = await executeMcpTool('new_game', args);
         console.log('🎲 MCP: new_game 返回', result);
 
@@ -3606,11 +3608,37 @@ M：${aiText}`;
             const infoTool = tools.find(t => t && t.name === 'game_info');
             if (!infoTool) return false;
             const args = { query: 'state', game_id: gid };
+            console.log('🎲 MCP[sync] game_info 调用前', {
+              scope: 'syncMonopolyStateFromServer',
+              gid,
+              args,
+              activeBefore: (function(){ try { return JSON.parse(JSON.stringify(activeMonopolyGame)); } catch (_) { return String(activeMonopolyGame); } })()
+            });
             const result = await executeMcpTool('game_info', args);
             const sc = parseMcpStructured(result);
             if (!sc || typeof sc !== 'object') return false;
+            console.log('🎲 MCP[sync] game_info 返回 structuredContent', {
+              scope: 'syncMonopolyStateFromServer',
+              gid,
+              game_id: sc.game_id !== undefined ? sc.game_id : null,
+              status: sc.status !== undefined ? sc.status : null,
+              turn: sc.turn !== undefined ? sc.turn : null,
+              positions: sc.positions !== undefined ? sc.positions : null,
+              coins: sc.coins !== undefined ? sc.coins : null,
+              laps: sc.laps !== undefined ? sc.laps : null,
+              board: sc.board !== undefined ? sc.board : null,
+              structuredContent: sc
+            });
             // 期间如果游戏已切换/清理，丢弃这次结果。
             if (!activeMonopolyGame || activeMonopolyGame.game_id !== gid) return false;
+            console.log('🎲 MCP[sync] 更新 activeMonopolyGame 前', {
+              gid,
+              turn: activeMonopolyGame.next_turn,
+              positions: activeMonopolyGame.positions,
+              coins: activeMonopolyGame.coins,
+              action_needed: activeMonopolyGame.action_needed,
+              pendingAction: activeMonopolyGame.pendingAction
+            });
             if (sc.positions !== undefined && sc.positions !== null) activeMonopolyGame.positions = sc.positions;
             if (sc.coins !== undefined && sc.coins !== null) activeMonopolyGame.coins = sc.coins;
             if (sc.turn !== undefined && sc.turn !== null && sc.turn !== '') activeMonopolyGame.next_turn = String(sc.turn);
@@ -3637,6 +3665,15 @@ M：${aiText}`;
               // 本地 action_needed 为空或不可识别：保持现有 pendingAction 不变，不猜。
             }
             activeMonopolyGame.updatedAt = Date.now();
+            console.log('🎲 MCP[sync] 更新 activeMonopolyGame 后', {
+              gid,
+              turn: activeMonopolyGame.next_turn,
+              positions: activeMonopolyGame.positions,
+              coins: activeMonopolyGame.coins,
+              action_needed: activeMonopolyGame.action_needed,
+              pendingAction: activeMonopolyGame.pendingAction,
+              updatedAt: activeMonopolyGame.updatedAt
+            });
             saveMonopolyState();
             renderMonopolyStatus();
             monopolySyncAt = Date.now();
@@ -3702,12 +3739,31 @@ M：${aiText}`;
           if (!infoTool) throw new Error('MCP 没有提供 game_info 工具');
           const args = buildGameInfoArgs(infoTool);
           console.log('🎲 MCP: 续局 game_info 参数', args);
+          console.log('🎲 MCP[restore] game_info 调用前', {
+            scope: 'restoreMonopolyGameFromServer',
+            lastGameId: activeMonopolyGame && activeMonopolyGame.game_id ? activeMonopolyGame.game_id : null,
+            activeMonopolyGame: (function(){ try { return JSON.parse(JSON.stringify(activeMonopolyGame)); } catch (_) { return String(activeMonopolyGame); } })(),
+            gameInfoArgs: args
+          });
           const result = await executeMcpTool('game_info', args);
           console.log('🎲 MCP: 续局 game_info 返回', result);
           let obj = null;
           try { obj = JSON.parse(String(result || '')); } catch (_) {}
           sc = obj && typeof obj === 'object' ? obj.structuredContent : null;
           if (typeof sc === 'string') { try { sc = JSON.parse(sc); } catch (_) {} }
+          console.log('🎲 MCP[restore] game_info 返回 structuredContent', {
+            scope: 'restoreMonopolyGameFromServer',
+            game_id: sc && sc.game_id !== undefined ? sc.game_id : null,
+            last_game_id: sc && sc.last_game_id !== undefined ? sc.last_game_id : null,
+            last_game_in_progress: sc && sc.last_game_in_progress !== undefined ? sc.last_game_in_progress : null,
+            status: sc && sc.status !== undefined ? sc.status : null,
+            turn: sc && sc.turn !== undefined ? sc.turn : null,
+            positions: sc && sc.positions !== undefined ? sc.positions : null,
+            coins: sc && sc.coins !== undefined ? sc.coins : null,
+            laps: sc && sc.laps !== undefined ? sc.laps : null,
+            board: sc && sc.board !== undefined ? sc.board : null,
+            structuredContent: sc
+          });
         } catch (e) {
           console.error('🎲 MCP: 续局查询 game_info 失败', e);
           throw new Error('🎲 续局查询失败：' + (e.message || e));
