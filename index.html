@@ -3585,6 +3585,18 @@ M：${aiText}`;
             const args = { query: 'state', game_id: gid };
             const result = await executeMcpTool('game_info', args);
             const sc = parseMcpStructured(result);
+            console.log('🎲 DEBUG game_info sync:', {
+              game_id: gid,
+              rawResult: result,
+              structured: sc,
+              action_needed: sc?.action_needed,
+              toll: sc?.toll,
+              duel: sc?.duel,
+              super: sc?.super,
+              task: sc?.task,
+              truth: sc?.truth,
+              tile: sc?.tile
+            });
             if (!sc || typeof sc !== 'object') return false;
             // 期间如果游戏已切换/清理，丢弃这次结果。
             if (!activeMonopolyGame || activeMonopolyGame.game_id !== gid) return false;
