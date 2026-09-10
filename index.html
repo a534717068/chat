@@ -3585,18 +3585,6 @@ M：${aiText}`;
             const args = { query: 'state', game_id: gid };
             const result = await executeMcpTool('game_info', args);
             const sc = parseMcpStructured(result);
-            console.log('🎲 DEBUG game_info sync:', {
-              game_id: gid,
-              rawResult: result,
-              structured: sc,
-              action_needed: sc?.action_needed,
-              toll: sc?.toll,
-              duel: sc?.duel,
-              super: sc?.super,
-              task: sc?.task,
-              truth: sc?.truth,
-              tile: sc?.tile
-            });
             if (!sc || typeof sc !== 'object') return false;
             // 期间如果游戏已切换/清理，丢弃这次结果。
             if (!activeMonopolyGame || activeMonopolyGame.game_id !== gid) return false;
@@ -3604,13 +3592,27 @@ M：${aiText}`;
             if (sc.coins !== undefined && sc.coins !== null) activeMonopolyGame.coins = sc.coins;
             if (sc.turn !== undefined && sc.turn !== null && sc.turn !== '') activeMonopolyGame.next_turn = String(sc.turn);
             if (typeof sc.board === 'string' && sc.board) activeMonopolyGame.lastBoard = sc.board;
-            // 同步服务器权威待办：action_needed 存在时写入原值，并用完整状态重算 pendingAction。
-            // 只有 action_needed 缺失且旧字段也无法识别待办时，才保留本地已有的 pendingAction（不清成 none）。
+            // 同步服务器权威待办：服务器返回 action_needed / legacy 字段时以服务器为准。
+            // 服务器 state 查询不返回待办时，若本地已有可识别的 action_needed，则用它重新推导 pendingAction，
+            // 避免出现 action_needed="duel" 而 pendingAction 仍是旧值 "toll" 的历史不一致。
             const hasActionNeeded = sc.action_needed !== undefined && sc.action_needed !== null && sc.action_needed !== '';
             const hasLegacyPending = !!sc.toll || !!sc.duel || !!sc.super || !!sc.task || !!sc.truth ||
               (typeof sc.tile === 'string' && ['task', 'truth', 'toll', 'duel', 'super', 'shop'].indexOf(sc.tile.toLowerCase()) !== -1);
             if (hasActionNeeded) activeMonopolyGame.action_needed = String(sc.action_needed);
-            if (hasActionNeeded || hasLegacyPending) activeMonopolyGame.pendingAction = detectPendingAction(sc);
+            if (hasActionNeeded || hasLegacyPending) {
+              activeMonopolyGame.pendingAction = detectPendingAction(sc);
+            } else {
+              const localActionNeeded = typeof activeMonopolyGame.action_needed === 'string'
+                ? activeMonopolyGame.action_needed.trim().toLowerCase()
+                : '';
+              if (localActionNeeded === 'toll' || localActionNeeded === 'duel' || localActionNeeded === 'super' || localActionNeeded === 'task' || localActionNeeded === 'truth') {
+                activeMonopolyGame.pendingAction = detectPendingAction({ action_needed: localActionNeeded });
+              } else if (localActionNeeded === 'none') {
+                activeMonopolyGame.action_needed = 'none';
+                activeMonopolyGame.pendingAction = 'none';
+              }
+              // 本地 action_needed 为空或不可识别：保持现有 pendingAction 不变，不猜。
+            }
             activeMonopolyGame.updatedAt = Date.now();
             saveMonopolyState();
             renderMonopolyStatus();
