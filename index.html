@@ -3592,6 +3592,13 @@ M：${aiText}`;
             if (sc.coins !== undefined && sc.coins !== null) activeMonopolyGame.coins = sc.coins;
             if (sc.turn !== undefined && sc.turn !== null && sc.turn !== '') activeMonopolyGame.next_turn = String(sc.turn);
             if (typeof sc.board === 'string' && sc.board) activeMonopolyGame.lastBoard = sc.board;
+            // 同步服务器权威待办：action_needed 存在时写入原值，并用完整状态重算 pendingAction。
+            // 只有 action_needed 缺失且旧字段也无法识别待办时，才保留本地已有的 pendingAction（不清成 none）。
+            const hasActionNeeded = sc.action_needed !== undefined && sc.action_needed !== null && sc.action_needed !== '';
+            const hasLegacyPending = !!sc.toll || !!sc.duel || !!sc.super || !!sc.task || !!sc.truth ||
+              (typeof sc.tile === 'string' && ['task', 'truth', 'toll', 'duel', 'super', 'shop'].indexOf(sc.tile.toLowerCase()) !== -1);
+            if (hasActionNeeded) activeMonopolyGame.action_needed = String(sc.action_needed);
+            if (hasActionNeeded || hasLegacyPending) activeMonopolyGame.pendingAction = detectPendingAction(sc);
             activeMonopolyGame.updatedAt = Date.now();
             saveMonopolyState();
             renderMonopolyStatus();
