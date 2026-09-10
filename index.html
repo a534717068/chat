@@ -2544,15 +2544,31 @@ M：${aiText}`;
         try { localStorage.removeItem(MONOPOLY_STATE_KEY); } catch (e) {}
       }
 
-      // 解析 MCP 工具返回里的 structuredContent（优先结构化字段，其次回退文本）。
+      // 解析 MCP 工具返回里的结构化字段（优先 structuredContent，其次 snake_case 别名）。
+      // 不同工具（roll / game_info）返回的字段名并不完全一致，这里只做“字段别名归一化”：
+      // 只在目标字段缺失、且别名真实存在时才赋值；返回里没有的字段一律保持缺失，不编造、不从 board 文本猜。
       function parseMcpStructured(resultStr) {
         const s = String(resultStr || '');
         let obj = null;
         try { obj = JSON.parse(s); } catch (_) {}
         if (obj && typeof obj === 'object') {
           let sc = obj.structuredContent;
+          if (sc === undefined) sc = obj.structured_content;
           if (typeof sc === 'string') { try { sc = JSON.parse(sc); } catch (_) {} }
-          if (sc && typeof sc === 'object') return sc;
+          if (sc && typeof sc === 'object') {
+            const pick = (target, aliases) => {
+              if (sc[target] !== undefined && sc[target] !== null) return;
+              for (const a of aliases) {
+                if (sc[a] !== undefined && sc[a] !== null) { sc[target] = sc[a]; return; }
+              }
+            };
+            pick('game_id', ['gameId', 'gameid', 'gid']);
+            pick('turn', ['next_turn', 'current_turn', 'whose_turn']);
+            pick('positions', ['pos', 'locations']);
+            pick('coins', ['money', 'gold']);
+            pick('round', ['round_no', 'turn_no', 'turn_count']);
+            return sc;
+          }
         }
         return null;
       }
