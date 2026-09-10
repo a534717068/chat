@@ -2839,7 +2839,7 @@ M：${aiText}`;
           '掷骰', '骰子', '下一回合', '下一轮', '继续游戏', '继续大富翁', '继续上一局',
           '走一步', '走一格', '该我了', '该你了', '轮到我了', '轮到你了',
           '完成任务', '任务完成', '跳过任务', '支付过路费', '付过路费', '交过路费',
-          '服务过路费', '买地', '买下这块', '购买地产'
+          '服务过路费', '买地', '买下这块', '购买地产', '接受对决', '拒绝对决'
         ].some(k => s.includes(k));
       }
 
@@ -2853,6 +2853,11 @@ M：${aiText}`;
         if (isMonopolyRestoreRequest(s)) return true;
         if (isMonopolyNewGameRequest(s)) return true;   // 精确的“开始游戏”
         if (isMonopolyStartRequest(s)) return true;
+        // 明确的局内动作：掷骰子 / 买地 / 支付过路费 / 接受对决 / 完成任务…
+        // 复用专门的局内动作判定，而不是复制“房子/银行/回合/游戏”等宽泛词。
+        if (hasExplicitMonopolyAction(s)) return true;
+        // 明确的对决赢家：城月赢 / 阿慕获胜…
+        if (parseDuelWinner(s)) return true;
         return false;
       }
 
