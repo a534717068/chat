@@ -3350,6 +3350,115 @@ M：${aiText}`;
         return String(msg.content || '').trim();
       }
 
+      // 从用户消息里确定性解析“对决赢家”：必须同时出现玩家名（城月/阿慕）与胜负表达。
+      // 只识别明确表达，普通聊天（如“我想你了”“你走吧”）不会命中。
+      function parseDuelWinner(text) {
+        const s = String(text || '').trim();
+        if (!s) return null;
+        const hasChengYue = s.includes('城月');
+        const hasAMu = s.includes('阿慕');
+        if (hasChengYue === hasAMu) return null; // 都没出现 或 同时出现，不识别
+        if (!/(赢|胜|获胜|得胜|胜利)/.test(s)) return null;
+        return hasChengYue ? '城月' : '阿慕';
+      }
+
+      // 依据 game_action 的真实 inputSchema 构造参数（不假设字段名）。
+      // 只传 schema 允许的字段：game_id、duel_winner（字段名以 schema 为准），以及 schema 的 default。
+      function buildGameActionArgs(tool, extra) {
+        const schema = (tool && tool.inputSchema && typeof tool.inputSchema === 'object') ? tool.inputSchema : {};
+        const props = (schema.properties && typeof schema.properties === 'object') ? schema.properties : {};
+        const keys = Object.keys(props);
+        const args = {};
+
+        // 1) schema 默认值
+        for (const key of keys) {
+          const def = props[key];
+          if (def && typeof def === 'object' && def.default !== undefined) args[key] = def.default;
+        }
+
+        // 2) game_id（字段名按 schema 匹配，未声明时回退 game_id）
+        if (activeMonopolyGame && activeMonopolyGame.game_id) {
+          const gidField = keys.find(k => /game[_\-]?id|^gid$|^id$/i.test(k)) || 'game_id';
+          args[gidField] = activeMonopolyGame.game_id;
+        }
+
+        // 3) duel_winner（字段名按 schema 匹配，未声明时回退 duel_winner）
+        const winner = extra && extra.duel_winner;
+        if (winner) {
+          const winnerField = keys.find(k => /duel[_\-\s]*winner|winner/i.test(k)) || 'duel_winner';
+          args[winnerField] = winner;
+          // 若 schema 有 action/operation 之类的判别字段且其 enum 含 duel 值，一并显式指定。
+          const actionKey = keys.find(k => /action|operation|command|^type$/i.test(k) && props[k] && Array.isArray(props[k].enum));
+          if (actionKey) {
+            const duelVal = props[actionKey].enum.find(v => /duel/i.test(String(v)));
+            if (duelVal !== undefined) args[actionKey] = duelVal;
+          }
+        }
+        return args;
+      }
+
+      // 从 MCP 返回判断 game_action 是否明确失败（ok:false / success:false）。
+      function mcpActionFailed(result) {
+        const sc = parseMcpStructured(result);
+        if (sc && (sc.ok === false || sc.success === false)) {
+          return String(sc.error || sc.message || sc.reason || sc.detail || 'MCP 返回 ok:false');
+        }
+        return null;
+      }
+
+      // 确定性提交对决赢家：前端直接调用 game_action(game_id, duel_winner=...)，
+      // 不依赖 LLM 自行决定是否产生 tool_call（实测 DeepSeek 只回文字、不调用工具）。
+      // 成功后用权威返回更新本地状态，再让 AI 只依据真实返回叙述。
+      async function resolveMonopolyDuel(apiMsgs, target, winner) {
+        const game = activeMonopolyGame;
+        if (!game || !game.game_id) throw new Error('没有进行中的大富翁游戏。');
+        const tools = await ensureMcp();
+        const actionTool = tools.find(t => t && t.name === 'game_action');
+        if (!actionTool) throw new Error('MCP 没有提供 game_action 工具');
+        console.log('🎲 MCP: game_action inputSchema', actionTool.inputSchema);
+
+        const args = buildGameActionArgs(actionTool, { duel_winner: winner });
+        console.log('🎲 MCP: 准备调用工具', { name: 'game_action', args });
+        const result = await executeMcpTool('game_action', args);
+        console.log('🎲 MCP: game_action 返回', result);
+
+        // 用权威返回更新快照并持久化；失败时 updateMonopolyStateFromResult 会保留原 pending。
+        updateMonopolyStateFromResult('game_action', result, args);
+
+        const stillPending = !!(activeMonopolyGame && activeMonopolyGame.pendingAction === 'duel');
+        const failure = mcpActionFailed(result);
+
+        // 只用 MCP 真实返回叙述，严禁自行计算移动/金币/回合。
+        const conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
+        let note = '【大富翁系统消息】客户端已真实提交对决赢家 duel_winner=' + winner +
+          '，并调用了 game_action。下面是 MCP 的真实返回。请只用真实返回叙述本回合结果，' +
+          '不得自行计算移动格数、金币、下一回合，不得自行决定胜负，也不得假装或声称你没有调用过 MCP。';
+        if (failure || stillPending) {
+          note += ' 注意：服务端真实返回显示该结果未被接受或仍要求 duel_winner，请把真实错误/状态如实告诉用户，绝对不要假装成功。';
+        }
+        conversation.push({
+          role: 'user',
+          content: note + '\n\n' + monopolyStateSummary() + '\n\ngame_action 返回（真实 JSON）：\n' + result
+        });
+
+        const res = await workerFetch('', {
+          method: 'POST',
+          headers: target.headers,
+          body: JSON.stringify({
+            provider: target.provider,
+            model: target.model,
+            messages: conversation,
+            stream: false,
+            temperature: 0.5
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error?.message || `模型请求失败 HTTP ${res.status}`);
+        const msg = data?.choices?.[0]?.message;
+        if (!msg) throw new Error('模型没有返回有效消息。');
+        return String(msg.content || '').trim();
+      }
+
       // 根据 game_info 的真实 inputSchema 构造参数：
       // 查询类型用 pair_history；玩家姓名/性别用固定身份（P1=城月/女，P2=阿慕/女）；其余用 schema 默认值。
       function buildGameInfoArgs(tool) {
@@ -3676,6 +3785,22 @@ M：${aiText}`;
             // 必须连 localStorage 一起清，否则刷新后又会被 initMonopolyFromStorage 恢复出来。
             clearMonopolyGameState();
             reply = '已退出这局大富翁，回到普通聊天。';
+          }
+
+          // 对决赢家：pendingAction === 'duel' 时，用户明确说“城月赢/阿慕赢”由前端确定性提交 game_action，
+          // 不依赖 LLM 自行决定是否产生 tool_call（实测 DeepSeek 只回文字、不调用工具）。
+          if (!reply && !pendingActive && getWorkerToken() &&
+              activeMonopolyGame && activeMonopolyGame.pendingAction === 'duel') {
+            const winner = parseDuelWinner(text);
+            if (winner) {
+              console.log('🎲 MCP: 识别到对决赢家，确定性提交 game_action', { text, winner, game_id: activeMonopolyGame.game_id });
+              try {
+                reply = await resolveMonopolyDuel(apiMsgs, target, winner);
+              } catch (mcpError) {
+                console.error('🎲 MCP FAILED:', mcpError);
+                throw new Error('🎲 大富翁对决结算失败：' + (mcpError.message || mcpError));
+              }
+            }
           }
 
           // 等待继续：存在待玩家选择的任务/过路费/对决/超强动作。
