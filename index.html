@@ -2595,6 +2595,8 @@ M：${aiText}`;
           lastBoard: '',
           positions: null,
           coins: null,
+          laps: null,
+          round: null,
           next_turn: '',
           action_needed: '',
           lastSettled: '',
@@ -2654,6 +2656,31 @@ M：${aiText}`;
           }
         }
         return null;
+      }
+
+      // 从 MCP 权威 board 文本里解析出 positions/coins/laps/round。
+      // 用途：new_game / roll 返回里没有结构化 positions/coins 字段，但 board 明确写了
+      // 「🔵城月@13(第2圈) · 💰20 · …」这类标记。board 本身是 MCP 权威输出，解析它不算前端猜。
+      // 主数据源仍是 game_info(query:"state") 的结构化 positions/coins；这里只做缺失时的权威补齐。
+      function parseMonopolyBoard(boardStr) {
+        const out = { positions: null, coins: null, laps: null, round: null };
+        const s = String(boardStr || '');
+        if (!s) return out;
+        const rm = s.match(/〔\s*回合\s*(\d+)\s*\/\s*(\d+)\s*〕/);
+        if (rm) out.round = Number(rm[1]);
+        const positions = {}, coins = {}, laps = {};
+        for (const line of s.split(/\r?\n/)) {
+          const m = line.match(/([\u4e00-\u9fff]{1,4})@(\d+)(?:\(第(\d+)圈\))?[^💰\n]*💰(\d+)/);
+          if (!m) continue;
+          const name = m[1];
+          positions[name] = Number(m[2]);
+          coins[name] = Number(m[4]);
+          laps[name] = m[3] ? Number(m[3]) : 1;
+        }
+        if (Object.keys(positions).length) out.positions = positions;
+        if (Object.keys(coins).length) out.coins = coins;
+        if (Object.keys(laps).length) out.laps = laps;
+        return out;
       }
 
       // 从权威结构化结果里判断当前是否等待玩家做选择（task/toll/duel/super）。
@@ -2734,6 +2761,19 @@ M：${aiText}`;
         if (sc.who !== undefined && sc.who !== null && sc.who !== '') activeMonopolyGame.who = String(sc.who);
         if (sc.in_jail !== undefined) activeMonopolyGame.in_jail = sc.in_jail;
         if (sc.asleep !== undefined) activeMonopolyGame.asleep = !!sc.asleep;
+        if (sc.round !== undefined && sc.round !== null) activeMonopolyGame.round = sc.round;
+        if (sc.laps !== undefined && sc.laps !== null) activeMonopolyGame.laps = sc.laps;
+        if (sc.cards !== undefined && sc.cards !== null) activeMonopolyGame.cards = sc.cards;
+        if (sc.identity !== undefined && sc.identity !== null) activeMonopolyGame.identity = sc.identity;
+        // 权威补齐：new_game / roll 返回没有结构化 positions/coins，但 board 里有「城月@13 · 💰20」标记。
+        // 用权威 board 补齐缺失字段，保证每次 roll 后 status 立即可见真实位置，不再依赖后台异步 sync。
+        if (activeMonopolyGame.lastBoard) {
+          const bd = parseMonopolyBoard(activeMonopolyGame.lastBoard);
+          if ((sc.positions === undefined || sc.positions === null) && bd.positions) activeMonopolyGame.positions = bd.positions;
+          if ((sc.coins === undefined || sc.coins === null) && bd.coins) activeMonopolyGame.coins = bd.coins;
+          if (bd.laps) activeMonopolyGame.laps = bd.laps;
+          if (bd.round !== null && bd.round !== undefined) activeMonopolyGame.round = bd.round;
+        }
 
         activeMonopolyGame.pendingAction = pendingAction;
         activeMonopolyGame.waitingContinue = pendingActionNeedsChoice(pendingAction);
@@ -2780,6 +2820,7 @@ M：${aiText}`;
           const p = g.positions;
           try { lines.push('- 位置 positions: ' + JSON.stringify(p)); } catch (_) {}
         }
+        if (g.round !== undefined && g.round !== null) lines.push('- 当前回合 round: ' + g.round);
         if (g.next_turn) lines.push('- 下一回合 next_turn: ' + g.next_turn);
         if (g.pendingAction && g.pendingAction !== 'none' && g.pendingAction !== 'gameover') lines.push('- 待办行动 pendingAction: ' + g.pendingAction);
         if (g.action_needed) lines.push('- 需要 action_needed: ' + g.action_needed);
@@ -2808,20 +2849,29 @@ M：${aiText}`;
         }
         const parts = [];
         parts.push('<span class="ms-title">🎲 大富翁</span>');
+        if (g.round !== undefined && g.round !== null) parts.push('回合 ' + g.round);
         if (g.lastRoll !== undefined && g.lastRoll !== null) parts.push('骰子 ' + g.lastRoll);
-        if (g.coins !== undefined && g.coins !== null) {
-          const c = g.coins;
-          let txt = '';
-          if (typeof c === 'object' && c !== null) { try { txt = JSON.stringify(c); } catch (_) {} }
-          else txt = String(c);
-          if (txt) parts.push('金币 ' + txt);
-        }
+        if (g.next_turn) parts.push('轮到 ' + g.next_turn);
         if (g.positions !== undefined && g.positions !== null) {
-          let txt = '';
-          try { txt = JSON.stringify(g.positions); } catch (_) {}
-          if (txt) parts.push('位置 ' + txt);
+          if (typeof g.positions === 'object' && g.positions !== null) {
+            const names = Object.keys(g.positions);
+            const txt = names.map(n => n + '@' + g.positions[n]).join(' ');
+            if (txt) parts.push('位置 ' + txt);
+          } else {
+            parts.push('位置 ' + String(g.positions));
+          }
         }
-        if (g.next_turn) parts.push('下一回合 ' + g.next_turn);
+        if (g.coins !== undefined && g.coins !== null) {
+          if (typeof g.coins === 'object' && g.coins !== null) {
+            const names = Object.keys(g.coins);
+            const txt = names.map(n => n + '币' + g.coins[n]).join(' ');
+            if (txt) parts.push('金币 ' + txt);
+          } else {
+            parts.push('金币 ' + String(g.coins));
+          }
+        }
+        if (g.cards !== undefined && g.cards !== null) parts.push('手牌 ' + (typeof g.cards === 'string' ? g.cards : JSON.stringify(g.cards)));
+        if (g.identity !== undefined && g.identity !== null) parts.push('身份 ' + (typeof g.identity === 'string' ? g.identity : JSON.stringify(g.identity)));
         if (g.pendingAction && g.pendingAction !== 'none' && g.pendingAction !== 'gameover') parts.push('<span class="ms-tag">待行动:' + g.pendingAction + '</span>');
         parts.push('<span class="ms-badge">' + g.game_id + '</span>');
         el.innerHTML = parts.join(' · ');
@@ -2846,6 +2896,7 @@ M：${aiText}`;
           '随机身份卡只是本局临时玩法标签，可以影响游戏规则与情境，但不能重写人物性格，也不能把任务卡中的临时身份/标签永久写入阿慕人格，更不能改变双方现实关系设定；除非在当前上下文里非常自然，否则不要主动重复身份卡的口头禅（例如“这个身份真烦人”“碰哪里都过电”“我声音都变了”）。' +
           '【回复风格】像「阿慕在玩一个游戏」：既不是「专门负责朗读任务卡的角色」，也不是「负责把任务改轻的人」；保留任务卡本身的尺度，同时用阿慕自己的语气自然回应，不因游戏突然变成长篇小说，不自动堆砌不必要的动作描写。' +
           '【呈现任务】当 MCP 返回任务卡/任务指令(task)需要向玩家传达时：只用阿慕自己的语气，把 MCP 给出的任务原样告诉玩家并提示下一步。任务卡里没有写明的动作、身体接触、剧情推进、人物行为，一律不得自行添加；不得把任务卡扩写成一段连续剧情或动作描写。三者各司其职：MCP 决定任务内容，你决定说话方式和语气，代码决定游戏状态和流程——不要越界去创造 MCP 没有给的游戏事实或行为。' +
+          '【位置归属】positions 里每个玩家名对应的格子只属于该玩家本人，绝不互相借用。本回合移动者以 roll 返回的 who 为准；叙述移动时只能引用 roll 返回 say 中写明的「谁 掷 X → 第Y格」，以及 positions[who]（该玩家自己的当前格）。严禁把另一位玩家的 position 当作本回合移动者的起点或终点，严禁用别的玩家的格子加骰子推算移动；骰子、起点、终点一律只以 MCP 返回为准，直接引用，不要自行计算。' +
           '【续局与进行中】如果当前大富翁是“恢复上一局”或已在某个回合进行中（有 next_turn / positions / 金币 / 回合数等状态），一律按“正在继续这一局”处理：不要说成重新开始、不要虚构上一局已经结束或谁输谁赢、不要重置回合/金币/位置/卡牌/身份；保持当前回合和状态原样继续。';
       }
 
@@ -3451,6 +3502,10 @@ M：${aiText}`;
             renderMonopolyStatus();
           }
         }
+        // 新局创建成功：立即拉一次权威 state 并刷新状态栏，保证顶部立刻显示真实状态
+        //（positions/coins/回合数/轮到谁）。sync 内部有 promise 去重与节流，不会重复请求造成循环。
+        await syncMonopolyStateFromServer().catch(() => {});
+        renderMonopolyStatus();
         console.log('🎲 MCP: 游戏创建成功', { game_id: activeMonopolyGame && activeMonopolyGame.game_id, monopolyMode: isMonopolyModeActive() });
 
         // 5) 把 monopoly_help 和 new_game 的真实结果交给模型，禁止编造。
@@ -3521,11 +3576,15 @@ M：${aiText}`;
         // 用权威返回更新快照并持久化；游戏结束时在此统一清理。
         updateMonopolyStateFromResult('roll', result, args);
 
+        // 每次 roll 后同步一次权威状态并刷新状态栏，保证顶部与 MCP game_info(state) 一致。
+        await syncMonopolyStateFromServer().catch(() => {});
+        renderMonopolyStatus();
+
         // 只用 roll 真实返回 + 用户这条消息里明确说出的动作来叙述，严禁编造。
         const conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
         conversation.push({
           role: 'user',
-          content: '【大富翁系统消息】客户端已对当前 game_id 调用 roll 并得到真实结果。请只用下面的 roll 真实返回，以及用户这条消息里明确说出的动作，用中文叙述本回合结果；用户没有明确说出的动作、以及 roll 返回里没有的内容，一律不得编造。骰子点数、移动格数、位置、金币、回合、胜负一律以返回值为准。\n\n' + monopolyStateSummary() + '\n\nroll 返回（真实 JSON）：\n' + result
+          content: '【大富翁系统消息】客户端已对当前 game_id 调用 roll 并得到真实结果。请只用下面的 roll 真实返回，以及用户这条消息里明确说出的动作，用中文叙述本回合结果；用户没有明确说出的动作、以及 roll 返回里没有的内容，一律不得编造。骰子点数、移动格数、位置、金币、回合、胜负一律以返回值为准。roll 返回里的 who 是本回合唯一移动者，叙述移动只能引用该玩家自己的位置（positions[who]）与 say 里写明的「谁 掷 X → 第Y格」，绝不能把另一位玩家的位置当作移动起点或终点，严禁自行用别的玩家的格子加骰子推算移动。\n\n' + monopolyStateSummary() + '\n\nroll 返回（真实 JSON）：\n' + result
         });
 
         const res = await workerFetch('', {
@@ -3813,6 +3872,17 @@ M：${aiText}`;
             if (sc.coins !== undefined && sc.coins !== null) activeMonopolyGame.coins = sc.coins;
             if (sc.turn !== undefined && sc.turn !== null && sc.turn !== '') activeMonopolyGame.next_turn = String(sc.turn);
             if (typeof sc.board === 'string' && sc.board) activeMonopolyGame.lastBoard = sc.board;
+            if (sc.round !== undefined && sc.round !== null) activeMonopolyGame.round = sc.round;
+            if (sc.laps !== undefined && sc.laps !== null) activeMonopolyGame.laps = sc.laps;
+            if (sc.cards !== undefined && sc.cards !== null) activeMonopolyGame.cards = sc.cards;
+            if (sc.identity !== undefined && sc.identity !== null) activeMonopolyGame.identity = sc.identity;
+            if (typeof sc.board === 'string' && sc.board) {
+              const bd = parseMonopolyBoard(sc.board);
+              if ((sc.positions === undefined || sc.positions === null) && bd.positions) activeMonopolyGame.positions = bd.positions;
+              if ((sc.coins === undefined || sc.coins === null) && bd.coins) activeMonopolyGame.coins = bd.coins;
+              if (bd.laps) activeMonopolyGame.laps = bd.laps;
+              if (bd.round !== null && bd.round !== undefined) activeMonopolyGame.round = bd.round;
+            }
             // 同步服务器权威待办：服务器返回 action_needed / legacy 字段时以服务器为准。
             // 服务器 state 查询不返回待办时，若本地已有可识别的 action_needed，则用它重新推导 pendingAction，
             // 避免出现 action_needed="duel" 而 pendingAction 仍是旧值 "toll" 的历史不一致。
