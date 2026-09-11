@@ -2543,11 +2543,17 @@ M：${aiText}`;
         return msg;
       }
 
-      // 恢复提示：CHAT 模式下存在未结束游戏时显示，用户明确选择后才进入 MONOPOLY。
+      // ===== 恢复提示（只属于 MONOPOLY 模式） =====
+      // 显示规则统一由 appModeV1 控制，不使用任何关键词判断：
+      //   CHAT 模式：永不显示
+      //   MONOPOLY 模式：存在“本会话前的未结束游戏”且用户尚未选择时显示
+      let monopolyResumeDismissed = false;   // 用户已对恢复提示做出选择（继续/不继续），本会话内不再重复提示
+      let monopolyResumeAvailable = false;   // 是否存在进入本会话前的未结束游戏（刷新时从本地/服务器标记）
+
       function showMonopolyResumePrompt() {
         const el = $('monopolyResumePrompt');
         if (!el) return;
-        if (isMonopolyModeActive()) { el.style.display = 'none'; return; }
+        if (!isMonopolyModeActive()) { el.style.display = 'none'; return; }  // 只在 MONOPOLY 模式显示
         el.style.display = 'flex';
       }
       function hideMonopolyResumePrompt() {
@@ -2556,14 +2562,23 @@ M：${aiText}`;
       }
 
       // 模式 UI：模式栏高亮 + 状态栏 + 恢复提示 + 聊天/游戏视图切换。
+      // 一切 Monopoly 专属 UI 只在 MONOPOLY 模式显示；CHAT 模式一律隐藏。
       function updateModeUI() {
         const inMonopoly = isMonopolyModeActive();
         const chatBtn = $('chatModeBtn');
         const monoBtn = $('monopolyModeBtn');
         if (chatBtn) chatBtn.classList.toggle('active', !inMonopoly);
         if (monoBtn) monoBtn.classList.toggle('active', inMonopoly);
-        if (inMonopoly) hideMonopolyResumePrompt();
-        else if (activeMonopolyGame && activeMonopolyGame.game_id) showMonopolyResumePrompt();
+        if (inMonopoly) {
+          if (monopolyResumeAvailable && !monopolyResumeDismissed &&
+              activeMonopolyGame && activeMonopolyGame.game_id) {
+            showMonopolyResumePrompt();
+          } else {
+            hideMonopolyResumePrompt();
+          }
+        } else {
+          hideMonopolyResumePrompt();
+        }
         renderMonopolyStatus();
         renderAll();
       }
@@ -2775,19 +2790,20 @@ M：${aiText}`;
       }
 
       // 渲染权威状态指示器（来源 = MCP 状态，不是 AI 文本）。
+      // 只在大富翁模式显示；CHAT 模式一律隐藏。
       function renderMonopolyStatus() {
         const el = $('monopolyStatus');
         if (!el) return;
         const inMonopoly = isMonopolyModeActive();
+        if (!inMonopoly) {
+          el.style.display = 'none';
+          el.textContent = '';
+          return;
+        }
         const g = activeMonopolyGame;
         if (!g || !g.game_id) {
-          if (inMonopoly) {
-            el.style.display = 'block';
-            el.innerHTML = '<span class="ms-title">🎲 大富翁模式</span>还没有进行中的游戏，输入「开始游戏」创建新局。';
-          } else {
-            el.style.display = 'none';
-            el.textContent = '';
-          }
+          el.style.display = 'block';
+          el.innerHTML = '<span class="ms-title">🎲 大富翁模式</span>还没有进行中的游戏，输入「开始游戏」创建新局。';
           return;
         }
         const parts = [];
@@ -3843,24 +3859,26 @@ M：${aiText}`;
       }
 
       // 页面初始化：优先从 localStorage 恢复上一局快照，再后台与服务器对齐。
-      // 刷新后绝不自动进入大富翁模式：保持聊天模式，只显示恢复提示，等用户明确选择。
+      // 刷新后绝不自动进入大富翁模式：保持聊天模式。
+      // 若存在未结束游戏，只“准备”可恢复状态（monopolyResumeAvailable），
+      // 恢复提示必须等用户进入 MONOPOLY 后才显示，CHAT 模式绝不显示。
       // 绝不因为 activeMonopolyGame 为空就 new_game。
       function initMonopolyFromStorage() {
         try {
           const saved = loadMonopolyState();
           if (saved && saved.game_id) {
             activeMonopolyGame = saved;
+            monopolyResumeAvailable = true;
             // 不调用 setMonopolyModeActive：恢复快照 ≠ 进入游戏模式。
             renderMonopolyStatus();
-            console.log('🎲 MCP: 已从 localStorage 恢复大富翁快照（保持聊天模式，等待用户选择是否继续）', saved);
-            showMonopolyResumePrompt();
+            console.log('🎲 MCP: 已从 localStorage 恢复大富翁快照（保持聊天模式，进入 MONOPOLY 后可恢复）', saved);
             syncMonopolyStateFromServer().catch(() => {});
           } else {
             renderMonopolyStatus();
             if (localStorage.getItem(MONOPOLY_MODE_KEY) === 'active') {
-              // 有“进行中”标记但没有本地快照：不自动进入大富翁模式，仅提示可恢复（点击继续时再向服务器查询）。
-              console.log('🎲 MCP: 存在进行中标记但无本地快照，显示恢复提示');
-              showMonopolyResumePrompt();
+              // 有“进行中”标记但没有本地快照：进入 MONOPOLY 后再向服务器查询恢复。
+              monopolyResumeAvailable = true;
+              console.log('🎲 MCP: 存在进行中标记但无本地快照，进入 MONOPOLY 后可尝试恢复');
             }
           }
         } catch (e) {
@@ -4498,12 +4516,16 @@ M：${aiText}`;
       };
       $('monopolyModeBtn').onclick = () => {
         if (isMonopolyModeActive()) return;
-        enterMonopolyMode();
-        hideMonopolyResumePrompt();
+        monopolyResumeDismissed = false;   // 每次显式进入 MONOPOLY，允许重新提示恢复
+        enterMonopolyMode();               // updateModeUI 会按模式显示状态栏 / 恢复提示
         if (!activeMonopolyGame || !activeMonopolyGame.game_id) {
-          // 无本地快照：尝试从服务器恢复；失败则等待用户开新局。
+          // 无本地快照：尝试从服务器恢复；若找到未结束游戏则进入可恢复状态并显示提示。
           restoreActiveMonopolyGame().then(ok => {
-            if (!ok) {
+            if (ok) {
+              monopolyResumeAvailable = true;
+              showMonopolyResumePrompt();
+              renderMonopolyStatus();
+            } else {
               addMonopolyMsg('assistant', '已进入大富翁模式。输入「开始游戏」创建新局。');
               renderMonopolyChat();
               renderMonopolyStatus();
@@ -4512,10 +4534,12 @@ M：${aiText}`;
         }
       };
       $('resumeGameBtn').onclick = () => {
+        monopolyResumeDismissed = true;    // 已选择“继续”，本会话不再重复提示
         enterMonopolyMode();
         hideMonopolyResumePrompt();
         restoreActiveMonopolyGame().then(ok => {
           if (!ok) {
+            monopolyResumeAvailable = false;
             addMonopolyMsg('assistant', '没有找到可恢复的进行中游戏。输入「开始游戏」可开一局新的大富翁。');
           } else {
             addMonopolyMsg('assistant', '已进入大富翁模式，继续刚才那一局。');
@@ -4524,7 +4548,11 @@ M：${aiText}`;
           renderMonopolyStatus();
         });
       };
-      $('dismissResumeBtn').onclick = () => { hideMonopolyResumePrompt(); enterChatMode(); };
+      $('dismissResumeBtn').onclick = () => {
+        // “不继续”：只隐藏提示，留在 MONOPOLY，保留游戏状态，不 new_game、不退出模式。
+        monopolyResumeDismissed = true;
+        hideMonopolyResumePrompt();
+      };
 
       // 刷新页面后默认回到聊天模式，绝不自动进入大富翁模式。
       enterChatMode();
