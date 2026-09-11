@@ -1809,22 +1809,6 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
         const latestUserText = [...messages].reverse().find(m => m.role === 'user')?.content || '';
         refreshSystemPrompt(latestUserText);
         let systemMsg = messages[0];
-        // 只有大富翁模式且当前这条用户消息明确属于大富翁操作时，才把 MCP 权威状态并入系统提示。
-        // 普通聊天（即使存在 activeMonopolyGame / game_id）绝不注入，避免 AI 误进入游戏语境。
-        // 顶层路由由模式决定：聊天模式永不注入游戏上下文。
-        // 这里（发送时）才读取 activeMonopolyGame，避开初始化前的 TDZ。
-        const needMonopolyContext = isMonopolyModeActive() && monopolyContextNeeded(latestUserText);
-        try {
-          if (needMonopolyContext && activeMonopolyGame && activeMonopolyGame.game_id) {
-            const summary = monopolyStateSummary();
-            if (summary) {
-              systemMsg = {
-                role: 'system',
-                content: String(systemMsg.content || '') + monopolySystemPromptExtra(summary)
-              };
-            }
-          }
-        } catch (_) {}
         const nonSystem = messages.filter(m => m.role !== 'system');
         
         let history = [];
@@ -2860,11 +2844,6 @@ M：${aiText}`;
         renderMonopolyStatus();
       }
 
-      function isMonopolyRequest(text) {
-        const s = String(text || '').toLowerCase();
-        return ['大富翁','monopoly','掷骰','骰子','棋盘','买地','房子','地产','银行','破产','回合','开始游戏','玩游戏'].some(k => s.includes(k));
-      }
-
       // 开新局：必须同时出现启动动词和“大富翁/Monopoly”。
       // 不再把裸“游戏”当作充分条件，避免“我想玩游戏”误启动大富翁。
       function isMonopolyStartRequest(text) {
@@ -2906,11 +2885,7 @@ M：${aiText}`;
 
       // 等待继续：roll 返回需要玩家完成任务后，用户明确表示“完成/继续”等。
       // 只在 activeMonopolyGame.waitingContinue 为 true 时才命中，普通“继续”不会触发。
-      function isMonopolyContinueRequest(text) {
-        const s = String(text || '').trim().toLowerCase();
-        if (['继续', '下一回合', '下一步', '继续吧', '完成', '完成了', '完成了继续', '准备好', '准备好了', '好了', '完事了', '弄好了', '做完了', 'done', 'next', 'continue'].includes(s)) return true;
-        return ['完成了继续', '下一回合', '准备好了', '完成', '继续'].some(k => s.includes(k));
-      }
+      // 局内确认统一由 isMonopolyPendingConfirm() 解析。
 
       // 推进回合：进行中的游戏不等待任务时，用户明确要求开始/下一回合/掷骰等。
       // 只在 activeMonopolyGame 存在且 waitingContinue === false 时才命中。
