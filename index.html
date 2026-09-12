@@ -2597,14 +2597,19 @@ M：${aiText}`;
           coins: null,
           laps: null,
           round: null,
+          roundTotal: null,
           next_turn: '',
           action_needed: '',
           lastSettled: '',
           hint: '',
           who: '',
+          cards: null,
+          identity: null,
           in_jail: null,
           asleep: false,
           gameStatus: 'active',
+          // pending action 一次性消费标记：key -> 时间戳。刷新后仍生效，避免旧 duel/task 被再次处理。
+          consumed: {},
           updatedAt: 0
         };
       }
@@ -2652,6 +2657,8 @@ M：${aiText}`;
             pick('positions', ['pos', 'locations']);
             pick('coins', ['money', 'gold']);
             pick('round', ['round_no', 'turn_no', 'turn_count']);
+            pick('round_total', ['roundTotal', 'total_round', 'total_rounds', 'max_round', 'turn_total']);
+            pick('who', ['current_who', 'moved_by', 'rolling_player']);
             return sc;
           }
         }
@@ -2663,11 +2670,11 @@ M：${aiText}`;
       // 「🔵城月@13(第2圈) · 💰20 · …」这类标记。board 本身是 MCP 权威输出，解析它不算前端猜。
       // 主数据源仍是 game_info(query:"state") 的结构化 positions/coins；这里只做缺失时的权威补齐。
       function parseMonopolyBoard(boardStr) {
-        const out = { positions: null, coins: null, laps: null, round: null };
+        const out = { positions: null, coins: null, laps: null, round: null, roundTotal: null };
         const s = String(boardStr || '');
         if (!s) return out;
         const rm = s.match(/〔\s*回合\s*(\d+)\s*\/\s*(\d+)\s*〕/);
-        if (rm) out.round = Number(rm[1]);
+        if (rm) { out.round = Number(rm[1]); out.roundTotal = Number(rm[2]); }
         const positions = {}, coins = {}, laps = {};
         for (const line of s.split(/\r?\n/)) {
           const m = line.match(/([\u4e00-\u9fff]{1,4})@(\d+)(?:\(第(\d+)圈\))?[^💰\n]*💰(\d+)/);
@@ -2691,18 +2698,29 @@ M：${aiText}`;
         const has = (k) => !!sc[k];
         // action_needed 是服务器的权威待办字段：有值且可识别时直接决定 pendingAction。
         const an = typeof sc.action_needed === 'string' ? sc.action_needed.trim().toLowerCase() : '';
-        if (an === 'toll' || an === 'duel' || an === 'super' || an === 'task' || an === 'truth') {
-          return an === 'truth' ? 'task' : an;
+        if (an === 'toll' || an === 'duel' || an === 'super' || an === 'task' || an === 'truth' || an === 'chat' || an === 'chat_task') {
+          // truth 与 chat/chat_task 都是需要玩家先完成对话/回答的待办，结算方式同 task。
+          return (an === 'truth' || an === 'chat' || an === 'chat_task') ? 'task' : an;
+        }
+        // 服务器若用 pending_action / pending / required_action 表达待办，同样以权威字段为准。
+        const pendingRaw = [sc.pending_action, sc.pending, sc.required_action]
+          .find(v => typeof v === 'string' && v.trim());
+        if (pendingRaw) {
+          const pv = pendingRaw.trim().toLowerCase();
+          if (pv === 'toll' || pv === 'duel' || pv === 'super' || pv === 'task' || pv === 'truth' || pv === 'chat' || pv === 'chat_task') {
+            return (pv === 'truth' || pv === 'chat' || pv === 'chat_task') ? 'task' : pv;
+          }
         }
         // 只有 action_needed 缺失或不可识别时，才回退到旧字段判断。
         if (has('toll')) return 'toll';
         if (has('duel')) return 'duel';
         if (has('super')) return 'super';
         if (has('task')) return 'task';
-        // 真心话格同样需要玩家先回答，结算方式与普通任务相同（下一轮 roll 默认 done）。
+        if (has('chat_task')) return 'task';
+        // 真心话格/聊天格同样需要玩家先回答，结算方式与普通任务相同（下一轮 roll 默认 done）。
         if (has('truth')) return 'task';
         const tile = typeof sc.tile === 'string' ? sc.tile.toLowerCase() : '';
-        if (tile === 'task' || tile === 'truth') return 'task';
+        if (tile === 'task' || tile === 'truth' || tile === 'chat' || tile === 'chat_task') return 'task';
         if (tile === 'toll') return 'toll';
         if (tile === 'duel') return 'duel';
         if (tile === 'super') return 'super';
@@ -2713,6 +2731,47 @@ M：${aiText}`;
       // 需要玩家明确选择（会阻塞下一次 roll，且不能被静默结算）的动作类型。
       function pendingActionNeedsChoice(p) {
         return p === 'task' || p === 'toll' || p === 'duel' || p === 'super';
+      }
+
+      // ===== pending action 一次性消费标记 =====
+      // 规则：一个 duel/task 只能消费一次。聊天历史 ≠ pending action。
+      // 消费键 = game_id + 动作类型 + 当时的回合/轮到谁/移动者，避免把“历史上出现过的旧待办”再当成当前待办。
+      // 刷新/切模式/普通聊天都不会重处理已消费的待办；只有 MCP 当前权威状态给出新的 pendingAction 才处理。
+      function pendingActionKeyWith(gid, type, ctx) {
+        const r = ctx && ctx.round != null ? ctx.round : '';
+        const t = ctx && ctx.next_turn ? ctx.next_turn : '';
+        const w = ctx && ctx.who ? ctx.who : '';
+        return String(gid) + '::' + String(type) + '::r' + r + '::t' + t + '::w' + w;
+      }
+      function pendingActionKey(gid, type) {
+        return pendingActionKeyWith(gid, type, activeMonopolyGame);
+      }
+      function getConsumedMap() {
+        if (!activeMonopolyGame) return {};
+        if (!activeMonopolyGame.consumed || typeof activeMonopolyGame.consumed !== 'object') activeMonopolyGame.consumed = {};
+        return activeMonopolyGame.consumed;
+      }
+      function pruneConsumedMap(map) {
+        if (!map) return;
+        const keys = Object.keys(map);
+        if (keys.length <= 120) return;
+        keys.sort((a, b) => (Number(map[a]) || 0) - (Number(map[b]) || 0));
+        for (let i = 0; i < keys.length - 100; i++) delete map[keys[i]];
+      }
+      function markPendingActionConsumedAt(type, ctx) {
+        const g = activeMonopolyGame;
+        if (!g || !g.game_id) return;
+        const map = getConsumedMap();
+        map[pendingActionKeyWith(g.game_id, type, ctx || g)] = Date.now();
+        pruneConsumedMap(map);
+      }
+      function markPendingActionConsumed(type) {
+        markPendingActionConsumedAt(type, activeMonopolyGame);
+      }
+      function isPendingActionConsumed(type) {
+        const g = activeMonopolyGame;
+        if (!g || !g.game_id) return false;
+        return !!getConsumedMap()[pendingActionKey(g.game_id, type)];
       }
 
       // 用一次 MCP 权威返回更新前端游戏快照并持久化。
@@ -2752,7 +2811,13 @@ M：${aiText}`;
         if (sc.positions !== undefined && sc.positions !== null) activeMonopolyGame.positions = sc.positions;
         if (sc.coins !== undefined && sc.coins !== null) activeMonopolyGame.coins = sc.coins;
         if (sc.next_turn !== undefined && sc.next_turn !== null && sc.next_turn !== '') activeMonopolyGame.next_turn = String(sc.next_turn);
-        if (sc.action_needed !== undefined && sc.action_needed !== null && sc.action_needed !== '') activeMonopolyGame.action_needed = String(sc.action_needed);
+        // 权威 action_needed：返回里有值就采用；变更型工具返回里没有 action_needed 且权威判定无待办时，
+        // 立即清除历史遗留的 action_needed（这是“旧 duel 再次出现”的根因之一）。
+        if (sc.action_needed !== undefined && sc.action_needed !== null && sc.action_needed !== '') {
+          activeMonopolyGame.action_needed = String(sc.action_needed);
+        } else if ((name === 'game_action' || name === 'roll' || name === 'new_game') && pendingAction === 'none') {
+          activeMonopolyGame.action_needed = 'none';
+        }
         if (sc.status !== undefined && sc.status !== null && sc.status !== '') activeMonopolyGame.gameStatus = String(sc.status);
         if (sc.settled !== undefined && sc.settled !== null) {
           activeMonopolyGame.lastSettled = typeof sc.settled === 'string' ? sc.settled : (() => { try { return JSON.stringify(sc.settled); } catch (_) { return ''; } })();
@@ -2762,6 +2827,7 @@ M：${aiText}`;
         if (sc.in_jail !== undefined) activeMonopolyGame.in_jail = sc.in_jail;
         if (sc.asleep !== undefined) activeMonopolyGame.asleep = !!sc.asleep;
         if (sc.round !== undefined && sc.round !== null) activeMonopolyGame.round = sc.round;
+        if (sc.round_total !== undefined && sc.round_total !== null) activeMonopolyGame.roundTotal = sc.round_total;
         if (sc.laps !== undefined && sc.laps !== null) activeMonopolyGame.laps = sc.laps;
         if (sc.cards !== undefined && sc.cards !== null) activeMonopolyGame.cards = sc.cards;
         if (sc.identity !== undefined && sc.identity !== null) activeMonopolyGame.identity = sc.identity;
@@ -2773,6 +2839,15 @@ M：${aiText}`;
           if ((sc.coins === undefined || sc.coins === null) && bd.coins) activeMonopolyGame.coins = bd.coins;
           if (bd.laps) activeMonopolyGame.laps = bd.laps;
           if (bd.round !== null && bd.round !== undefined) activeMonopolyGame.round = bd.round;
+          if (bd.roundTotal !== null && bd.roundTotal !== undefined) activeMonopolyGame.roundTotal = bd.roundTotal;
+        }
+
+        // 一次性消费保护：如果这个 pendingAction 在本局当前上下文中已经被成功消费过，
+        // 即使服务器状态有短暂滞后仍然显示旧待办，也绝不能再次处理（聊天历史 ≠ pending action）。
+        if (!isGameOver && pendingAction !== 'none' && isPendingActionConsumed(pendingAction)) {
+          console.log('🎲 MCP: 忽略已消费的旧待办 ' + pendingAction + '（只消费一次）', pendingActionKey(activeMonopolyGame.game_id, pendingAction));
+          pendingAction = 'none';
+          if (name === 'game_action' || name === 'roll' || name === 'new_game') activeMonopolyGame.action_needed = 'none';
         }
 
         activeMonopolyGame.pendingAction = pendingAction;
@@ -2820,8 +2895,10 @@ M：${aiText}`;
           const p = g.positions;
           try { lines.push('- 位置 positions: ' + JSON.stringify(p)); } catch (_) {}
         }
-        if (g.round !== undefined && g.round !== null) lines.push('- 当前回合 round: ' + g.round);
+        if (g.round !== undefined && g.round !== null) lines.push('- 当前回合 round: ' + g.round + (g.roundTotal ? '/' + g.roundTotal : ''));
         if (g.next_turn) lines.push('- 下一回合 next_turn: ' + g.next_turn);
+        if (g.cards !== undefined && g.cards !== null) lines.push('- 手牌 cards: ' + (typeof g.cards === 'string' ? g.cards : JSON.stringify(g.cards)));
+        if (g.identity !== undefined && g.identity !== null) lines.push('- 身份 identity: ' + (typeof g.identity === 'string' ? g.identity : JSON.stringify(g.identity)));
         if (g.pendingAction && g.pendingAction !== 'none' && g.pendingAction !== 'gameover') lines.push('- 待办行动 pendingAction: ' + g.pendingAction);
         if (g.action_needed) lines.push('- 需要 action_needed: ' + g.action_needed);
         if (g.hint) lines.push('- MCP 给的下一步提示 hint: ' + g.hint);
@@ -2849,7 +2926,7 @@ M：${aiText}`;
         }
         const parts = [];
         parts.push('<span class="ms-title">🎲 大富翁</span>');
-        if (g.round !== undefined && g.round !== null) parts.push('回合 ' + g.round);
+        if (g.round !== undefined && g.round !== null) parts.push('回合 ' + g.round + (g.roundTotal ? '/' + g.roundTotal : ''));
         if (g.lastRoll !== undefined && g.lastRoll !== null) parts.push('骰子 ' + g.lastRoll);
         if (g.next_turn) parts.push('轮到 ' + g.next_turn);
         if (g.positions !== undefined && g.positions !== null) {
@@ -2897,6 +2974,7 @@ M：${aiText}`;
           '【回复风格】像「阿慕在玩一个游戏」：既不是「专门负责朗读任务卡的角色」，也不是「负责把任务改轻的人」；保留任务卡本身的尺度，同时用阿慕自己的语气自然回应，不因游戏突然变成长篇小说，不自动堆砌不必要的动作描写。' +
           '【呈现任务】当 MCP 返回任务卡/任务指令(task)需要向玩家传达时：只用阿慕自己的语气，把 MCP 给出的任务原样告诉玩家并提示下一步。任务卡里没有写明的动作、身体接触、剧情推进、人物行为，一律不得自行添加；不得把任务卡扩写成一段连续剧情或动作描写。三者各司其职：MCP 决定任务内容，你决定说话方式和语气，代码决定游戏状态和流程——不要越界去创造 MCP 没有给的游戏事实或行为。' +
           '【位置归属】positions 里每个玩家名对应的格子只属于该玩家本人，绝不互相借用。本回合移动者以 roll 返回的 who 为准；叙述移动时只能引用 roll 返回 say 中写明的「谁 掷 X → 第Y格」，以及 positions[who]（该玩家自己的当前格）。严禁把另一位玩家的 position 当作本回合移动者的起点或终点，严禁用别的玩家的格子加骰子推算移动；骰子、起点、终点一律只以 MCP 返回为准，直接引用，不要自行计算。' +
+          '【待办只消费一次】MCP 当前权威状态里的 pendingAction 是唯一有效的待办来源。聊天历史里出现过的旧任务/旧对决不等于当前待办：已经完成的对决、任务、聊天格任务绝不能再处理。绝对不要因为历史消息里出现过“你赢了”“任务完成”等字眼就重新结算旧的 duel/task；只有 MCP 当前明确给出的新 pendingAction 才需要你处理，并且每个 pendingAction 只处理一次。' +
           '【续局与进行中】如果当前大富翁是“恢复上一局”或已在某个回合进行中（有 next_turn / positions / 金币 / 回合数等状态），一律按“正在继续这一局”处理：不要说成重新开始、不要虚构上一局已经结束或谁输谁赢、不要重置回合/金币/位置/卡牌/身份；保持当前回合和状态原样继续。';
       }
 
@@ -3235,7 +3313,12 @@ M：${aiText}`;
       async function chatWithMonopolyMcp(apiMsgs, target) {
         const tools = await ensureMcp();
         let conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
-        const modelTools = mcpToolsForModel(tools);
+        // 已有进行中游戏时，禁止模型在决策/闲聊流程里调用 new_game，防止“投掷/继续”被误触发重开一局。
+        // 明确的新开局请求走 startMonopolyGame，不经过这里。
+        const usableTools = (activeMonopolyGame && activeMonopolyGame.game_id)
+          ? tools.filter(t => t && t.name !== 'new_game')
+          : tools;
+        const modelTools = mcpToolsForModel(usableTools);
 
         for (let round = 0; round < 8; round++) {
           const res = await workerFetch('', {
@@ -3378,6 +3461,52 @@ M：${aiText}`;
           if (hasDefault(def)) args[key] = def.default;
         }
 
+        // 已确认的固定游戏配置注入（不是每局询问的内容，由代码内部直接传）：
+        // 尺度=heavy、红线=无、后面=允许、反攻概率=0、局长=short、身份模式=开启、先手=阿慕。
+        // 只在字段语义匹配、且值符合 schema 类型/枚举时才写入；枚举不匹配则保持默认，绝不硬塞。
+        const confirmedConfigs = [
+          { re: /scale|尺度|程度|level/i, value: 'heavy', num: null, bool: null },
+          { re: /redline|红线|底线|界限/i, value: 'none', num: null, bool: null },
+          { re: /anal|后面|backdoor|back[_\-\s]?door/i, value: 'allow', num: null, bool: true },
+          { re: /counterattack|反攻|反击|rebellion/i, value: 0, num: 0, bool: null },
+          { re: /leader|局长|监委/i, value: 'short', num: null, bool: null },
+          { re: /identity[_\-\s]?mode|身份模式/i, value: 'on', num: null, bool: true },
+          { re: /first[_\-\s]?(?:player|turn|move)|first_turn|先手|谁先/i, value: '阿慕', num: null, bool: null }
+        ];
+        const nameAlias = { '城月': ['城月', 'player1', 'p1', 'chengyue', 'cangyue'], '阿慕': ['阿慕', 'player2', 'p2', 'amu'] };
+        for (const key of Object.keys(props)) {
+          const def = props[key];
+          if (!def || typeof def !== 'object') continue;
+          if (fieldKind(key) !== 'other') continue;   // 玩家 name/sex/role/lineup 已由固定身份填充，不覆盖
+          const cfg = confirmedConfigs.find(c => c.re.test(key));
+          if (!cfg) continue;
+          const types = getTypes(def);
+          const enums = enumOf(def);
+          const targetStr = typeof cfg.value === 'string' ? cfg.value : String(cfg.value);
+          if (types.includes('string')) {
+            if (enums.length) {
+              let matched = enums.find(v => String(v) === targetStr);
+              if (matched === undefined && nameAlias[targetStr]) {
+                matched = enums.find(v => nameAlias[targetStr].includes(String(v).toLowerCase()));
+              }
+              if (matched === undefined) {
+                const synonym = { 'heavy': '重', 'none': '无', 'allow': '允许', 'on': '开启', 'off': '关闭' };
+                for (const v of enums) {
+                  if (String(v) === targetStr) { matched = v; break; }
+                  if (synonym[targetStr] && String(v) === synonym[targetStr]) { matched = v; break; }
+                }
+              }
+              if (matched !== undefined) args[key] = matched;
+            } else {
+              args[key] = cfg.value;
+            }
+          } else if (types.includes('boolean')) {
+            args[key] = !!cfg.bool;
+          } else if (types.includes('integer') || types.includes('number')) {
+            if (cfg.num !== null) args[key] = cfg.num;
+          }
+        }
+
         return args;
       }
 
@@ -3432,10 +3561,14 @@ M：${aiText}`;
         });
 
         // 4) 让模型根据 monopoly_help 的真实返回，向用户说明需要确认的设置。
+        //    固定玩家配置与已确认默认配置绝不重新询问（城月=女/受，阿慕=女/攻；heavy 等）。
         const conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
         conversation.push({
           role: 'user',
-          content: '【大富翁系统消息】客户端已真实调用 monopoly_help 并读取了规则，现在处于“等待用户确认设置”阶段，还没有调用 new_game。请只用下面的 monopoly_help 真实返回内容，用中文向用户说明需要确认的游戏设置，并明确告诉用户“规则已读取。请确认以下设置后，我才能正式创建游戏。”；严禁编造 monopoly_help 中没有的规则、先手、位置、金币或棋盘状态。\n\nmonopoly_help 返回：\n' + helpResult
+          content: '【大富翁系统消息】客户端已真实调用 monopoly_help 并读取了规则，现在处于“等待用户确认设置”阶段，还没有调用 new_game。请只用下面的 monopoly_help 真实返回内容，用中文向用户说明需要确认的游戏设置，并明确告诉用户“规则已读取。请确认以下设置后，我才能正式创建游戏。”；严禁编造 monopoly_help 中没有的规则、先手、位置、金币或棋盘状态。\n\n' +
+            '【固定配置 · 绝对不要询问】玩家配置已固定：城月＝女／受，阿慕＝女／攻。不要询问玩家名字、性别或攻受角色。' +
+            '已确认的默认配置（除非用户明确要求修改，否则不要重新询问）：尺度=heavy，红线=无，后面=允许，反攻概率=0，局长=short，身份模式=开启，先手=阿慕。' +
+            '只向用户确认 monopoly_help 里真正需要确认、且不属于上述固定配置的其它项目。\n\nmonopoly_help 返回：\n' + helpResult
         });
 
         const res = await workerFetch('', {
@@ -3541,11 +3674,22 @@ M：${aiText}`;
         const rollTool = tools.find(t => t && t.name === 'roll');
         if (!rollTool) throw new Error('MCP 没有提供 roll 工具');
 
+        // roll 前抓取权威上下文：位置/回合/轮到谁/移动者，用于 ① 叙述移动不串位 ② task 一次性消费标记。
+        const prevCtx = {
+          round: game.round,
+          next_turn: game.next_turn,
+          who: game.who,
+          positions: game.positions && typeof game.positions === 'object'
+            ? (() => { try { return JSON.parse(JSON.stringify(game.positions)); } catch (_) { return null; } })()
+            : null
+        };
+        const wasTask = game.pendingAction === 'task';
+
         const gameIdField = rollGameIdField(rollTool);
         const args = { [gameIdField]: game.game_id };
-        // 普通任务/真心话"继续"= 玩家已确认做完：显式带 task=done，让引擎按真实语义结算，
+        // 普通任务/真心话/聊天格"继续"= 玩家已确认做完：显式带 task=done，让引擎按真实语义结算，
         // 不依赖引擎的默认值（避免"没说清就默认照做"这类静默结算）。
-        if (game.pendingAction === 'task') args.task = 'done';
+        if (wasTask) args.task = 'done';
         console.log('🎲 MCP: 继续回合 roll 参数', { args });
         console.log('🎲 MCP[roll-diag] 调用 roll 前', {
           game_id: game.game_id,
@@ -3576,15 +3720,48 @@ M：${aiText}`;
         // 用权威返回更新快照并持久化；游戏结束时在此统一清理。
         updateMonopolyStateFromResult('roll', result, args);
 
+        // task 一次性消费：roll 带 task=done 成功且权威返回无该 task 待办时，先标记本局该 task 已消费，
+        // 再执行 sync，这样即使服务器状态短暂滞后仍显示旧 task，也会被消费保护忽略。
+        const scRoll = parseMcpStructured(result);
+        const rollFailed = scRoll && scRoll.ok === false;
+        if (wasTask && !rollFailed && activeMonopolyGame && activeMonopolyGame.pendingAction !== 'task') {
+          markPendingActionConsumedAt('task', prevCtx);
+          console.log('🎲 MCP: 聊天格/任务 task 已消费一次', prevCtx);
+        }
+
         // 每次 roll 后同步一次权威状态并刷新状态栏，保证顶部与 MCP game_info(state) 一致。
         await syncMonopolyStateFromServer().catch(() => {});
         renderMonopolyStatus();
+
+        // 从权威数据构建“本回合移动”叙述块：起点=roll 前该玩家自己的位置，终点=roll 后该玩家自己的位置。
+        // 骰子、起点、终点全部来自 MCP，直接引用，绝不自行计算，也不借用另一位玩家的位置。
+        let movementNote = '';
+        if (activeMonopolyGame && activeMonopolyGame.positions && typeof activeMonopolyGame.positions === 'object') {
+          const postPos = activeMonopolyGame.positions;
+          const who = (scRoll && scRoll.who) || activeMonopolyGame.who || activeMonopolyGame.next_turn || '';
+          const mLines = [];
+          if (who && prevCtx.positions && prevCtx.positions[who] !== undefined && postPos[who] !== undefined) {
+            const diceTxt = (activeMonopolyGame.lastRoll !== undefined && activeMonopolyGame.lastRoll !== null)
+              ? '（骰子 ' + activeMonopolyGame.lastRoll + '）' : '';
+            mLines.push(who + '：' + prevCtx.positions[who] + ' → ' + postPos[who] + diceTxt);
+          }
+          for (const n of Object.keys(postPos)) {
+            if (n !== who && prevCtx.positions && prevCtx.positions[n] !== undefined && postPos[n] !== undefined &&
+                Number(prevCtx.positions[n]) !== Number(postPos[n])) {
+              mLines.push(n + '：' + prevCtx.positions[n] + ' → ' + postPos[n]);
+            }
+          }
+          if (mLines.length) movementNote = '\n【本回合移动（MCP 权威，叙述时原样引用，禁止自行计算）】\n' + mLines.join('\n');
+        }
 
         // 只用 roll 真实返回 + 用户这条消息里明确说出的动作来叙述，严禁编造。
         const conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
         conversation.push({
           role: 'user',
-          content: '【大富翁系统消息】客户端已对当前 game_id 调用 roll 并得到真实结果。请只用下面的 roll 真实返回，以及用户这条消息里明确说出的动作，用中文叙述本回合结果；用户没有明确说出的动作、以及 roll 返回里没有的内容，一律不得编造。骰子点数、移动格数、位置、金币、回合、胜负一律以返回值为准。roll 返回里的 who 是本回合唯一移动者，叙述移动只能引用该玩家自己的位置（positions[who]）与 say 里写明的「谁 掷 X → 第Y格」，绝不能把另一位玩家的位置当作移动起点或终点，严禁自行用别的玩家的格子加骰子推算移动。\n\n' + monopolyStateSummary() + '\n\nroll 返回（真实 JSON）：\n' + result
+          content: '【大富翁系统消息】这是当前这一局（game_id=' + (activeMonopolyGame && activeMonopolyGame.game_id) + '）的继续，不是新开局。客户端已对当前 game_id 调用 roll 并得到真实结果。请只用下面的 roll 真实返回，以及用户这条消息里明确说出的动作，用中文叙述本回合结果；用户没有明确说出的动作、以及 roll 返回里没有的内容，一律不得编造。骰子点数、移动格数、位置、金币、回合、胜负一律以返回值为准。' +
+            movementNote +
+            '【位置铁律】positions 里每个玩家名对应的位置只属于该玩家本人；本回合移动者必须用上面给出的移动块（起点/终点）原样叙述，绝对禁止借用另一位玩家的位置作为起点或终点，绝对禁止用位置加骰子自行推算。' +
+            '\n\n' + monopolyStateSummary() + '\n\nroll 返回（真实 JSON）：\n' + result
         });
 
         const res = await workerFetch('', {
@@ -3672,6 +3849,9 @@ M：${aiText}`;
         if (!actionTool) throw new Error('MCP 没有提供 game_action 工具');
         console.log('🎲 MCP: game_action inputSchema', actionTool.inputSchema);
 
+        // 提交前抓取当前 duel 上下文：用于“一个 duel 只能消费一次”的标记。
+        const duelCtx = { round: game.round, next_turn: game.next_turn, who: game.who };
+
         const args = buildGameActionArgs(actionTool, { duel_winner: winner });
         args.action = 'duel_result';
         args.winner = winner;
@@ -3684,6 +3864,11 @@ M：${aiText}`;
 
         const stillPending = !!(activeMonopolyGame && activeMonopolyGame.pendingAction === 'duel');
         const failure = mcpActionFailed(result);
+        // 成功结算：立即标记该 duel 已消费，保证之后普通聊天/继续投掷不会从历史消息再次处理旧 duel。
+        if (!failure && !stillPending) {
+          markPendingActionConsumedAt('duel', duelCtx);
+          console.log('🎲 MCP: 对决 duel 已消费一次', { winner, ctx: duelCtx });
+        }
 
         // 只用 MCP 真实返回叙述，严禁自行计算移动/金币/回合。
         const conversation = apiMsgs.map(m => ({ role: m.role, content: m.content }));
@@ -3718,12 +3903,13 @@ M：${aiText}`;
 
       // 根据 game_info 的真实 inputSchema 构造参数：
       // 查询类型用 pair_history；玩家姓名/性别用固定身份（P1=城月/女，P2=阿慕/女）；其余用 schema 默认值。
-      function buildGameInfoArgs(tool) {
+      function buildGameInfoArgs(tool, queryValue) {
         const schema = (tool && tool.inputSchema && typeof tool.inputSchema === 'object') ? tool.inputSchema : {};
         const props = (schema.properties && typeof schema.properties === 'object') ? schema.properties : {};
         console.log('🎲 MCP[buildGameInfoArgs] inputSchema = ' + JSON.stringify(schema));
         console.log('🎲 MCP[buildGameInfoArgs] property keys = ' + JSON.stringify(Object.keys(props)));
         console.log('🎲 MCP[buildGameInfoArgs] required = ' + JSON.stringify(schema.required || null));
+        const qv = typeof queryValue === 'string' && queryValue ? queryValue : 'pair_history';
         const players = [
           { name: '城月', sex: '女' },
           { name: '阿慕', sex: '女' }
@@ -3754,7 +3940,7 @@ M：${aiText}`;
           const idx = playerIndex(key);
 
           if (kind === 'query') {
-            if (isString(def)) args[key] = 'pair_history';
+            if (isString(def)) args[key] = qv;
             continue;
           }
           if (kind === 'name') {
@@ -3833,7 +4019,7 @@ M：${aiText}`;
             const tools = await ensureMcp();
             const infoTool = tools.find(t => t && t.name === 'game_info');
             if (!infoTool) return false;
-            const args = { query: 'state', game_id: gid };
+            const args = Object.assign(buildGameInfoArgs(infoTool, 'state'), { query: 'state', game_id: gid });
             console.log('🎲 MCP[sync] 实际发送 args = ' + JSON.stringify(args));
             console.log('🎲 MCP[sync] game_info 调用前', {
               scope: 'syncMonopolyStateFromServer',
@@ -3873,6 +4059,8 @@ M：${aiText}`;
             if (sc.turn !== undefined && sc.turn !== null && sc.turn !== '') activeMonopolyGame.next_turn = String(sc.turn);
             if (typeof sc.board === 'string' && sc.board) activeMonopolyGame.lastBoard = sc.board;
             if (sc.round !== undefined && sc.round !== null) activeMonopolyGame.round = sc.round;
+            if (sc.round_total !== undefined && sc.round_total !== null) activeMonopolyGame.roundTotal = sc.round_total;
+            if (sc.who !== undefined && sc.who !== null && sc.who !== '') activeMonopolyGame.who = String(sc.who);
             if (sc.laps !== undefined && sc.laps !== null) activeMonopolyGame.laps = sc.laps;
             if (sc.cards !== undefined && sc.cards !== null) activeMonopolyGame.cards = sc.cards;
             if (sc.identity !== undefined && sc.identity !== null) activeMonopolyGame.identity = sc.identity;
@@ -3882,13 +4070,15 @@ M：${aiText}`;
               if ((sc.coins === undefined || sc.coins === null) && bd.coins) activeMonopolyGame.coins = bd.coins;
               if (bd.laps) activeMonopolyGame.laps = bd.laps;
               if (bd.round !== null && bd.round !== undefined) activeMonopolyGame.round = bd.round;
+              if (bd.roundTotal !== null && bd.roundTotal !== undefined) activeMonopolyGame.roundTotal = bd.roundTotal;
             }
             // 同步服务器权威待办：服务器返回 action_needed / legacy 字段时以服务器为准。
             // 服务器 state 查询不返回待办时，若本地已有可识别的 action_needed，则用它重新推导 pendingAction，
             // 避免出现 action_needed="duel" 而 pendingAction 仍是旧值 "toll" 的历史不一致。
+            // 但：已经在本局上下文消费过的旧待办绝不能被重新恢复（聊天历史 ≠ pending action）。
             const hasActionNeeded = sc.action_needed !== undefined && sc.action_needed !== null && sc.action_needed !== '';
-            const hasLegacyPending = !!sc.toll || !!sc.duel || !!sc.super || !!sc.task || !!sc.truth ||
-              (typeof sc.tile === 'string' && ['task', 'truth', 'toll', 'duel', 'super', 'shop'].indexOf(sc.tile.toLowerCase()) !== -1);
+            const hasLegacyPending = !!sc.toll || !!sc.duel || !!sc.super || !!sc.task || !!sc.truth || !!sc.chat_task ||
+              (typeof sc.tile === 'string' && ['task', 'truth', 'chat', 'chat_task', 'toll', 'duel', 'super', 'shop'].indexOf(sc.tile.toLowerCase()) !== -1);
             if (hasActionNeeded) activeMonopolyGame.action_needed = String(sc.action_needed);
             if (hasActionNeeded || hasLegacyPending) {
               activeMonopolyGame.pendingAction = detectPendingAction(sc);
@@ -3896,13 +4086,21 @@ M：${aiText}`;
               const localActionNeeded = typeof activeMonopolyGame.action_needed === 'string'
                 ? activeMonopolyGame.action_needed.trim().toLowerCase()
                 : '';
-              if (localActionNeeded === 'toll' || localActionNeeded === 'duel' || localActionNeeded === 'super' || localActionNeeded === 'task' || localActionNeeded === 'truth') {
+              if (localActionNeeded === 'toll' || localActionNeeded === 'duel' || localActionNeeded === 'super' || localActionNeeded === 'task' || localActionNeeded === 'truth' || localActionNeeded === 'chat' || localActionNeeded === 'chat_task') {
                 activeMonopolyGame.pendingAction = detectPendingAction({ action_needed: localActionNeeded });
               } else if (localActionNeeded === 'none') {
                 activeMonopolyGame.action_needed = 'none';
                 activeMonopolyGame.pendingAction = 'none';
               }
               // 本地 action_needed 为空或不可识别：保持现有 pendingAction 不变，不猜。
+            }
+            // 一次性消费保护：已消费过的旧待办（duel/task）即使服务器状态滞后仍显示，也必须忽略。
+            if (activeMonopolyGame.pendingAction && activeMonopolyGame.pendingAction !== 'none' &&
+                activeMonopolyGame.pendingAction !== 'gameover' &&
+                isPendingActionConsumed(activeMonopolyGame.pendingAction)) {
+              console.log('🎲 MCP[sync] 忽略已消费的旧待办 ' + activeMonopolyGame.pendingAction + '（只消费一次）');
+              activeMonopolyGame.pendingAction = 'none';
+              activeMonopolyGame.action_needed = 'none';
             }
             activeMonopolyGame.updatedAt = Date.now();
             console.log('🎲 MCP[sync] 更新 activeMonopolyGame 后', {
@@ -4165,6 +4363,13 @@ M：${aiText}`;
         if (activeMonopolyGame && activeMonopolyGame.game_id) {
           const summary = monopolyStateSummary();
           if (summary) sysContent += monopolySystemPromptExtra(summary);
+          // 聊天格/任务格待办提示：当前处于本局大富翁流程内的聊天任务对话，不是普通 CHAT。
+          // 这段对话只属于本局游戏（monopolyMessages），绝不会写入普通聊天 memory/fullHistory。
+          if (activeMonopolyGame.pendingAction === 'task') {
+            sysContent += '\n\n【当前处于大富翁任务格/聊天格待办中】MCP 判定玩家走到任务格/聊天格并返回了需要完成的任务（pendingAction=task），你们正处在这段任务对话里。' +
+              '按阿慕本人格正常聊天、正常回应即可。这段对话属于当前大富翁游戏流程，不属于普通聊天。' +
+              '聊天中不要自动掷骰、不要创建新对决、不要编造游戏结算；任务由用户明确说“好了/继续投掷”后再结算。';
+          }
         }
         const systemMsg = { role: 'system', content: sysContent };
         const nonSystem = Array.isArray(monopolyMessages) ? monopolyMessages.filter(m => m.role !== 'system') : [];
@@ -4287,11 +4492,13 @@ M：${aiText}`;
           }
 
           // 待选择类型的决策（任务/过路费/对决/超强）。
+          // 聊天格任务 + 明确推进请求（“继续投掷/下一步”）不在这里交给 LLM，由下面的推进回合分支确定性 task=done 结算。
           if (!reply && !pendingActive && getWorkerToken() &&
               monopolyContextNeeded(text) &&
               activeMonopolyGame && activeMonopolyGame.game_id &&
               activeMonopolyGame.pendingAction &&
               (activeMonopolyGame.pendingAction === 'task' || activeMonopolyGame.pendingAction === 'toll' || activeMonopolyGame.pendingAction === 'duel' || activeMonopolyGame.pendingAction === 'super') &&
+              !(activeMonopolyGame.pendingAction === 'task' && isMonopolyAdvanceRequest(text)) &&
               !isMonopolyNewGameRequest(text) && !isMonopolyRestoreRequest(text) && !isMonopolyExitRequest(text)) {
             console.log('🎲 MCP: 待决策动作，交给 LLM 选择正确 game_action', { text, pendingAction: activeMonopolyGame.pendingAction });
             try {
@@ -4305,7 +4512,17 @@ M：${aiText}`;
           // 推进回合：用户明确“开始/下一回合/掷骰”等。
           if (!reply && !pendingActive && monopolyContextNeeded(text) && isMonopolyAdvanceRequest(text) && getWorkerToken()) {
             const hasPendingChoice = !!(activeMonopolyGame && activeMonopolyGame.pendingAction && pendingActionNeedsChoice(activeMonopolyGame.pendingAction));
-            if (hasPendingChoice) {
+            if (hasPendingChoice && activeMonopolyGame.pendingAction === 'task') {
+              // 聊天格/任务格待办 + 推进请求 = 玩家已完成聊天任务，确定性提交 task=done 并 roll，
+              // 由 continueMonopolyGame 结算并把该 task 标记为已消费。
+              console.log('🎲 MCP: 任务/聊天格待办 + 推进请求 → task=done 并 roll', { text, pendingAction: activeMonopolyGame.pendingAction });
+              try {
+                reply = await continueMonopolyGame(apiMsgs, target);
+              } catch (mcpError) {
+                console.error('🎲 MCP FAILED:', mcpError);
+                throw new Error('🎲 大富翁任务结算失败：' + (mcpError.message || mcpError));
+              }
+            } else if (hasPendingChoice) {
               console.log('🎲 MCP: 推进请求但有待选择动作，交给 LLM 处理', { text, pendingAction: activeMonopolyGame.pendingAction });
               try {
                 reply = await chatWithMonopolyMcp(apiMsgs, target);
