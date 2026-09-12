@@ -335,7 +335,6 @@
 
   <script>
     (function() {
-      window.__M_WORKER_VERSION__ = '2026-09-05-v12.4-emotion-auto-adjust';
       const $ = id => document.getElementById(id);
 
       // 登录控件必须在其他初始化之前绑定。loginWorker 是函数声明，已提升，
@@ -362,7 +361,6 @@
 
       // ===== V14.3：输入框身份追踪 + PointerDown 发送硬绑定 =====
       // 目的：确认“肉眼看到的文字”和 JS 读取到的 userInput 是否是同一个 DOM/value。
-      window.__M_V14_2_BUILD__ = '2026-09-06-V14.3-REAL-INPUT-FIX';
       window.__M_V14_SEND_STATE__ = '🟢 V14.3 输入追踪已启动';
       window.__M_V14_TRACE__ = { lastInputLen: 0, lastEvent: 'init', lastValue: '', count: 0, realInputIndex: -1 };
       window.__M_REAL_INPUT__ = null;
@@ -581,7 +579,7 @@
         console.error('V14.3捕获Promise错误:', e && e.reason);
       });
 
-      const SK = 'deepseek_api_key', CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
+      const CK = 'deepseek_chat_v7', TK = 'deepseek_theme';
       const AEK = 'last_auto_export';
       const SETTING_KEY = 'deepseek_global_setting', MEMORY_KEY = 'deepseek_compressed_memory';
       const FULL_HISTORY_KEY = 'deepseek_full_history';
@@ -732,54 +730,6 @@
         emotionState.disappointment *= (1 - 0.10 * factor);
         emotionState.longing += (20 - emotionState.longing) * 0.10 * factor;
         emotionState.lastUpdated = now;
-      }
-
-      function updateEmotionFromUserText(text) {
-        decayEmotionState();
-        const t = String(text || '').trim();
-        if (!t) return;
-
-        let delta = 0;
-        const reasons = [];
-        const add = (field, amount) => { emotionState[field] = clampNum(emotionState[field] + amount, 0, 100); };
-
-        // 这里只根据用户本轮实际文字判断，不把模型幻想当成触发条件。
-        if (/(谢谢|感谢|辛苦了|抱抱|爱你|喜欢你|想你|想见你|陪陪我|在乎你)/.test(t)) {
-          add('affection', 4); add('safety', 3); add('irritation', -3); delta += 6; reasons.push('收到亲近/感谢表达');
-        }
-        if (/(对不起|抱歉|我错了|原谅我|别生气)/.test(t)) {
-          add('irritation', -8); add('disappointment', -5); add('safety', 2); delta += 3; reasons.push('收到道歉或修复关系的表达');
-        }
-        if (/(不理你|不想理你|算了|不打扰了|再见|拉黑|分手|不要你了)/.test(t)) {
-          add('longing', 6); add('disappointment', 8); add('safety', -4); delta -= 10; reasons.push('出现疏离/结束关系表达');
-        }
-        if (/(骗我|骗|敷衍|失望|生气|烦死|讨厌|别烦|滚|闭嘴)/.test(t)) {
-          add('irritation', 9); add('disappointment', 7); add('safety', -3); delta -= 9; reasons.push('出现负面/冲突表达');
-        }
-        if (/(开心|高兴|太好了|好棒|成功了|笑死|哈哈|惊喜)/.test(t)) {
-          delta += 5; add('safety', 2); reasons.push('出现积极情绪');
-        }
-        if (/(难过|伤心|孤独|孤单|委屈|崩溃|累死|好累|害怕|担心)/.test(t)) {
-          add('longing', 3); delta -= 1; reasons.push('用户表达负面情绪');
-        }
-        if (/(别人|另一个女生|她喜欢|前任|前女友|女朋友)/.test(t)) {
-          add('irritation', 3); add('disappointment', 2); add('longing', 2); delta -= 2; reasons.push('涉及可能引发在意的关系话题');
-        }
-
-        // 情绪强度存在惯性：没有明显触发时不会大幅跳变。
-        emotionState.intensity = clampNum(emotionState.intensity * 0.78 + (45 + delta * 3) * 0.22, 0, 100);
-        if (delta > 4) emotionState.mood = '开心';
-        else if (emotionState.irritation >= 55) emotionState.mood = '生气';
-        else if (emotionState.disappointment >= 55) emotionState.mood = '失望';
-        else if (emotionState.longing >= 55) emotionState.mood = '想念';
-        else if (delta < -5) emotionState.mood = '低落';
-        else if (emotionState.irritation >= 30) emotionState.mood = '烦躁';
-        else if (emotionState.safety >= 80 && emotionState.affection >= 75) emotionState.mood = '安心';
-        else emotionState.mood = '平静';
-
-        emotionState.lastReason = reasons.length ? reasons.join('；') : '本轮没有明显情绪触发，保持原有状态';
-        emotionState.lastUpdated = Date.now();
-        saveEmotionState(false);
       }
 
       function getEmotionStrategyPrompt() {
@@ -1015,7 +965,6 @@
         const mode=getApiMode(), sel=$('apiModeSelect'); if(sel)sel.value=mode;
         const hint=$('directKeyHint'); if(hint)hint.textContent='🔒 '+(mode==='deepseek'?'DeepSeek 官方 API':'OpenCode Go')+' 通过 Cloudflare Worker，API Key 不保存在网页或浏览器中。';
         const setup=$('setupStatusText'); if(setup)setup.textContent=mode==='deepseek'?'⚡ DeepSeek 官方 API → Cloudflare Worker':'☁️ OpenCode Go → Cloudflare Worker';
-        const modelInput=$('modelNameInput'); if(modelInput)modelInput.value=getSelectedModel();
         updateImageUploadAvailability();
       }
 
@@ -1303,7 +1252,6 @@
       updateEnvDisplay(); setInterval(updateEnvDisplay, 60000);
 
       // 兼容旧代码变量；Worker Key 不在前端，DeepSeek Key 仅保存在本机 localStorage。
-      let apiKey = ''; 
       let globalSetting = localStorage.getItem(SETTING_KEY) || '';
       let compressedMemory = localStorage.getItem(MEMORY_KEY) || '';
       let fullHistory = []; const sf = localStorage.getItem(FULL_HISTORY_KEY); if (sf) try { fullHistory = JSON.parse(sf); } catch(e) {}
@@ -1528,7 +1476,6 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
       
       $('settingSaveBtn').onclick = () => { 
         // API Key / API 地址 / 模型均由 Cloudflare Worker 固定管理，前端不保存。
-        apiKey = '';
         
         globalSetting = $('settingTextarea').value.trim(); 
         localStorage.setItem(SETTING_KEY, globalSetting); 
@@ -2593,12 +2540,6 @@ M：${aiText}`;
         try { localStorage.setItem(MONOPOLY_MODE_KEY, 'active'); } catch (_) {}
         enterMonopolyMode();
       }
-      // 旧函数保留兼容：清掉游戏会话标记 + 回到聊天模式。
-      function clearMonopolyModeActive() {
-        try { localStorage.removeItem(MONOPOLY_MODE_KEY); } catch (_) {}
-        enterChatMode();
-      }
-
       // 大富翁消息只写入 monopolyMessages，不进入 messages/fullHistory/memoryFacts。
       function loadMonopolyHistory() {
         try {
@@ -2839,9 +2780,6 @@ M：${aiText}`;
         const map = getConsumedMap();
         map[pendingActionKeyWith(g.game_id, type, ctx || g)] = Date.now();
         pruneConsumedMap(map);
-      }
-      function markPendingActionConsumed(type) {
-        markPendingActionConsumedAt(type, activeMonopolyGame);
       }
       function isPendingActionConsumed(type) {
         const g = activeMonopolyGame;
@@ -3238,10 +3176,6 @@ M：${aiText}`;
         return false;
       }
 
-      function mcpUrl() {
-        return workerUrl(MCP_GATEWAY_PATH);
-      }
-
       function mcpParseResponse(raw) {
         const text = String(raw || '').trim();
         if (!text) return {};
@@ -3322,12 +3256,6 @@ M：${aiText}`;
         return JSON.stringify(result);
       }
 
-      window.__MCP_DEBUG_GAME_INFO__ = (gameId, query) =>
-        executeMcpTool('game_info', {
-          query: query || 'state',
-          game_id: gameId
-        });
-
       // 从 new_game / roll 的返回字符串里提取 game_id（兼容 game_id / gameId / id 等写法）。
       function extractGameId(resultStr) {
         const s = String(resultStr || '');
@@ -3342,38 +3270,6 @@ M：${aiText}`;
           if (/game[_\-]?id|^id$/i.test(key) && typeof args[key] === 'string') return args[key];
         }
         return null;
-      }
-
-      // 判断 roll 返回是否处于“等待玩家完成任务”状态。
-      // 优先解析 structuredContent.tile：等于 "task" 才等待；其它（如 chance）不等待。
-      function mcpWaitingForContinue(resultStr) {
-        const s = String(resultStr || '');
-        let obj = null;
-        try { obj = JSON.parse(s); } catch (_) {}
-        if (obj && typeof obj === 'object') {
-          let sc = obj.structuredContent;
-          if (typeof sc === 'string') { try { sc = JSON.parse(sc); } catch (_) {} }
-          if (sc && typeof sc === 'object' && sc.tile !== undefined) {
-            return String(sc.tile).toLowerCase() === 'task';
-          }
-        }
-        // 无结构化字段或无法解析时，回退关键词判断。
-        return /等待玩家|等待你|等待用户|等待输入|等待继续|等待操作|需要玩家|需要你|需要用户|请完成|请执行|完成任务|待完成|待操作|等待.*任务|需要.*任务|waiting_for|requires_action|needs_player|player_action|pending_task/i.test(s);
-      }
-
-      // 判断 MCP 返回是否明确表示游戏已结束（game_over === true）。
-      function mcpGameOver(resultStr) {
-        const s = String(resultStr || '');
-        let obj = null;
-        try { obj = JSON.parse(s); } catch (_) {}
-        if (obj && typeof obj === 'object') {
-          let sc = obj.structuredContent;
-          if (typeof sc === 'string') { try { sc = JSON.parse(sc); } catch (_) {} }
-          if (sc && typeof sc === 'object') {
-            return sc.game_over === true || sc.game_over === 'true';
-          }
-        }
-        return /game[_\s]?over["']?\s*[:=]\s*true/i.test(s);
       }
 
       // 找出 roll 工具里表示 game_id 的参数字段名。
