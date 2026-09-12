@@ -598,6 +598,77 @@
       const IMAGE_JPEG_QUALITY = 0.86;
       // 大富翁独立历史 key：与普通聊天 FULL_HISTORY_KEY 完全隔离。
       const MONOPOLY_HISTORY_KEY = 'monopolyGameHistoryV1';
+
+      // ===== OpenCode conversation session（每个 conversation 独立、稳定的 x-opencode-session）=====
+      // 目的：满足 OpenCode 官方要求 —— “每个 conversation 使用稳定 session ID”。
+      // 规则：
+      //   1. 每个 conversation 有自己独立的稳定 session ID；
+      //   2. 同一个 conversation 后续请求始终使用同一个 x-opencode-session；
+      //   3. 新建 conversation（清空对话 / 导入覆盖 / 新开大富翁游戏）时生成新的 session ID；
+      //   4. 页面刷新不丢失当前 conversation 的 session；
+      //   5. 切换/恢复历史 conversation 时，恢复对应 conversation 的 session；
+      //   6. 绝不每发送一条消息就重新生成 session；
+      //   7. 不同 conversation 绝不共用一个 session。
+      // 本应用只有两类 conversation 上下文：普通聊天（chat:main）与大富翁（monopoly:<game_id>）。
+      // 普通聊天的 fullHistory/messages 是唯一聊天会话，因此用固定 key，清空/导入覆盖时重置。
+      // 大富翁按 game_id 生成 key：同一局（含刷新恢复）恒定同一 session，新开一局自然得到新 session。
+      const OPENCODE_SESSIONS_KEY = 'm_opencode_sessions_v1';
+      const CHAT_CONV_KEY = 'chat:main';
+      function loadOpenCodeSessions() {
+        try {
+          const raw = localStorage.getItem(OPENCODE_SESSIONS_KEY);
+          const o = raw ? JSON.parse(raw) : {};
+          return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {};
+        } catch (_) { return {}; }
+      }
+      function saveOpenCodeSessions(map) {
+        try { localStorage.setItem(OPENCODE_SESSIONS_KEY, JSON.stringify(map)); } catch (_) {}
+      }
+      function newOpenCodeSessionId() {
+        try {
+          if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+        } catch (_) {}
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+          const r = (Math.random() * 16) | 0;
+          return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        });
+      }
+      // 获取某 conversation 的稳定 session；不存在则生成并持久化。
+      function getConversationSession(convKey) {
+        const map = loadOpenCodeSessions();
+        let s = map[convKey];
+        if (!s) { s = newOpenCodeSessionId(); map[convKey] = s; saveOpenCodeSessions(map); }
+        return s;
+      }
+      // 重建某 conversation 的 session（新建 conversation 时调用）。
+      function resetConversationSession(convKey) {
+        const map = loadOpenCodeSessions();
+        delete map[convKey];
+        saveOpenCodeSessions(map);
+        return getConversationSession(convKey);
+      }
+      function getChatConversationSession() { return getConversationSession(CHAT_CONV_KEY); }
+      function resetChatConversationSession() { return resetConversationSession(CHAT_CONV_KEY); }
+      function getActiveMonopolyGameId() {
+        try {
+          if (typeof activeMonopolyGame !== 'undefined' && activeMonopolyGame && activeMonopolyGame.game_id) {
+            return activeMonopolyGame.game_id;
+          }
+        } catch (_) {}
+        return null;
+      }
+      function getMonopolyConversationSession() {
+        const gid = getActiveMonopolyGameId();
+        return getConversationSession(gid ? ('monopoly:' + gid) : 'monopoly:main');
+      }
+      // 当前 App 模式对应的 conversation session（CHAT / MONOPOLY 严格隔离）。
+      function getCurrentOpenCodeSession() {
+        try {
+          if (getAppMode() === 'monopoly') return getMonopolyConversationSession();
+        } catch (_) {}
+        return getChatConversationSession();
+      }
+
       let pendingImages = [];
 
       // ===== V12：情绪驱动回复策略 =====
@@ -830,6 +901,10 @@
         const headers={...(options.headers||{})};
         const token=getWorkerToken();
         if(token) headers['Authorization']='Bearer '+token;
+        // OpenCode 官方要求：每个 conversation 使用稳定的 x-opencode-session。
+        // 由前端直接提供，Worker 原样透传；Worker 仍保留自身的兼容 fallback。
+        // 对 /models、/backup、/login、/mcp 等非聊天请求加上该头也无害（Worker 只在聊天时使用）。
+        try { headers['x-opencode-session'] = getCurrentOpenCodeSession(); } catch (_) {}
         opts.headers=headers;
         const r=await fetch(workerUrl(path),opts);
         if(r.status===401){
@@ -1432,7 +1507,7 @@ ${compressedMemory ? compressedMemory.slice(-2600) : '无'}`;
       function setTheme(d) { document.body.classList.toggle('dark',d); $('themeToggle').textContent = d?'☀️':'🌙'; localStorage.setItem(TK, d?'dark':'light'); }
       setTheme(localStorage.getItem(TK)==='dark'); $('themeToggle').onclick = () => setTheme(!document.body.classList.contains('dark'));
       $('moreBtn').onclick = e => { e.stopPropagation(); $('moreMenu').classList.toggle('active'); }; document.addEventListener('click', () => $('moreMenu').classList.remove('active')); $('moreMenu').onclick = e => e.stopPropagation();
-      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); resetEmotionState('对话被清空，重新回到平静状态'); editingIdx = -1; renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
+      $('clearChatBtn').onclick = () => { if (confirm('清空所有对话？')) { messages = [messages[0]]; fullHistory = []; saveFullHistory(); compressedMemory = ''; localStorage.removeItem(MEMORY_KEY); resetEmotionState('对话被清空，重新回到平静状态'); editingIdx = -1; resetChatConversationSession(); renderAll(); saveAll(); $('moreMenu').classList.remove('active'); } };
       bindDraft($('userInput'),DRAFT_CHAT); bindDraft($('settingTextarea'),DRAFT_SETTING); bindDraft($('importTextarea'),DRAFT_IMPORT); bindDraft($('searchInput'),DRAFT_SEARCH);
       
       $('settingBtn').onclick = () => { 
@@ -4778,6 +4853,8 @@ M：${aiText}`;
           }
           messages = [messages[0], ...filtered];
           fullHistory = filtered.map(m => ({ role: m.role, content: m.content, time: m.time }));
+          // 覆盖导入 = 新的 conversation，重置 OpenCode session，避免与旧会话混用。
+          resetChatConversationSession();
         } else {
           const lastMsg = messages[messages.length - 1];
           if (lastMsg && lastMsg.role !== 'system') newMessages[0].parentId = lastMsg.id;
