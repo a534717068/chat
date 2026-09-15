@@ -72,11 +72,22 @@
     .assistant .version-switcher { justify-content: flex-start; }
     .scroll-to-bottom { position: absolute; bottom: 14px; right: 14px; background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; display: none; align-items: center; justify-content: center; cursor: pointer; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.2); opacity: 0; transform: scale(0.8); transition: opacity 0.2s, transform 0.2s; pointer-events: none; }
     .scroll-to-bottom.visible { display: flex; opacity: 0.85; transform: scale(1); pointer-events: auto; }
-    .input-area { background: var(--surface); padding: 8px 10px; border-top: 1px solid var(--border); display: flex; gap: 6px; flex-shrink: 0; align-items: flex-end; }
+    .input-area { background: var(--surface); padding: 8px 10px; border-top: 1px solid var(--border); display: flex; gap: 6px; flex-shrink: 0; align-items: flex-end; position: relative; }
     .input-area textarea { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 10px; font-size: 0.9rem; resize: none; max-height: 100px; font-family: inherit; background: var(--surface); color: var(--text-primary); }
     .input-area button { padding: 8px 14px; background: var(--btn-bg); color: var(--btn-text); border: none; border-radius: 10px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
     .image-upload-btn { padding: 8px 11px !important; font-size: 1rem !important; flex: 0 0 auto; }
     .image-upload-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    /* 「＋」按钮及其弹层（移动端友好尺寸） */
+    #addBtn { flex: 0 0 auto; width: 42px; height: 42px; padding: 0; font-size: 1.5rem; line-height: 1; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+    #addBtn.active { background: #e94560; }
+    .add-menu { position: absolute; bottom: calc(100% + 6px); left: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); z-index: 600; display: none; flex-direction: column; min-width: 172px; overflow: hidden; }
+    .add-menu.active { display: flex; }
+    .add-menu button { background: none; border: none; color: var(--text-primary); padding: 13px 16px; text-align: left; font-size: 0.92rem; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .add-menu button:last-child { border-bottom: none; }
+    .add-menu button:active { background: var(--bg); }
+    /* 旧入口已整合进「＋」菜单：隐藏旧按钮但保留其 DOM 与功能 */
+    #imageUploadBtn { display: none; }
+    #monopolyModeBtn { display: none; }
     .image-preview-bar { display: none; gap: 8px; padding: 7px 10px; background: var(--surface); border-top: 1px solid var(--border); overflow-x: auto; }
     .image-preview-bar.active { display: flex; }
     .image-preview-item { position: relative; flex: 0 0 auto; width: 72px; height: 72px; border-radius: 9px; overflow: hidden; border: 1px solid var(--border); background: var(--bg); }
@@ -197,6 +208,11 @@
   <div class="input-area">
     <input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style="display:none;">
     <button id="imageUploadBtn" class="image-upload-btn" title="上传图片" aria-label="上传图片">📎</button>
+    <button id="addBtn" title="更多功能" aria-label="更多功能">＋</button>
+    <div class="add-menu" id="addMenu">
+      <button type="button" id="addImageMenuItem">🖼️ 添加图片</button>
+      <button type="button" id="addMonopolyMenuItem">🎲 大富翁</button>
+    </div>
     <textarea id="userInput" rows="1" placeholder="输入消息，或先上传图片..."></textarea>
     <button id="sendBtn">发送</button>
   </div>
@@ -278,6 +294,7 @@
       <div id="visionStatus" class="format-hint" style="margin-bottom:8px;">🖼️ 图片上传状态：检查当前模型能力中…</div>
       <div class="format-hint" style="margin-top:6px;margin-bottom:4px;">📊 套餐用量</div>
       <div id="usagePanel" class="format-hint usage-panel" style="margin-bottom:8px;">选择 Provider 后可查看账户用量。</div>
+      <a id="ccUsageLink" class="format-hint" href="https://commandcode.ai/studio/" target="_blank" rel="noopener noreferrer" style="display:none;margin-bottom:8px;color:var(--btn-bg);text-decoration:underline;font-weight:600;">📊 查看 Command Code 官方用量</a>
       <button class="btn-cancel" id="refreshUsageBtn" style="width:100%;margin-bottom:8px;">🔄 刷新用量</button>
       <textarea id="settingTextarea" placeholder="在此粘贴你的人设、设定、全局记忆..."></textarea>
       <div class="format-hint">🔒 普通聊天直连所选 API；API Key 仅保存在本机 localStorage。Worker 仅用于云备份与 MCP。</div>
@@ -1192,7 +1209,15 @@
         // Command Code GOAT：没有可确认的官方账户用量接口。
         throw new Error('该 Provider 未提供可用的账户用量查询接口');
       }
-      function formatUsageText(entry){
+      function formatUsageText(entry, provider){
+        // Command Code GOAT：官方 Provider API 没有账户套餐用量查询接口。
+        // 余额 / 5小时 / 周 / 月额度只能去官方 Studio 的 Billing / Usage 页面查看。
+        if (provider === 'commandcode') {
+          const when = entry && entry.at ? new Date(entry.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : '';
+          let txt = 'Command Code 官方 Provider API 未提供账户套餐用量查询接口。\n账户套餐余额 / 5小时额度 / 周额度 / 月额度请在 Command Code 官方 Studio 的 Billing / Usage 页面中查看。';
+          if (when) txt += '\n最后更新：' + when;
+          return txt;
+        }
         if(!entry) return '尚未查询，请点击「🔄 刷新用量」。';
         if(entry.error) return '用量获取失败：' + entry.error;
         const when = entry.at ? new Date(entry.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : '';
@@ -1218,11 +1243,21 @@
         const el=$('usagePanel'); if(!el) return;
         const provider=getApiProvider();
         const cache=loadUsageCache()[provider];
-        el.textContent = formatUsageText(cache);
+        el.textContent = formatUsageText(cache, provider);
+        // Command Code 下显示官方用量入口；DeepSeek 走内置余额查询，不显示该链接。
+        const link=$('ccUsageLink');
+        if(link) link.style.display = (provider === 'commandcode') ? 'inline-block' : 'none';
       }
       async function refreshUsage(){
         const el=$('usagePanel'), provider=getApiProvider();
-        if(el) el.textContent='正在查询 '+apiProviderLabel(provider)+' 用量…';
+        if(el){
+          if (provider === 'commandcode') {
+            // 官方无账户用量查询接口：刷新只更新面板状态文案，绝不假装返回数字。
+            el.textContent='Command Code 官方 Provider API 未提供账户套餐用量查询接口，正在更新面板状态…';
+          } else {
+            el.textContent='正在查询 '+apiProviderLabel(provider)+' 用量…';
+          }
+        }
         try{
           const entry = await fetchProviderUsage(provider);
           const cache = loadUsageCache(); cache[provider]=entry; saveUsageCache(cache);
@@ -5079,6 +5114,36 @@ M：${aiText}`;
         // “不继续”：只隐藏提示，留在 MONOPOLY，保留游戏状态，不 new_game、不退出模式。
         monopolyResumeDismissed = true;
         hideMonopolyResumePrompt();
+      };
+
+      // ===== ＋ 菜单：添加图片 / 大富翁（复用现有入口，不新增第二套逻辑） =====
+      // 点击「＋」切换菜单；点菜单外区域自动关闭；两项都复用原有绑定的事件处理器。
+      const addBtn = $('addBtn'), addMenu = $('addMenu');
+      function toggleAddMenu(show) {
+        if (!addMenu || !addBtn) return;
+        const next = typeof show === 'boolean' ? show : !addMenu.classList.contains('active');
+        addMenu.classList.toggle('active', next);
+        addBtn.classList.toggle('active', next);
+        if (next) $('moreMenu').classList.remove('active');
+      }
+      if (addBtn) addBtn.onclick = (e) => { e.stopPropagation(); toggleAddMenu(); };
+      if (addMenu) addMenu.onclick = (e) => e.stopPropagation();
+      document.addEventListener('click', (e) => {
+        if (e.target && e.target.closest && (e.target.closest('#addMenu') || e.target.closest('#addBtn'))) return;
+        toggleAddMenu(false);
+      });
+      const addImageItem = $('addImageMenuItem'), addMonopolyItem = $('addMonopolyMenuItem');
+      if (addImageItem) addImageItem.onclick = () => {
+        // 关闭菜单后等价于点击原有图片上传按钮（调用原有 handler，含 Vision 模型自动切换）。
+        toggleAddMenu(false);
+        const uploadBtn = $('imageUploadBtn');
+        if (uploadBtn) uploadBtn.click();
+      };
+      if (addMonopolyItem) addMonopolyItem.onclick = () => {
+        // 关闭菜单后等价于点击原「🎲 大富翁」按钮（调用原有入场/恢复逻辑）。
+        toggleAddMenu(false);
+        const monoBtn = $('monopolyModeBtn');
+        if (monoBtn) monoBtn.click();
       };
 
       // 刷新页面后默认回到聊天模式，绝不自动进入大富翁模式。
