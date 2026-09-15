@@ -85,8 +85,9 @@
     .add-menu button { background: none; border: none; color: var(--text-primary); padding: 13px 16px; text-align: left; font-size: 0.92rem; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
     .add-menu button:last-child { border-bottom: none; }
     .add-menu button:active { background: var(--bg); }
-    /* 旧入口已整合进「＋」菜单：隐藏旧按钮但保留其 DOM 与功能 */
-    #imageUploadBtn { display: none; }
+    /* 旧入口已整合进「＋」菜单：隐藏旧模式栏与旧按钮，但保留其 DOM 与事件绑定 */
+    #modeBar { display: none; }
+    #imageUploadBtn { display: none !important; }
     #monopolyModeBtn { display: none; }
     .image-preview-bar { display: none; gap: 8px; padding: 7px 10px; background: var(--surface); border-top: 1px solid var(--border); overflow-x: auto; }
     .image-preview-bar.active { display: flex; }
