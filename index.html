@@ -99,7 +99,7 @@
     .image-hint { font-size: 0.7rem; color: var(--text-secondary); padding: 0 10px 5px; background: var(--surface); }
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--modal-overlay); z-index: 1000; justify-content: center; align-items: center; padding: 20px; }
     .modal-overlay.active { display: flex; }
-    .modal { background: var(--modal-bg); border-radius: 14px; padding: 16px; width: 100%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; gap: 10px; }
+    .modal { background: var(--modal-bg); border-radius: 14px; padding: 16px; width: 100%; max-width: 500px; max-height: 80vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
     .modal textarea { width: 100%; flex: 1; min-height: 120px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; font-family: inherit; resize: vertical; background: var(--surface); color: var(--text-primary); }
     .modal input[type="text"], .modal input[type="password"] { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; background: var(--surface); color: var(--text-primary); }
     .modal-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
